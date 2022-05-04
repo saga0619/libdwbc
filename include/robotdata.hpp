@@ -198,17 +198,6 @@ public:
                 {
                     ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
 
-                    std::cout << ts_[i].J_task_ << std::endl;
-
-                    std::cout << ts_[i].J_kt_ << std::endl;
-
-                    std::cout << ts_[i].Lambda_task_ << std::endl;
-
-                    std::cout << ts_[i].f_star_ << std::endl;
-
-                    std::cout << "torque task " << std::endl;
-
-                    std::cout << ts_[i].torque_h_.transpose() << std::endl;
                     ts_[i].CalcNullMatrix(A_inv_, N_C);
 
                     torque_task_ = ts_[i].torque_h_;

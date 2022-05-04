@@ -5,7 +5,7 @@ int main()
 {
     RobotData rd_;
 
-    std::string urdf_path = "/home/saga/catkin_ws/src/dyros_tocabi_v2/tocabi_description/robots/dyros_tocabi.urdf";
+    std::string urdf_path = "../test/dyros_tocabi.urdf";
 
     rd_.InitModelData(urdf_path, true, 1);
 
@@ -88,7 +88,7 @@ int main()
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
-    fstar_1(1) = 2.0;
+    fstar_1(1) = 1.0;
     fstar_1(2) = 0.1;
     rd_.SetTaskSpace(0, fstar_1);
     rd_.SetTaskSpace(1, Vector3d::Zero());
@@ -112,7 +112,7 @@ int main()
 
     std::cout << "Calc Task Torque" << std::endl;
 
-    rd_.CalcTaskTorque(false);
+    rd_.CalcTaskTorque();
 
     std::cout << "Calc Contact Redistribute" << std::endl;
 
@@ -122,9 +122,9 @@ int main()
     std::cout << "Task Torque : " << rd_.torque_task_.transpose() << std::endl;
     std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
 
-    std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_).transpose() << std::endl;
+    // std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_).transpose() << std::endl;
 
-    std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_).transpose() << std::endl;
+    // std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_).transpose() << std::endl;
 
     std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
