@@ -17,19 +17,13 @@ include_directories(
     ${QPOASES_INCLUDE_DIR}
     )
 
-#add_library(DyrosHQP_LIB INTERFACE)
-#target_include_directories(DyrosHQP_LIB INTERFACE include)
+add_library(${PROJECT_NAME} src/dyros_hqp_lib.cpp)
 
-#target_link_libraries(DyrosHQP_LIB
-#    PUBLIC
-#    DyrosHQP_LIB
-#)
-
-
-add_executable(test test/test.cpp)
-
-target_link_libraries(test 
+target_link_libraries(${PROJECT_NAME}
 ${RBDL_LIBRARY}
 ${RBDL_URDFReader_LIBRARY}
 ${QPOASES_LIBRARY}
 )
+
+# compile test program
+add_subdirectory(test)

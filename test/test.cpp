@@ -5,7 +5,7 @@ int main()
 {
     RobotData rd_;
 
-    std::string urdf_path = "../test/dyros_tocabi.urdf";
+    std::string urdf_path = "../../test/dyros_tocabi.urdf";
 
     rd_.InitModelData(urdf_path, true, 1);
 
@@ -88,7 +88,7 @@ int main()
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
-    fstar_1(1) = 1.0;
+    fstar_1(1) = 2.0;
     fstar_1(2) = 0.1;
     rd_.SetTaskSpace(0, fstar_1);
     rd_.SetTaskSpace(1, Vector3d::Zero());

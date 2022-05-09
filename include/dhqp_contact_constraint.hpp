@@ -4,7 +4,8 @@
 #include "rbdl/rbdl.h"
 #include <iostream>
 #include <Eigen/Dense>
-#include "math.hpp"
+#include "dhqp_math.hpp"
+#include "wholebody_dynamics.hpp"
 
 using namespace Eigen;
 
@@ -121,45 +122,12 @@ public:
 
     MatrixXd GetZMPConstMatrix4x6()
     {
-        MatrixXd zmp_const_mat = MatrixXd::Zero(4, 6);
-
-        zmp_const_mat(0, 2) = -contact_plane_x;
-        zmp_const_mat(0, 4) = -1;
-
-        zmp_const_mat(1, 2) = -contact_plane_x;
-        zmp_const_mat(1, 4) = 1;
-
-        zmp_const_mat(2, 2) = -contact_plane_y;
-        zmp_const_mat(2, 3) = -1;
-
-        zmp_const_mat(3, 2) = -contact_plane_y;
-        zmp_const_mat(3, 3) = 1;
-
-
-        return zmp_const_mat;
+        return GetZMPConstMatrix(contact_plane_x, contact_plane_y);
     }
 
     MatrixXd GetForceConstMatrix6x6()
     {
-
-        MatrixXd force_const_matrix = MatrixXd::Zero(6, 6);
-
-        force_const_matrix(0, 0) = 1.0;
-        force_const_matrix(0, 2) = -friction_ratio_x;
-        force_const_matrix(1, 0) = -1.0;
-        force_const_matrix(1, 2) = -friction_ratio_x;
-
-        force_const_matrix(2, 1) = 1.0;
-        force_const_matrix(2, 2) = -friction_ratio_y;
-        force_const_matrix(3, 1) = -1.0;
-        force_const_matrix(3, 2) = -friction_ratio_y;
-
-        force_const_matrix(4, 5) = 1.0;
-        force_const_matrix(4, 2) = -friction_ratio_z;
-        force_const_matrix(5, 5) = -1.0;
-        force_const_matrix(5, 2) = -friction_ratio_z;
-
-        return force_const_matrix;
+        return GetForceConstMatrix(friction_ratio_x, friction_ratio_y, friction_ratio_z);
     }
 
     MatrixXd GetContactConstMatrix()
@@ -169,19 +137,6 @@ public:
         cc_m_.block(4,0,6,6) = GetForceConstMatrix6x6();
 
         return cc_m_;
-        
-
-        // int total_const = 0;
-        // for(int i=0;i<constraint_m_.size();i++)
-        // {
-        //     total_const += constraint_m_[i];
-        // }
-
-        // MatrixXd cc_m_ = MatrixXd::Zero(total_const,6);
-
-        // cc_m_.block(0,0,constraint_m_[i],6 ) = GetZMPConstMatrix4x6();
-        // cc_m_.block(constraint_m_[i - i], 0, constraint_m_[i])
-        // MatrixXd contact_const_m_ = MatrixXd::Zero()
     }
 };
 

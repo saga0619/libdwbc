@@ -4,7 +4,7 @@
 #include "rbdl/rbdl.h"
 #include <iostream>
 #include <Eigen/Dense>
-#include "math.hpp"
+#include "dhqp_math.hpp"
 
 using namespace Eigen;
 

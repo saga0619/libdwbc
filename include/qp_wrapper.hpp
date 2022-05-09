@@ -8,9 +8,8 @@ min   0.5 * x' * H * x + x' * g
     lb < x < ub
 */
 #include <iostream>
-#include "math.hpp"
 #include <Eigen/Dense>
-#include "qpOASES.hpp"
+#include <qpOASES.hpp>
 
 using namespace Eigen;
 using namespace std;
@@ -242,7 +241,7 @@ int CQuadraticProgram::SolveQPoases(const int &num_max_iter, VectorXd &solv, boo
   //_options.boundTolerance = 1E-6;
   _options.boundRelaxation = 1E-4;
   // _options.printLevel = PL_LOW;
-  _options.printLevel = PL_NONE;
+  _options.printLevel = PL_HIGH;
 
   _QPprob.setOptions(_options);
 
