@@ -5,8 +5,9 @@ operational space whole-body control library.
 ## How to ...
 ### Prereauisities
  * Eigen3
- * RBDL
- * qpOASES
+ * [RBDL](https://github.com/saga0619/rbdl-orb)
+ * [qpOASES](https://github.com/saga0619/qpOASES)
+ * [qpSWIFT](https://github.com/qpSWIFT/qpSWIFT)(wip)
 
 ### How to install
 ```sh

@@ -75,24 +75,78 @@ namespace DWBC
 
         */
         void AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x = 0, double contact_y = 0, bool verbose = false);
+        
+        /*
+        Clear all stored ContactConstraint 
+        */
         void ClearContactConstraint();
+        
+        /*
+        Update Conact space information
+        */
         void UpdateContactConstraint();
+
+        /*
+        Calculate Contact Constraint Dynamics
+        bool update : Call UpdateContactConstraint()
+        */
         void CalcContactConstraint(bool update = true);
 
+        /*
+        Set Contact status, true or false
+        */
         template <typename... Types>
         void SetContact(Types... args);
 
-        void CalcContactRedistribute();
+        /*
+        Calculate Contact Redistribution Torque
+        */
+        void CalcContactRedistribute(bool init = true);
+
+        /*
+        Calculate Contact Force with command Torque
+        */
         VectorXd getContactForce(const VectorXd &command_torque);
 
-        void ClearTaskSpace();
+        /*
+        Add Task Space
+        */
         void AddTaskSpace(int task_mode, int task_dof, bool verbose = false);
         void AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose = false);
+        
+        /*
+        Clear all task space
+        */
+        void ClearTaskSpace();
+
+        /*
+        Set fstar or jtask or specific task heirarchy
+        */
         void SetTaskSpace(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task = MatrixXd::Zero(1, 1));
+        
+        /*
+        Update Task Space information
+        */
         void UpdateTaskSpace();
+
+        /*
+        Calculate Task Space dynamics
+        */
         void CalcTaskSpace(bool update = true);
+
+        /*
+        qpSWIFT test..
+        */
         void qpSWIFT_test();
+
+        /*
+        Calculate Heirarcical task torque.
+        */
         void CalcTaskTorque(bool hqp = true, bool init = true);
+        
+        /*
+        Calculate heirarchy task torque
+        */
         void CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_limit, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
         /*
@@ -102,35 +156,13 @@ namespace DWBC
         verbose 0 : disable verbose
         */
         void InitModelData(std::string urdf_path, bool floating, int verbose);
+
+        /*
+        Calculate Gravity Compensation
+        */
         VectorXd CalcGravCompensation();
         void CalcGravCompensation(VectorXd &grav_torque);
 
-        /*
-        modified axis contact force : mfc ( each contact point's z axis is piercing COM position)
-        minimize contact forces.
-
-        rotm * (rd_.J_C_INV_T.rightCols(MODEL_DOF) * control_torque + rd_.J_C_INV_T * rd_.G);
-        rd_.J_C_INV_T.rightCols(MODEL_DOF).transpose() * rotm.transpose() * rotm *rd_.J_C_INV_T.rightCols(MODEL_DOF) - 2 * rd_.J_C_INV_T * rd_.G
-
-        min mfc except z axis
-
-        s.t. zmp condition, friction condition.
-
-        H matrix :
-
-        contact condition : on/off
-        contact mode : plane, line, point
-
-        s. t. zmp condition :      (left_rotm.transpose(), 0; 0, right_rotm.transpose()) * rd_.J_C_INV_T.rightCols(MODEL_DOF) * (control_torue + contact_torque) + rd_.J_C_INV_T * rd_.G
-
-        contact_force = rd_.J_C_INV_T.rightCols(MODEL_DOF)*(torque_control + torque_contact) + rd_.J_C_INV_T * rd_.G;
-
-        torque_contact = Robot.qr_V2.transpose() * (Robot.J_C_INV_T.rightCols(MODEL_DOF).topRows(6) * Robot.qr_V2.transpose()).inverse() * desired_contact_force;
-
-        rd_.J_C_INV_T.rightCols(MODEL_DOF) * (torque + nwjw * des_Force) - rd_.
-
-        torque_contact = nwjw * des_Force
-        */
     };
 
     template <typename... Types>

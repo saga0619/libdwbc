@@ -383,7 +383,7 @@ namespace DWBC
 
     torque_contact = nwjw * des_Force
     */
-    void RobotData::CalcContactRedistribute()
+    void RobotData::CalcContactRedistribute(bool init)
     {
         int contact_index = cc_.size();  // size of contact link
         int total_contact_dof = 0;       // size of contact dof
@@ -410,10 +410,6 @@ namespace DWBC
         }
         else
         {
-
-            if (true)
-                qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
-
             MatrixXd H, H_temp;
             VectorXd g;
 
@@ -447,7 +443,6 @@ namespace DWBC
             H = H_temp.transpose() * H_temp;
             g = (RotW * crot_matrix * (J_C_INV_T.rightCols(model_size) * control_torque - P_C)).transpose() * H_temp;
 
-            qp_contact_.UpdateMinProblem(H, g);
 
             MatrixXd A_qp;
             A_qp.setZero(total_constraint_size, variable_number);
@@ -493,6 +488,9 @@ namespace DWBC
             lbA.segment(model_size, contact_constraint_size) = bA;
             ubA.segment(model_size, contact_constraint_size) = bA + ubA_contact;
 
+            if (true)
+                qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+            qp_contact_.UpdateMinProblem(H, g);
             qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
 
             Eigen::VectorXd qpres;
