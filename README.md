@@ -3,7 +3,7 @@ operational space whole-body control library.
 
 
 ## How to ...
-### Prereauisities
+### prerequisites
  * Eigen3
  * [RBDL](https://github.com/saga0619/rbdl-orb)
  * [qpOASES](https://github.com/saga0619/qpOASES)
