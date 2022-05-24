@@ -1,5 +1,5 @@
 #include <chrono>
-#include <dwbc.h>
+#include <dwbc/dwbc.h>
 
 class MyRobotData : public DWBC::RobotData
 {
