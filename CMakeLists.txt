@@ -45,7 +45,6 @@ file(GLOB dwbc_header
 
 add_library(dwbc ${dwbc_src})
 
-
 target_link_libraries(dwbc
 PUBLIC
 ${RBDL_LIBRARY}
