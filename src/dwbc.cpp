@@ -140,15 +140,68 @@ namespace DWBC
             ts_[i].CalcJKT(A_inv_, N_C, W_inv);
         }
     }
-    void RobotData::qpSWIFT_test(MatrixXd &H, MatrixXd &G, MatrixXd &A, MatrixXd &UB)
+
+    VectorXd RobotData::qpSWIFT_test(int val_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &UB)
     {
         QP *myQP;
 
-        qp_int n = H.cols(); /*! Number of Decision Variables */
-        qp_int m = A.cols(); /*! Number of Inequality Constraints */
-        qp_int p = 0;        /*! Number of equality Constraints */
+        qp_int n = val_size;   /*! Number of Decision Variables */
+        qp_int m = const_size; /*! Number of Inequality Constraints */
+        qp_int p = 0;          /*! Number of equality Constraints */
 
         myQP = QP_SETUP_dense(n, m, 0, H.data(), NULL, A.data(), G.data(), UB.data(), NULL, NULL, COLUMN_MAJOR_ORDERING);
+
+        qp_int ExitCode = QP_SOLVE(myQP);
+
+        // if (myQP != NULL)
+        //     printf("Setup Time     : %f ms\n", myQP->stats->tsetup * 1000.0);
+        // if (ExitCode == QP_OPTIMAL)
+        // {
+        //     printf("Solve Time     : %f ms\n", (myQP->stats->tsolve + myQP->stats->tsetup) * 1000.0);
+        //     printf("KKT_Solve Time : %f ms\n", myQP->stats->kkt_time * 1000.0);
+        //     printf("LDL Time       : %f ms\n", myQP->stats->ldl_numeric * 1000.0);
+        //     printf("Diff	       : %f ms\n", (myQP->stats->kkt_time - myQP->stats->ldl_numeric) * 1000.0);
+        //     printf("Iterations     : %ld\n", myQP->stats->IterationCount);
+        //     printf("Optimal Solution Found\n");
+        // }
+        if (ExitCode == QP_MAXIT)
+        {
+            printf("Solve Time     : %f ms\n", myQP->stats->tsolve * 1000.0);
+            printf("KKT_Solve Time : %f ms\n", myQP->stats->kkt_time * 1000.0);
+            printf("LDL Time       : %f ms\n", myQP->stats->ldl_numeric * 1000.0);
+            printf("Diff	       : %f ms\n", (myQP->stats->kkt_time - myQP->stats->ldl_numeric) * 1000.0);
+            printf("Iterations     : %ld\n", myQP->stats->IterationCount);
+            printf("Maximum Iterations reached\n");
+        }
+
+        if (ExitCode == QP_FATAL)
+        {
+            printf("Unknown Error Detected\n");
+        }
+
+        if (ExitCode == QP_KKTFAIL)
+        {
+            printf("LDL Factorization fail\n");
+        }
+
+        /*! The Solution can be found as real pointer in myQP->x;It is an array of Dimension n*/
+        // std::cout << "Solution" << std::endl;
+
+        // for (int i = 0; i < 3; ++i)
+        // {
+        //     std::cout << "x[" << i << "]: " << myQP->x[i] << std::endl;
+        // }
+
+        VectorXd res_;
+        res_.setZero(n);
+        for (int i = 0; i < n; i++)
+        {
+            res_(i) = myQP->x[i];
+        }
+
+        QP_CLEANUP_dense(myQP);
+
+        return res_;
     }
 
     void RobotData::CalcTaskTorque(bool hqp, bool init)
@@ -283,7 +336,7 @@ namespace DWBC
         contact_dof += total_contact_dof;
 
         int variable_size = task_dof + contact_dof;
-        int total_constraint_size = contact_constraint_size + model_size; // total contact constraint size
+        int total_constraint_size = contact_constraint_size + 2 * model_size; // total contact constraint size
 
         MatrixXd H;
         VectorXd g;
@@ -303,8 +356,12 @@ namespace DWBC
         lbA.setZero(total_constraint_size);
         ubA.setZero(total_constraint_size);
 
-        lbA.segment(0, model_size) = -torque_limit - torque_prev - Ntorque_task * ts_.f_star_;
+        // lbA.segment(0, model_size) = -torque_limit - torque_prev - Ntorque_task * ts_.f_star_;
         ubA.segment(0, model_size) = torque_limit - torque_prev - Ntorque_task * ts_.f_star_;
+
+        A.block(model_size, 0, model_size, task_dof) = -Ntorque_task;
+        A.block(model_size, task_dof, model_size, contact_dof) = -NwJw;
+        ubA.segment(model_size, model_size) = torque_limit + torque_prev + Ntorque_task * ts_.f_star_;
 
         Eigen::MatrixXd A_const_a;
         A_const_a.setZero(contact_constraint_size, total_contact_dof);
@@ -328,35 +385,37 @@ namespace DWBC
 
         Eigen::MatrixXd Atemp = A_const_a * A_rot * J_C_INV_T.rightCols(model_size);
         // t[3] = std::chrono::steady_clock::now();
-        A.block(model_size, 0, contact_constraint_size, task_dof) = - Atemp * Ntorque_task;
-        A.block(model_size, task_dof, contact_constraint_size, contact_dof) = - Atemp * NwJw;
+        A.block(2 * model_size, 0, contact_constraint_size, task_dof) = -Atemp * Ntorque_task;
+        A.block(2 * model_size, task_dof, contact_constraint_size, contact_dof) = -Atemp * NwJw;
         // t[4] = std::chrono::steady_clock::now();
 
         Eigen::VectorXd bA = A_const_a * (A_rot * P_C) - Atemp * (torque_prev + Ntorque_task * ts_.f_star_);
-        Eigen::VectorXd ubA_contact;
-        ubA_contact.setConstant(contact_constraint_size, 1E+6);
+        // Eigen::VectorXd ubA_contact;
+        lbA.setConstant(total_constraint_size, -1E+6);
 
-        lbA.segment(model_size, contact_constraint_size) = - ubA_contact;
-        ubA.segment(model_size, contact_constraint_size) = - bA ;
+        // lbA.segment(total_constraint_size) = -ubA_contact;
+        ubA.segment(2 * model_size, contact_constraint_size) = -bA;
 
         // qp_.EnableEqualityCondition(0.0001);
 
-        if (init_trigger)
-            ts_.qp_.InitializeProblemSize(variable_size, total_constraint_size);
+        // if (init_trigger)
+        //     ts_.qp_.InitializeProblemSize(variable_size, total_constraint_size);
 
-        ts_.qp_.UpdateMinProblem(H, g);
-        ts_.qp_.UpdateSubjectToAx(A, lbA, ubA);
+        // ts_.qp_.UpdateMinProblem(H, g);
+        // ts_.qp_.UpdateSubjectToAx(A, lbA, ubA);
 
-        VectorXd qpres;
-        if (ts_.qp_.SolveQPoases(100, qpres))
-        {
-            ts_.f_star_qp_ = qpres.segment(0, task_dof);
-        }
-        else
-        {
-            std::cout << "task solve failed" << std::endl;
-            ts_.f_star_qp_ = VectorXd::Zero(task_dof);
-        }
+        VectorXd qpres = qpSWIFT_test(variable_size, total_constraint_size, H, g, A, ubA);
+
+        ts_.f_star_qp_ = qpres.segment(0, task_dof);
+        // if (ts_.qp_.SolveQPoases(100, qpres))
+        // {
+        //     ts_.f_star_qp_ = qpres.segment(0, task_dof);
+        // }
+        // else
+        // {
+        //     std::cout << "task solve failed" << std::endl;
+        //     ts_.f_star_qp_ = VectorXd::Zero(task_dof);
+        // }
     }
 
     /*
@@ -400,8 +459,8 @@ namespace DWBC
         }
         contact_dof += total_contact_dof;
 
-        int variable_number = contact_dof;                                // total size of qp variable
-        int total_constraint_size = contact_constraint_size + model_size; // total size of constraint
+        int variable_number = contact_dof;                                    // total size of qp variable
+        int total_constraint_size = contact_constraint_size + 2 * model_size; // total size of constraint
 
         VectorXd control_torque = torque_grav_ + torque_task_;
         VectorXd torque_limit = VectorXd::Constant(model_size, 300);
@@ -449,11 +508,14 @@ namespace DWBC
             A_qp.setZero(total_constraint_size, variable_number);
             A_qp.block(0, 0, model_size, contact_dof) = NwJw;
 
+            A_qp.block(model_size, 0, model_size, contact_dof) = -NwJw;
+
             VectorXd lbA, ubA;
             lbA.setZero(total_constraint_size);
             ubA.setZero(total_constraint_size);
-            lbA.segment(0, model_size) = -torque_limit - control_torque;
+            // lbA.segment(0, model_size) = -torque_limit - control_torque;
             ubA.segment(0, model_size) = torque_limit - control_torque;
+            ubA.segment(model_size, model_size) = torque_limit + control_torque;
 
             MatrixXd A_const_a;
             A_const_a.setZero(contact_constraint_size, total_contact_dof);
@@ -482,12 +544,12 @@ namespace DWBC
 
             Eigen::MatrixXd Atemp = A_const_a * A_rot * J_C_INV_T.rightCols(model_size);
             Eigen::VectorXd bA = A_const_a * (A_rot * P_C) - Atemp * control_torque;
-            Eigen::VectorXd ubA_contact;
-            ubA_contact.setConstant(contact_constraint_size, 1E+6);
+            // Eigen::VectorXd ubA_contact;
+            lbA.setConstant(total_constraint_size, -1E+6);
 
-            A_qp.block(model_size, 0, contact_constraint_size, contact_dof) = -Atemp * NwJw;
-            lbA.segment(model_size, contact_constraint_size) = - ubA_contact;
-            ubA.segment(model_size, contact_constraint_size) = -bA;
+            A_qp.block(2 * model_size, 0, contact_constraint_size, contact_dof) = -Atemp * NwJw;
+            // lbA.segment(2*model_size, contact_constraint_size) = -ubA_contact;
+            ubA.segment(2 * model_size, contact_constraint_size) = -bA;
 
             if (init)
                 qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);

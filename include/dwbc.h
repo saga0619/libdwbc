@@ -137,7 +137,7 @@ namespace DWBC
         /*
         qpSWIFT test..
         */
-        void qpSWIFT_test(MatrixXd &H, MatrixXd &G, MatrixXd &A, MatrixXd &LB);
+        VectorXd qpSWIFT_test(int val_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &UB);
 
         /*
         Calculate Heirarcical task torque.
