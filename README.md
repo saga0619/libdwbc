@@ -7,8 +7,7 @@ operational space whole-body control library.
  * Eigen3
  * [RBDL](https://github.com/saga0619/rbdl-orb)
  * [qpOASES](https://github.com/saga0619/qpOASES)
- * [qpSWIFT](https://github.com/qpSWIFT/qpSWIFT)(wip)
-
+ 
 ### How to install
 ```sh
 mkdir build
