@@ -141,69 +141,6 @@ namespace DWBC
         }
     }
 
-    VectorXd RobotData::qpSWIFT_test(int val_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &UB)
-    {
-        QP *myQP;
-
-        qp_int n = val_size;   /*! Number of Decision Variables */
-        qp_int m = const_size; /*! Number of Inequality Constraints */
-        qp_int p = 0;          /*! Number of equality Constraints */
-
-        myQP = QP_SETUP_dense(n, m, 0, H.data(), NULL, A.data(), G.data(), UB.data(), NULL, NULL, COLUMN_MAJOR_ORDERING);
-
-        qp_int ExitCode = QP_SOLVE(myQP);
-
-        // if (myQP != NULL)
-        //     printf("Setup Time     : %f ms\n", myQP->stats->tsetup * 1000.0);
-        // if (ExitCode == QP_OPTIMAL)
-        // {
-        //     printf("Solve Time     : %f ms\n", (myQP->stats->tsolve + myQP->stats->tsetup) * 1000.0);
-        //     printf("KKT_Solve Time : %f ms\n", myQP->stats->kkt_time * 1000.0);
-        //     printf("LDL Time       : %f ms\n", myQP->stats->ldl_numeric * 1000.0);
-        //     printf("Diff	       : %f ms\n", (myQP->stats->kkt_time - myQP->stats->ldl_numeric) * 1000.0);
-        //     printf("Iterations     : %ld\n", myQP->stats->IterationCount);
-        //     printf("Optimal Solution Found\n");
-        // }
-        if (ExitCode == QP_MAXIT)
-        {
-            printf("Solve Time     : %f ms\n", myQP->stats->tsolve * 1000.0);
-            printf("KKT_Solve Time : %f ms\n", myQP->stats->kkt_time * 1000.0);
-            printf("LDL Time       : %f ms\n", myQP->stats->ldl_numeric * 1000.0);
-            printf("Diff	       : %f ms\n", (myQP->stats->kkt_time - myQP->stats->ldl_numeric) * 1000.0);
-            printf("Iterations     : %ld\n", myQP->stats->IterationCount);
-            printf("Maximum Iterations reached\n");
-        }
-
-        if (ExitCode == QP_FATAL)
-        {
-            printf("Unknown Error Detected\n");
-        }
-
-        if (ExitCode == QP_KKTFAIL)
-        {
-            printf("LDL Factorization fail\n");
-        }
-
-        /*! The Solution can be found as real pointer in myQP->x;It is an array of Dimension n*/
-        // std::cout << "Solution" << std::endl;
-
-        // for (int i = 0; i < 3; ++i)
-        // {
-        //     std::cout << "x[" << i << "]: " << myQP->x[i] << std::endl;
-        // }
-
-        VectorXd res_;
-        res_.setZero(n);
-        for (int i = 0; i < n; i++)
-        {
-            res_(i) = myQP->x[i];
-        }
-
-        QP_CLEANUP_dense(myQP);
-
-        return res_;
-    }
-
     void RobotData::CalcTaskTorque(bool hqp, bool init)
     {
         torque_task_.setZero(model_dof_);
@@ -211,7 +148,7 @@ namespace DWBC
         if (hqp)
         {
             VectorXd torque_limit;
-            torque_limit.setConstant(model_dof_, 1000);
+            torque_limit.setConstant(model_dof_, 300);
             for (int i = 0; i < ts_.size(); i++)
             {
                 if (i == 0)
@@ -398,24 +335,23 @@ namespace DWBC
 
         // qp_.EnableEqualityCondition(0.0001);
 
-        // if (init_trigger)
-        //     ts_.qp_.InitializeProblemSize(variable_size, total_constraint_size);
+        VectorXd qpres;
 
-        // ts_.qp_.UpdateMinProblem(H, g);
-        // ts_.qp_.UpdateSubjectToAx(A, lbA, ubA);
+        if (init_trigger)
+            ts_.qp_.InitializeProblemSize(variable_size, total_constraint_size);
 
-        VectorXd qpres = qpSWIFT_test(variable_size, total_constraint_size, H, g, A, ubA);
+        ts_.qp_.UpdateMinProblem(H, g);
+        ts_.qp_.UpdateSubjectToAx(A, lbA, ubA);
 
-        ts_.f_star_qp_ = qpres.segment(0, task_dof);
-        // if (ts_.qp_.SolveQPoases(100, qpres))
-        // {
-        //     ts_.f_star_qp_ = qpres.segment(0, task_dof);
-        // }
-        // else
-        // {
-        //     std::cout << "task solve failed" << std::endl;
-        //     ts_.f_star_qp_ = VectorXd::Zero(task_dof);
-        // }
+        if (ts_.qp_.SolveQPoases(100, qpres))
+        {
+            ts_.f_star_qp_ = qpres.segment(0, task_dof);
+        }
+        else
+        {
+            std::cout << "task solve failed" << std::endl;
+            ts_.f_star_qp_ = VectorXd::Zero(task_dof);
+        }
     }
 
     /*

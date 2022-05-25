@@ -20,7 +20,6 @@ ENDIF()
 find_package(RBDL REQUIRED)
 find_package(Eigen3 3.0.0 REQUIRED)
 find_package(QPOASES REQUIRED)
-find_package(qpSWIFT)
 
 include_directories(
     include
@@ -43,8 +42,6 @@ PUBLIC
 ${RBDL_LIBRARY}
 ${RBDL_URDFREADER_LIBRARY}
 ${QPOASES_LIBRARY}
-PRIVATE
-qpSWIFT::qpSWIFT-static
 )
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/dwbc-config.cmake" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

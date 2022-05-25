@@ -8,7 +8,6 @@
 #include "contact_constraint.h"
 #include "task.h"
 #include "wbd.h"
-#include <qpSWIFT/qpSWIFT.h>
 
 using namespace Eigen;
 namespace DWBC
@@ -133,11 +132,6 @@ namespace DWBC
         Calculate Task Space dynamics
         */
         void CalcTaskSpace(bool update = true);
-
-        /*
-        qpSWIFT test..
-        */
-        VectorXd qpSWIFT_test(int val_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &UB);
 
         /*
         Calculate Heirarcical task torque.
