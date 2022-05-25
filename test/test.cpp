@@ -7,7 +7,6 @@ class MyRobotData : public DWBC::RobotData
     double control_time;
 };
 
-
 using namespace DWBC;
 
 int main()
@@ -16,7 +15,7 @@ int main()
 
     std::string urdf_path = "../../test/dyros_tocabi.urdf";
 
-    rd_.InitModelData(urdf_path, true, 1);
+    rd_.InitModelData(urdf_path, true, false);
 
     VectorXd q;
     VectorXd qdot;
@@ -58,7 +57,7 @@ int main()
     // std::cout << q.transpose() << std::endl;
     // std::cout << qdot.transpose() << std::endl;
 
-    std::cout << "Update Kinematics Random Test complete. : " << t_dur.count() / repeat_time << " us" << std::endl;
+    std::cout << "Update Kinematics Random q Repeat test : " << t_dur.count() / repeat_time << " us" << std::endl;
 
     q.setZero();
     q << 0, 0, 0.92983, 0, 0, 0,
@@ -74,26 +73,14 @@ int main()
     qdot.setZero();
     rd_.UpdateKinematics(q, qdot, qddot);
 
-    // std::cout << "total mass : " << rd_.total_mass_ << std::endl;
-    // std::cout << rd_.link_[0].xpos.transpose() << std::endl;
-    // std::cout << rd_.link_[0].rotm;
-
     int left_foot_id = 6;
     int right_foot_id = 12;
 
-    // Add ContactConstraint
-    rd_.AddContactConstraint(left_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, true);
-    rd_.AddContactConstraint(right_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, true);
-    // rd_.AddContactConstraint(33, 0, Vector3d(0, 0, 0), Vector3d(0, 0, 1), 0.1, 0.1, true);
+    rd_.AddContactConstraint(left_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(right_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
 
-    rd_.SetContact(true, true);
-    // rd_.CalcContactConstraint();
-
-    // Add taskspace info
-    // rd_.AddTaskSpace(TASK_LINK_6D, 0, rd_.link_[0].com_position_l_, true);
-    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero(), true);
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero(), true);
-
+    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
@@ -102,59 +89,102 @@ int main()
     rd_.SetTaskSpace(0, fstar_1);
     rd_.SetTaskSpace(1, Vector3d::Zero());
 
-    std::cout << "Calc Task Space" << std::endl;
-
-    rd_.CalcTaskSpace(); // Calculate Task Spaces...
-
-    std::cout << "Calc grav compensation " << std::endl;
-
-    rd_.CalcGravCompensation(); // Calulate Gravity Compensation
-
-    std::cout << "Calc Task Torque times..." << std::endl;
-
-    rd_.CalcTaskTorque(true, true);
     t_start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 10000; i++)
+
+    bool init = true;
+
+    for (int i = 0; i < repeat_time; i++)
     {
-        rd_.CalcTaskTorque(true, false);
+        rd_.SetContact(true, true);
+        rd_.CalcTaskSpace();        // Calculate Task Spaces...
+        rd_.CalcGravCompensation(); // Calulate Gravity Compensation
+        rd_.CalcTaskTorque(true, init);
+        rd_.CalcContactRedistribute(init);
+
+        init = false;
     }
     t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_start);
 
-    std::cout << "Calc Task Torque : " << t_dur.count() / 10000 << " us" << std::endl;
-
-    std::cout << "Calc Contact Redistribute" << std::endl;
-
-    rd_.CalcContactRedistribute();
+    std::cout << "Calc Task Repeat test : " << t_dur.count() / repeat_time << " us" << std::endl;
 
     std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
     std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
     std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
-
-    // std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_).transpose() << std::endl;
-
-    // std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_).transpose() << std::endl;
-
     std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
-    // std::cout<<"V2"<<std::endl<<rd_.V2<<std::endl;
 
-    // std::cout<<"NwJw"<<std::endl<<rd_.NwJw<<std::endl;
 
-    // std::cout << "mid consume : " << mid_consume / repeat_time << " us" << std::endl;
+
+    Eigen::Matrix<qp_real, 3, 3> P;
+    Eigen::Matrix<qp_real, 3, 1> c;
+    Eigen::Matrix<qp_real, 2, 3> G;
+    Eigen::Matrix<qp_real, 2, 1> h;
+    Eigen::Matrix<qp_real, 1, 3> A;
+    Eigen::Matrix<qp_real, 1, 1> b;
+    P << 5.0, 1.0, 0.0,
+        1.0, 2.0, 1.0,
+        0.0, 1.0, 4.0;
+
+    c << 1.0, 2.0, 1.0;
+
+    G << -4.0, -4.0, 0.0,
+        0.0, 0.0, -1.0;
+
+    h << -1.0, -1.0;
+
+    A << 1.0, -2.0, 1.0;
+
+    b << 3.0;
+
+    qp_int n = 3; /*! Number of Decision Variables */
+    qp_int m = 2; /*! Number of Inequality Constraints */
+    qp_int p = 1; /*! Number of equality Constraints */
+
+    QP *myQP;
+
+    myQP = QP_SETUP_dense(n, m, 0, P.data(), NULL, G.data(), c.data(), h.data(), NULL, NULL, COLUMN_MAJOR_ORDERING);
+
+    qp_int ExitCode = QP_SOLVE(myQP);
+    if (myQP != NULL)
+        printf("Setup Time     : %f ms\n", myQP->stats->tsetup * 1000.0);
+    if (ExitCode == QP_OPTIMAL)
+    {
+        printf("Solve Time     : %f ms\n", (myQP->stats->tsolve + myQP->stats->tsetup) * 1000.0);
+        printf("KKT_Solve Time : %f ms\n", myQP->stats->kkt_time * 1000.0);
+        printf("LDL Time       : %f ms\n", myQP->stats->ldl_numeric * 1000.0);
+        printf("Diff	       : %f ms\n", (myQP->stats->kkt_time - myQP->stats->ldl_numeric) * 1000.0);
+        printf("Iterations     : %ld\n", myQP->stats->IterationCount);
+        printf("Optimal Solution Found\n");
+    }
+    if (ExitCode == QP_MAXIT)
+    {
+        printf("Solve Time     : %f ms\n", myQP->stats->tsolve * 1000.0);
+        printf("KKT_Solve Time : %f ms\n", myQP->stats->kkt_time * 1000.0);
+        printf("LDL Time       : %f ms\n", myQP->stats->ldl_numeric * 1000.0);
+        printf("Diff	       : %f ms\n", (myQP->stats->kkt_time - myQP->stats->ldl_numeric) * 1000.0);
+        printf("Iterations     : %ld\n", myQP->stats->IterationCount);
+        printf("Maximum Iterations reached\n");
+    }
+
+    if (ExitCode == QP_FATAL)
+    {
+        printf("Unknown Error Detected\n");
+    }
+
+    if (ExitCode == QP_KKTFAIL)
+    {
+        printf("LDL Factorization fail\n");
+    }
+
+    /*! The Solution can be found as real pointer in myQP->x;It is an array of Dimension n*/
+    std::cout << "Solution" << std::endl;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        std::cout << "x[" << i << "]: " << myQP->x[i] << std::endl;
+    }
+
+    QP_CLEANUP_dense(myQP);
+
+    return 0;
 }
-
-// wholebodycontrollibrary
-
-/*
-
-wbcl
-
-WholeBodyControlLibrary::
-
-WholeBodyModel;
-
-
-
-
-
-*/

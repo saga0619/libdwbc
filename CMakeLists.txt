@@ -28,13 +28,6 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
     )
 
-
-get_directory_property (inc_dirs INCLUDE_DIRECTORIES)
-
-#message(STATUS "eigen dir : ${QPOASES_INCLUDE_DIR}")
-
-message(STATUS "include dir : ${inc_dirs}")
-
 file(GLOB dwbc_src
 "src/*.cpp"
 )

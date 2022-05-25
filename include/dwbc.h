@@ -75,12 +75,12 @@ namespace DWBC
 
         */
         void AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x = 0, double contact_y = 0, bool verbose = false);
-        
+
         /*
-        Clear all stored ContactConstraint 
+        Clear all stored ContactConstraint
         */
         void ClearContactConstraint();
-        
+
         /*
         Update Conact space information
         */
@@ -113,7 +113,7 @@ namespace DWBC
         */
         void AddTaskSpace(int task_mode, int task_dof, bool verbose = false);
         void AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose = false);
-        
+
         /*
         Clear all task space
         */
@@ -123,7 +123,7 @@ namespace DWBC
         Set fstar or jtask or specific task heirarchy
         */
         void SetTaskSpace(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task = MatrixXd::Zero(1, 1));
-        
+
         /*
         Update Task Space information
         */
@@ -137,13 +137,13 @@ namespace DWBC
         /*
         qpSWIFT test..
         */
-        void qpSWIFT_test();
+        void qpSWIFT_test(MatrixXd &H, MatrixXd &G, MatrixXd &A, MatrixXd &LB);
 
         /*
         Calculate Heirarcical task torque.
         */
         void CalcTaskTorque(bool hqp = true, bool init = true);
-        
+
         /*
         Calculate heirarchy task torque
         */
@@ -162,7 +162,6 @@ namespace DWBC
         */
         VectorXd CalcGravCompensation();
         void CalcGravCompensation(VectorXd &grav_torque);
-
     };
 
     template <typename... Types>
@@ -181,7 +180,7 @@ namespace DWBC
 
             for (auto n : v)
             {
-                std::cout << "setting " << link_[cc_[itr].link_number_].name_ << " contact : " << bool_cast(n) << std::endl;
+                // std::cout << "setting " << link_[cc_[itr].link_number_].name_ << " contact : " << bool_cast(n) << std::endl;
                 cc_[itr++].SetContact(n);
             }
 
@@ -189,7 +188,7 @@ namespace DWBC
             {
                 for (int i = v.size(); i < cc_.size(); i++)
                 {
-                    std::cout << "setting " << link_[cc_[itr].link_number_].name_ << " contact : false" << std::endl;
+                    // std::cout << "setting " << link_[cc_[itr].link_number_].name_ << " contact : false" << std::endl;
                     cc_[itr++].SetContact(false);
                 }
             }

@@ -140,13 +140,15 @@ namespace DWBC
             ts_[i].CalcJKT(A_inv_, N_C, W_inv);
         }
     }
-    void RobotData::qpSWIFT_test()
+    void RobotData::qpSWIFT_test(MatrixXd &H, MatrixXd &G, MatrixXd &A, MatrixXd &UB)
     {
         QP *myQP;
 
-        qp_int n = 3; /*! Number of Decision Variables */
-        qp_int m = 2; /*! Number of Inequality Constraints */
-        qp_int p = 1; /*! Number of equality Constraints */
+        qp_int n = H.cols(); /*! Number of Decision Variables */
+        qp_int m = A.cols(); /*! Number of Inequality Constraints */
+        qp_int p = 0;        /*! Number of equality Constraints */
+
+        myQP = QP_SETUP_dense(n, m, 0, H.data(), NULL, A.data(), G.data(), UB.data(), NULL, NULL, COLUMN_MAJOR_ORDERING);
     }
 
     void RobotData::CalcTaskTorque(bool hqp, bool init)
@@ -326,16 +328,16 @@ namespace DWBC
 
         Eigen::MatrixXd Atemp = A_const_a * A_rot * J_C_INV_T.rightCols(model_size);
         // t[3] = std::chrono::steady_clock::now();
-        A.block(model_size, 0, contact_constraint_size, task_dof) = Atemp * Ntorque_task;
-        A.block(model_size, task_dof, contact_constraint_size, contact_dof) = Atemp * NwJw;
+        A.block(model_size, 0, contact_constraint_size, task_dof) = - Atemp * Ntorque_task;
+        A.block(model_size, task_dof, contact_constraint_size, contact_dof) = - Atemp * NwJw;
         // t[4] = std::chrono::steady_clock::now();
 
         Eigen::VectorXd bA = A_const_a * (A_rot * P_C) - Atemp * (torque_prev + Ntorque_task * ts_.f_star_);
         Eigen::VectorXd ubA_contact;
         ubA_contact.setConstant(contact_constraint_size, 1E+6);
 
-        lbA.segment(model_size, contact_constraint_size) = bA;
-        ubA.segment(model_size, contact_constraint_size) = bA + ubA_contact;
+        lbA.segment(model_size, contact_constraint_size) = - ubA_contact;
+        ubA.segment(model_size, contact_constraint_size) = - bA ;
 
         // qp_.EnableEqualityCondition(0.0001);
 
@@ -443,7 +445,6 @@ namespace DWBC
             H = H_temp.transpose() * H_temp;
             g = (RotW * crot_matrix * (J_C_INV_T.rightCols(model_size) * control_torque - P_C)).transpose() * H_temp;
 
-
             MatrixXd A_qp;
             A_qp.setZero(total_constraint_size, variable_number);
             A_qp.block(0, 0, model_size, contact_dof) = NwJw;
@@ -484,11 +485,11 @@ namespace DWBC
             Eigen::VectorXd ubA_contact;
             ubA_contact.setConstant(contact_constraint_size, 1E+6);
 
-            A_qp.block(model_size, 0, contact_constraint_size, contact_dof) = Atemp * NwJw;
-            lbA.segment(model_size, contact_constraint_size) = bA;
-            ubA.segment(model_size, contact_constraint_size) = bA + ubA_contact;
+            A_qp.block(model_size, 0, contact_constraint_size, contact_dof) = -Atemp * NwJw;
+            lbA.segment(model_size, contact_constraint_size) = - ubA_contact;
+            ubA.segment(model_size, contact_constraint_size) = -bA;
 
-            if (true)
+            if (init)
                 qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
             qp_contact_.UpdateMinProblem(H, g);
             qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
