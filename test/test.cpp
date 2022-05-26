@@ -1,5 +1,6 @@
 #include <chrono>
 #include <dwbc.h>
+#include <iomanip>
 
 class MyRobotData : public DWBC::RobotData
 {
@@ -32,6 +33,9 @@ int main()
     auto t_start = std::chrono::high_resolution_clock::now();
 
     int mid_consume = 0;
+
+    VectorXd qmod;
+    qmod.setZero(rd_.model_.q_size);
 
     for (int i = 0; i < repeat_time; i++)
     {
@@ -86,27 +90,114 @@ int main()
     fstar_1(0) = 0.1;
     fstar_1(1) = 2.0;
     fstar_1(2) = 0.1;
-    rd_.SetTaskSpace(0, fstar_1);
-    rd_.SetTaskSpace(1, Vector3d::Zero());
 
-    t_start = std::chrono::high_resolution_clock::now();
+    fstar_1(3) = 0.1;
+    fstar_1(4) = -0.1;
+    fstar_1(5) = 0.1;
 
     bool init = true;
 
+    long ns_uk = 0;
+    long ns_sc = 0;
+    long ns_gc = 0;
+    long ns_ct = 0;
+    long ns_cr = 0;
+
+    // Quaterniond quat_random = Quaterniond()
+
+    t_start = std::chrono::high_resolution_clock::now();
+    VectorXd qr = q;
+
+    repeat_time = 10000;
+
+    VectorXd tlim;
+
+    tlim.setConstant(rd_.model_dof_, 300);
+
+    rd_.SetTorqueLimit(tlim);
+
+    int calc_task_res = 0;
+    int calc_cr_res = 0;
+
+    int c_res = 0;
+    int c_res2 = 0;
+
     for (int i = 0; i < repeat_time; i++)
     {
+        qmod.setRandom();
+
+        qr = q + qmod * 0.001;
+        qr.segment(3, 3).setZero();
+        qr(rd_.system_dof_) = 1;
+
+        auto t0 = std::chrono::high_resolution_clock::now();
+        rd_.UpdateKinematics(qr, qdot, qddot);
+
+        auto t1 = std::chrono::high_resolution_clock::now();
         rd_.SetContact(true, true);
-        rd_.CalcTaskSpace();        // Calculate Task Spaces...
+
+        rd_.SetTaskSpace(0, fstar_1);
+        rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
+
+        auto t2 = std::chrono::high_resolution_clock::now();
         rd_.CalcGravCompensation(); // Calulate Gravity Compensation
-        rd_.CalcTaskTorque(true, init);
-        rd_.CalcContactRedistribute(init);
+        // rd_.CalcTaskSpaceTorqueHQPWithThreaded(init); // Calculate Task Spaces...
 
-        init = false;
+        auto t3 = std::chrono::high_resolution_clock::now();
+        c_res = rd_.CalcTaskTorque(true);
+        calc_task_res += c_res;
+
+        // if (c_res == 0)
+        // {
+        //     std::cout << "error at " << i << std::endl;
+        //     std::cout << qr.transpose() << std::endl;
+        // }
+
+        // std::cout << std::endl
+        //           << std::endl
+        //           << i << "contact calc" << std::endl
+        //           << std::endl;
+
+        auto t4 = std::chrono::high_resolution_clock::now();
+        c_res2 = rd_.CalcContactRedistribute(true);
+        calc_cr_res += c_res2;
+        auto t5 = std::chrono::high_resolution_clock::now();
+
+        // std::cout << std::endl
+        //           << std::endl
+        //           << i << "done" << std::endl
+        //           << std::endl;
+        // init = true;
+
+        ns_uk += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+        ns_sc += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+        ns_gc += std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2).count();
+        ns_ct += std::chrono::duration_cast<std::chrono::nanoseconds>(t4 - t3).count();
+        ns_cr += std::chrono::duration_cast<std::chrono::nanoseconds>(t5 - t4).count();
     }
+
     t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_start);
+    std::cout << " -----------------------------------------------" << std::endl;
 
-    std::cout << "Calc Task Repeat test : " << t_dur.count() / repeat_time << " us" << std::endl;
+    std::cout << " ----function repeat performance test result---- " << std::endl;
 
+    int rp_ns = repeat_time * 1000;
+
+    std::cout << std::setw(30) << std::right << "UpdateKinematics : " << ns_uk / rp_ns << " us" << std::endl;
+    std::cout << std::setw(30) << std::right << "SetContact : " << ns_sc / rp_ns << " us" << std::endl;
+    std::cout << std::setw(30) << std::right << "CalcGravCompensation : " << ns_gc / rp_ns << " us" << std::endl;
+    std::cout << std::setw(30) << std::right << "CalcTaskTorque : " << ns_ct / rp_ns << " us" << std::endl;
+    std::cout << std::setw(30) << std::right << "CalcContactRedistribute : " << ns_cr / rp_ns << " us" << std::endl;
+    std::cout << std::setw(30) << std::right << "TOTAL : " << t_dur.count() / repeat_time << " us" << std::endl;
+
+    std::cout << " -----------------------------------------------" << std::endl;
+
+    std::cout << "qptask success : " << calc_task_res << std::endl;
+    std::cout << "contact redis  qp : " << calc_cr_res << std::endl;
+
+    std::cout << " -----------------------------------------------" << std::endl;
+
+    std::cout << " fstar qp : " << rd_.ts_[0].f_star_qp_.transpose() << std::endl;
     std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
     std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
     std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;

@@ -16,6 +16,7 @@ namespace DWBC
     /*
      * pseudo inverse function
      */
+    MatrixXd PinvCODWBt(const MatrixXd &A);
     MatrixXd PinvCODWB(const MatrixXd &A);
 
     void PinvCODWB(const MatrixXd &A, MatrixXd &ret);
@@ -65,6 +66,11 @@ namespace DWBC
      */
     void CalculateJKT(const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv,
                       MatrixXd &J_kt, MatrixXd &lambda_task);
+
+    void CalculateJKTThreaded(const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv,
+                              MatrixXd &Q, MatrixXd &Q_temp, MatrixXd &lambda_task);
+
+    MatrixXd CalculateJKTonly(const MatrixXd &W_inv, const MatrixXd &Q);
 
     /*
      * Calculate Taskspace Null matrix

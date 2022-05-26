@@ -2,7 +2,6 @@
 #define WBHQP_TASK_H
 
 #include <Eigen/Dense>
-#include "qp_wrapper.h"
 #include "wbd.h"
 
 using namespace Eigen;
@@ -45,10 +44,9 @@ namespace DWBC
         VectorXd torque_h_;
 
         MatrixXd Q_;
+        MatrixXd Q_temp_;
 
         MatrixXd Q_t_inv;
-
-        CQuadraticProgram qp_;
 
         VectorXd f_star_qp_;
         VectorXd contact_qp_;

@@ -2,6 +2,15 @@
 
 namespace DWBC
 {
+    MatrixXd PinvCODWBt(const MatrixXd &A)
+    {
+        Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
+        cod.setThreshold(COD_THRESHOLD);
+        cod.compute(A);
+
+        return cod.pseudoInverse();
+    }
+
     MatrixXd PinvCODWB(const MatrixXd &A)
     {
         Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
@@ -134,6 +143,30 @@ namespace DWBC
         lambda_task = (J_task * A_inv * N_C * J_task.transpose()).inverse();
         MatrixXd Q = (lambda_task * J_task * A_inv * N_C).rightCols(J_task.cols() - 6);
         J_kt = W_inv * Q.transpose() * PinvCODWB(Q * W_inv * Q.transpose());
+    }
+
+    /*
+     *
+     *
+     *
+     */
+    void CalculateJKTThreaded(const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv,
+                              MatrixXd &Q, MatrixXd &Q_temp, MatrixXd &lambda_task)
+    {
+        lambda_task = (J_task * A_inv * N_C * J_task.transpose()).inverse();
+        Q = (lambda_task * J_task * A_inv * N_C).rightCols(J_task.cols() - 6);
+        Q_temp = Q * W_inv * Q.transpose();
+
+        // J_kt = W_inv * Q.transpose() * PinvCODWB(Q * W_inv * Q.transpose());
+    }
+
+    /*
+     *
+     *
+     */
+    MatrixXd CalculateJKTonly(const MatrixXd &W_inv, const MatrixXd &Q)
+    {
+        return W_inv * Q.transpose() * PinvCODWB(Q * W_inv * Q.transpose());
     }
 
     /*

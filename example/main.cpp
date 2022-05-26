@@ -7,7 +7,6 @@ class MyRobotData : public DWBC::RobotData
     double control_time;
 };
 
-
 using namespace DWBC;
 
 int main()
@@ -16,7 +15,7 @@ int main()
 
     std::string urdf_path = "../../test/dyros_tocabi.urdf";
 
-    rd_.InitModelData(urdf_path, true, 1);
+    rd_.InitModelData(urdf_path, true, false);
 
     VectorXd q;
     VectorXd qdot;
@@ -58,7 +57,7 @@ int main()
     // std::cout << q.transpose() << std::endl;
     // std::cout << qdot.transpose() << std::endl;
 
-    std::cout << "Update Kinematics Random Test complete. : " << t_dur.count() / repeat_time << " us" << std::endl;
+    std::cout << "Update Kinematics Random q Repeat test : " << t_dur.count() / repeat_time << " us" << std::endl;
 
     q.setZero();
     q << 0, 0, 0.92983, 0, 0, 0,
@@ -74,26 +73,14 @@ int main()
     qdot.setZero();
     rd_.UpdateKinematics(q, qdot, qddot);
 
-    // std::cout << "total mass : " << rd_.total_mass_ << std::endl;
-    // std::cout << rd_.link_[0].xpos.transpose() << std::endl;
-    // std::cout << rd_.link_[0].rotm;
-
     int left_foot_id = 6;
     int right_foot_id = 12;
 
-    // Add ContactConstraint
-    rd_.AddContactConstraint(left_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, true);
-    rd_.AddContactConstraint(right_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, true);
-    // rd_.AddContactConstraint(33, 0, Vector3d(0, 0, 0), Vector3d(0, 0, 1), 0.1, 0.1, true);
+    rd_.AddContactConstraint(left_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(right_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
 
-    rd_.SetContact(true, true);
-    // rd_.CalcContactConstraint();
-
-    // Add taskspace info
-    // rd_.AddTaskSpace(TASK_LINK_6D, 0, rd_.link_[0].com_position_l_, true);
-    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero(), true);
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero(), true);
-
+    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
@@ -102,59 +89,28 @@ int main()
     rd_.SetTaskSpace(0, fstar_1);
     rd_.SetTaskSpace(1, Vector3d::Zero());
 
-    std::cout << "Calc Task Space" << std::endl;
-
-    rd_.CalcTaskSpace(); // Calculate Task Spaces...
-
-    std::cout << "Calc grav compensation " << std::endl;
-
-    rd_.CalcGravCompensation(); // Calulate Gravity Compensation
-
-    std::cout << "Calc Task Torque times..." << std::endl;
-
-    rd_.CalcTaskTorque(true, true);
     t_start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 10000; i++)
+
+    bool init = true;
+
+    for (int i = 0; i < repeat_time; i++)
     {
-        rd_.CalcTaskTorque(true, false);
+        rd_.SetContact(true, true);
+        rd_.CalcTaskSpaceTorqueHQPWithThreaded(); // Calculate Task Spaces...
+        rd_.CalcGravCompensation();               // Calulate Gravity Compensation
+        rd_.CalcTaskTorque(true, init);
+        rd_.CalcContactRedistribute(init);
+
+        init = false;
     }
     t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_start);
 
-    std::cout << "Calc Task Torque : " << t_dur.count() / 10000 << " us" << std::endl;
-
-    std::cout << "Calc Contact Redistribute" << std::endl;
-
-    rd_.CalcContactRedistribute();
+    std::cout << "Calc Task Repeat test : " << t_dur.count() / repeat_time << " us" << std::endl;
 
     std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
     std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
     std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
-
-    // std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_).transpose() << std::endl;
-
-    // std::cout << "contact force before : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_).transpose() << std::endl;
-
     std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
-    // std::cout<<"V2"<<std::endl<<rd_.V2<<std::endl;
-
-    // std::cout<<"NwJw"<<std::endl<<rd_.NwJw<<std::endl;
-
-    // std::cout << "mid consume : " << mid_consume / repeat_time << " us" << std::endl;
+    return 0;
 }
-
-// wholebodycontrollibrary
-
-/*
-
-wbcl
-
-WholeBodyControlLibrary::
-
-WholeBodyModel;
-
-
-
-
-
-*/

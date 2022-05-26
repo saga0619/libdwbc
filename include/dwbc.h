@@ -10,6 +10,36 @@
 #include "wbd.h"
 
 using namespace Eigen;
+
+#ifdef COMPILE_QPSWIFT
+#define INFTY 1.0E+10
+#include "qps_wrap.h"
+class TaskSpaceQP : public DWBC::TaskSpace
+{
+public:
+    QP *qp_;
+
+    TaskSpaceQP(int task_mode, int heirarchy, int task_dof, int model_dof)
+        : TaskSpace(task_mode, heirarchy, task_dof, model_dof) {}
+
+    TaskSpaceQP(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point, int model_dof)
+        : TaskSpace(task_mode, heirarchy, link_number, link_id, task_point, model_dof) {}
+};
+#else
+#include "qp_wrapper.h"
+class TaskSpaceQP : public DWBC::TaskSpace
+{
+public:
+    DWBC::CQuadraticProgram qp_;
+
+    TaskSpaceQP(int task_mode, int heirarchy, int task_dof, int model_dof)
+        : DWBC::TaskSpace(task_mode, heirarchy, task_dof, model_dof) {}
+
+    TaskSpaceQP(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point, int model_dof)
+        : DWBC::TaskSpace(task_mode, heirarchy, link_number, link_id, task_point, model_dof) {}
+};
+#endif
+
 namespace DWBC
 {
 
@@ -59,11 +89,19 @@ namespace DWBC
 
         MatrixXd NwJw;
 
+        bool torque_limit_set_;
+
+        VectorXd torque_limit_;
+
         std::vector<Link> link_;
         std::vector<ContactConstraint> cc_;
-        std::vector<TaskSpace> ts_;
-
+        std::vector<TaskSpaceQP> ts_;
+#ifdef COMPILE_QPSWIFT
+        QP *qp_contact_;
+#else
         CQuadraticProgram qp_contact_;
+#endif
+        void SetTorqueLimit(const VectorXd &torque_limit); /* Set torque limit */
 
         void UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual);
 
@@ -100,7 +138,7 @@ namespace DWBC
         /*
         Calculate Contact Redistribution Torque
         */
-        void CalcContactRedistribute(bool init = true);
+        int CalcContactRedistribute(bool init = true);
 
         /*
         Calculate Contact Force with command Torque
@@ -136,12 +174,14 @@ namespace DWBC
         /*
         Calculate Heirarcical task torque.
         */
-        void CalcTaskTorque(bool hqp = true, bool init = true);
+        int CalcTaskTorque(bool init, bool hqp = true, bool update_task_space = true);
 
         /*
         Calculate heirarchy task torque
         */
-        void CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_limit, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
+        int CalcTaskTorqueQP(TaskSpaceQP &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
+
+        void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 
         /*
         Init model data with rbdl

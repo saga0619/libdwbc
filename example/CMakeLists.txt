@@ -8,4 +8,4 @@ find_package(dwbc REQUIRED)
 
 add_executable(dwbc_example main.cpp)
 
-target_link_libraries(dwbc_example dwbc)
+target_link_libraries(dwbc_example dwbc pthread)
