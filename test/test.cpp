@@ -151,6 +151,9 @@ int main()
         c_res = rd_.CalcTaskTorque(true);
         calc_task_res += c_res;
 
+        if (c_res == 0)
+            break;
+
         // if (c_res == 0)
         // {
         //     std::cout << "error at " << i << std::endl;
@@ -166,6 +169,9 @@ int main()
         c_res2 = rd_.CalcContactRedistribute(true);
         calc_cr_res += c_res2;
         auto t5 = std::chrono::high_resolution_clock::now();
+
+        if (c_res2 == 0)
+            break;
 
         // std::cout << std::endl
         //           << std::endl

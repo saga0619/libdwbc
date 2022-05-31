@@ -68,7 +68,7 @@ void RobotData::ClearQP()
 void RobotData::AddQP()
 {
     QP *qp_ti;
-    qp_task_.push_back(qp_ti)
+    qp_task_.push_back(qp_ti);
 }
 
 #else
@@ -531,6 +531,7 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
 
     qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
     qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
+    qp_task_[ts_.heirarchy_].DeleteSubjectToX();
 
     if (qp_task_[ts_.heirarchy_].SolveQPoases(300, qpres))
     {
@@ -541,6 +542,10 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
     {
         std::cout << "task solve failed" << std::endl;
         ts_.f_star_qp_ = VectorXd::Zero(task_dof);
+
+        qp_task_[ts_.heirarchy_].PrintMinProb();
+
+        qp_task_[ts_.heirarchy_].PrintSubjectToAx();
         return 0;
     }
 #endif
