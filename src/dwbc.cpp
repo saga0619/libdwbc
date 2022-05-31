@@ -3,6 +3,86 @@
 
 using namespace DWBC;
 
+#ifdef COMPILE_QPSWIFT
+VectorXd qpSwiftSolve(QP *qpp, int var_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &Ub, bool verbose)
+{
+    qp_int n = var_size;   /*! Number of Decision Variables */
+    qp_int m = const_size; /*! Number of Inequality Constraints */
+    qp_int p = 0;          /*! Number of equality Constraints */
+
+    qpp = QP_SETUP_dense(n, m, 0, H.data(), NULL, A.data(), G.data(), Ub.data(), NULL, NULL, COLUMN_MAJOR_ORDERING);
+
+    qp_int ExitCode = QP_SOLVE(qpp);
+
+    if (verbose)
+    {
+        if (qpp != NULL)
+            printf("Setup Time     : %f ms\n", qpp->stats->tsetup * 1000.0);
+        if (ExitCode == QP_OPTIMAL)
+        {
+            printf("Solve Time     : %f ms\n", (qpp->stats->tsolve + qpp->stats->tsetup) * 1000.0);
+            printf("KKT_Solve Time : %f ms\n", qpp->stats->kkt_time * 1000.0);
+            printf("LDL Time       : %f ms\n", qpp->stats->ldl_numeric * 1000.0);
+            printf("Diff	       : %f ms\n", (qpp->stats->kkt_time - qpp->stats->ldl_numeric) * 1000.0);
+            printf("Iterations     : %ld\n", qpp->stats->IterationCount);
+            printf("Optimal Solution Found\n");
+        }
+        if (ExitCode == QP_MAXIT)
+        {
+            printf("Solve Time     : %f ms\n", qpp->stats->tsolve * 1000.0);
+            printf("KKT_Solve Time : %f ms\n", qpp->stats->kkt_time * 1000.0);
+            printf("LDL Time       : %f ms\n", qpp->stats->ldl_numeric * 1000.0);
+            printf("Diff	       : %f ms\n", (qpp->stats->kkt_time - qpp->stats->ldl_numeric) * 1000.0);
+            printf("Iterations     : %ld\n", qpp->stats->IterationCount);
+            printf("Maximum Iterations reached\n");
+        }
+
+        if (ExitCode == QP_FATAL)
+        {
+            printf("Unknown Error Detected\n");
+        }
+
+        if (ExitCode == QP_KKTFAIL)
+        {
+            printf("LDL Factorization fail\n");
+        }
+    }
+
+    VectorXd ret;
+    ret.setZero(n);
+    for (int i = 0; i < n; i++)
+    {
+        ret(i) = qpp->x[i];
+    }
+
+    QP_CLEANUP_dense(qpp);
+
+    return ret;
+}
+
+void RobotData::ClearQP()
+{
+    qp_task_.clear();
+}
+
+void RobotData::AddQP()
+{
+    QP *qp_ti;
+    qp_task_.push_back(qp_ti)
+}
+
+#else
+void RobotData::ClearQP()
+{
+    qp_task_.clear();
+}
+
+void RobotData::AddQP()
+{
+    qp_task_.push_back(CQuadraticProgram());
+}
+#endif
+
 RobotData::RobotData(/* args */)
 {
     torque_limit_set_ = false;
@@ -39,6 +119,11 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
         com_pos += link_[i].xpos * link_[i].mass / total_mass_;
     }
     G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
+
+    CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
+
+    B_.setZero(system_dof_);
+    RigidBodyDynamics::NonlinearEffects(model_, q_virtual, q_dot_virtual, B_);
 }
 
 void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
@@ -92,20 +177,27 @@ void RobotData::CalcContactConstraint(bool update)
 void RobotData::ClearTaskSpace()
 {
     ts_.clear();
+
+    ClearQP();
 }
+
 void RobotData::AddTaskSpace(int task_mode, int task_dof, bool verbose)
 {
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added with mode " << taskmode_str[task_mode] << std::endl;
 
-    ts_.push_back(TaskSpaceQP(task_mode, ts_.size(), task_dof, system_dof_));
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), task_dof, system_dof_));
+
+    AddQP();
 }
 void RobotData::AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose)
 {
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
 
-    ts_.push_back(TaskSpaceQP(task_mode, ts_.size(), link_number, link_[link_number].link_id_, task_point, model_dof_));
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].link_id_, task_point, model_dof_));
+
+    AddQP();
 }
 
 void RobotData::SetTaskSpace(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task)
@@ -339,7 +431,7 @@ VectorXd RobotData::getContactForce(const VectorXd &command_torque)
     return cf;
 }
 
-int RobotData::CalcTaskTorqueQP(TaskSpaceQP &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
+int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
 {
     // return fstar & contact force;
     int task_dof = ts_.f_star_.size(); // size of task
@@ -430,17 +522,17 @@ int RobotData::CalcTaskTorqueQP(TaskSpaceQP &ts_, const MatrixXd &task_null_matr
     VectorXd qpres;
 
 #ifdef COMPILE_QPSWIFT
-    qpres = qpSwiftSolve(ts_.qp_, variable_size, total_constraint_size, H, g, A, ubA, false);
+    qpres = qpSwiftSolve(qp_task_[ts_.heirarchy_], variable_size, total_constraint_size, H, g, A, ubA, false);
     ts_.f_star_qp_ = qpres.segment(0, task_dof);
     return 1;
 #else
     if (init_trigger)
-        ts_.qp_.InitializeProblemSize(variable_size, total_constraint_size);
+        qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
 
-    ts_.qp_.UpdateMinProblem(H, g);
-    ts_.qp_.UpdateSubjectToAx(A, lbA, ubA);
+    qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
+    qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
 
-    if (ts_.qp_.SolveQPoases(300, qpres))
+    if (qp_task_[ts_.heirarchy_].SolveQPoases(300, qpres))
     {
         ts_.f_star_qp_ = qpres.segment(0, task_dof);
         return 1;

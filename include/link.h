@@ -9,7 +9,6 @@
 using namespace Eigen;
 namespace DWBC
 {
-
     class Link
     {
     private:
@@ -46,6 +45,9 @@ namespace DWBC
         void UpdatePos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_);
 
         void UpdateJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_);
+
+        // void UpdateJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual);
+        MatrixXd UpdateJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual, const Eigen::Vector3d &point_jac);
 
         MatrixXd GetPointJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::Vector3d &point);
     };

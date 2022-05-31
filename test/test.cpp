@@ -10,6 +10,10 @@ class MyRobotData : public DWBC::RobotData
 
 using namespace DWBC;
 
+void CalcCMM(RobotData &robotData)
+{
+}
+
 int main()
 {
     MyRobotData rd_;
@@ -88,7 +92,7 @@ int main()
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
-    fstar_1(1) = 2.0;
+    fstar_1(1) = 4.0;
     fstar_1(2) = 0.1;
 
     fstar_1(3) = 0.1;
@@ -202,6 +206,16 @@ int main()
     std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
     std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
     std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
+
+    // myjac test
+
+    std::cout << "jac pelv " << std::endl;
+
+    std::cout << rd_.link_[0].jac_ << std::endl;
+
+    std::cout << "left_foot_id pelv " << std::endl;
+
+    std::cout << rd_.link_[left_foot_id].jac_ << std::endl;
 
     return 0;
 }

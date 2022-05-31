@@ -13,7 +13,7 @@ using namespace Eigen;
 
 #ifdef COMPILE_QPSWIFT
 #define INFTY 1.0E+10
-#include "qps_wrap.h"
+#include <qpSWIFT/qpSWIFT.h>
 class TaskSpaceQP : public DWBC::TaskSpace
 {
 public:
@@ -27,17 +27,17 @@ public:
 };
 #else
 #include "qp_wrapper.h"
-class TaskSpaceQP : public DWBC::TaskSpace
-{
-public:
-    DWBC::CQuadraticProgram qp_;
+// class TaskSpaceQP : public DWBC::TaskSpace
+// {
+// public:
+//     DWBC::CQuadraticProgram qp_;
 
-    TaskSpaceQP(int task_mode, int heirarchy, int task_dof, int model_dof)
-        : DWBC::TaskSpace(task_mode, heirarchy, task_dof, model_dof) {}
+//     TaskSpaceQP(int task_mode, int heirarchy, int task_dof, int model_dof)
+//         : DWBC::TaskSpace(task_mode, heirarchy, task_dof, model_dof) {}
 
-    TaskSpaceQP(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point, int model_dof)
-        : DWBC::TaskSpace(task_mode, heirarchy, link_number, link_id, task_point, model_dof) {}
-};
+//     TaskSpaceQP(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point, int model_dof)
+//         : DWBC::TaskSpace(task_mode, heirarchy, link_number, link_id, task_point, model_dof) {}
+// };
 #endif
 
 namespace DWBC
@@ -67,6 +67,10 @@ namespace DWBC
         MatrixXd A_;
         MatrixXd A_inv_;
 
+        VectorXd B_;
+
+        MatrixXd CMM_; /*Centroidal momentum matrix*/
+
         VectorXd q_;
         VectorXd q_dot_;
         VectorXd q_ddot_;
@@ -95,15 +99,18 @@ namespace DWBC
 
         std::vector<Link> link_;
         std::vector<ContactConstraint> cc_;
-        std::vector<TaskSpaceQP> ts_;
+        std::vector<TaskSpace> ts_;
 #ifdef COMPILE_QPSWIFT
+        std::vector<QP *> qp_task_;
         QP *qp_contact_;
 #else
+        std::vector<CQuadraticProgram> qp_task_;
         CQuadraticProgram qp_contact_;
 #endif
         void SetTorqueLimit(const VectorXd &torque_limit); /* Set torque limit */
 
         void UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual);
+
 
         /*
         Add Contact constraint
@@ -150,7 +157,8 @@ namespace DWBC
         */
         void AddTaskSpace(int task_mode, int task_dof, bool verbose = false);
         void AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose = false);
-
+        void ClearQP();
+        void AddQP();
         /*
         Clear all task space
         */
@@ -179,7 +187,7 @@ namespace DWBC
         /*
         Calculate heirarchy task torque
         */
-        int CalcTaskTorqueQP(TaskSpaceQP &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
+        int CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 

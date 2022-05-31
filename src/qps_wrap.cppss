@@ -2,7 +2,7 @@
 
 #include "qps_wrap.h"
 
-VectorXd qpSwiftSolve(QP *qpp, int var_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &Ub, bool verbose)
+VectorXd DWBC::qpSwiftSolve(QP *qpp, int var_size, int const_size, MatrixXd &H, VectorXd &G, MatrixXd &A, VectorXd &Ub, bool verbose)
 {
     qp_int n = var_size;   /*! Number of Decision Variables */
     qp_int m = const_size; /*! Number of Inequality Constraints */
