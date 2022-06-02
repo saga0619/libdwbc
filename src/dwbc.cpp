@@ -199,25 +199,25 @@ void RobotData::CalcContactConstraint(bool update)
 
     if (check_mat_file_)
     {
-        std::cout << "Matrix Check Mode !! Task Heirarchy : " << std::endl;
+        std::cout << std::setw(30) << std::right << "Matrix Check Mode !! Task Heirarchy : " << std::endl;
 
-        std::cout << "J_C : " << check_binary("/J_C", J_C) << std::endl;
+        std::cout << std::setw(30) << std::right << "J_C : " << check_binary("/J_C", J_C) << std::endl;
 
-        std::cout << "A_inv_ : " << check_binary("/A_inv_", A_inv_) << std::endl;
+        std::cout << std::setw(30) << std::right << "A_inv_ : " << check_binary("/A_inv_", A_inv_) << std::endl;
 
-        std::cout << "Lambda_contact : " << check_binary("/Lambda_contact", Lambda_contact) << std::endl;
+        std::cout << std::setw(30) << std::right << "Lambda_contact : " << check_binary("/Lambda_contact", Lambda_contact) << std::endl;
 
-        std::cout << "J_C_INV_T : " << check_binary("/J_C_INV_T", J_C_INV_T) << std::endl;
+        std::cout << std::setw(30) << std::right << "J_C_INV_T : " << check_binary("/J_C_INV_T", J_C_INV_T) << std::endl;
 
-        std::cout << "N_C : " << check_binary("/N_C", N_C) << std::endl;
+        std::cout << std::setw(30) << std::right << "N_C : " << check_binary("/N_C", N_C) << std::endl;
 
-        std::cout << "W : " << check_binary("/W", W) << std::endl;
+        std::cout << std::setw(30) << std::right << "W : " << check_binary("/W", W) << std::endl;
 
-        std::cout << "NwJw : " << check_binary("/NwJw", NwJw) << std::endl;
+        std::cout << std::setw(30) << std::right << "NwJw : " << check_binary("/NwJw", NwJw) << std::endl;
 
-        std::cout << "W_inv : " << check_binary("/W_inv", W_inv) << std::endl;
+        std::cout << std::setw(30) << std::right << "W_inv : " << check_binary("/W_inv", W_inv) << std::endl;
 
-        std::cout << "V2 : " << check_binary("/V2", V2) << std::endl;
+        std::cout << std::setw(30) << std::right << "V2 : " << check_binary("/V2", V2) << std::endl;
     }
 
 #endif
@@ -398,7 +398,7 @@ int RobotData::CalcTaskTorque(bool init, bool hqp, bool update_task_space)
         if (check_mat_file_)
         {
 
-            std::cout << "torque task : " << check_binary("/torque_task_", torque_task_) << std::endl;
+            std::cout << std::setw(30) << std::right << "torque task : " << check_binary("/torque_task_", torque_task_) << std::endl;
         }
 
 #endif
@@ -488,7 +488,7 @@ VectorXd RobotData::CalcGravCompensation()
     if (check_mat_file_)
     {
 
-        std::cout << "torque_grav_ : " << check_binary("/torque_grav_", torque_grav_) << std::endl;
+        std::cout << std::setw(30) << std::right << "torque_grav_ : " << check_binary("/torque_grav_", torque_grav_) << std::endl;
     }
 
 #endif
@@ -508,7 +508,7 @@ void RobotData::CalcGravCompensation(VectorXd &grav_torque)
     if (check_mat_file_)
     {
 
-        std::cout << "torque_grav_ : " << check_binary("/torque_grav_", grav_torque) << std::endl;
+        std::cout << std::setw(30) << std::right << "torque_grav_ : " << check_binary("/torque_grav_", grav_torque) << std::endl;
     }
 
 #endif
@@ -635,16 +635,16 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
         std::cout << "Matrix Check Mode !! Task Heirarchy : " << ts_.heirarchy_ << std::endl;
 
         std::string hpath = "/h" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << "H : " << check_binary(hpath.c_str(), H) << std::endl;
+        std::cout << std::setw(30) << std::right << "H : " << check_binary(hpath.c_str(), H) << std::endl;
 
         hpath = "/g" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << "g : " << check_binary(hpath.c_str(), g) << std::endl;
+        std::cout << std::setw(30) << std::right << "g : " << check_binary(hpath.c_str(), g) << std::endl;
 
         hpath = "/A" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << "A : " << check_binary(hpath.c_str(), A) << std::endl;
+        std::cout << std::setw(30) << std::right << "A : " << check_binary(hpath.c_str(), A) << std::endl;
 
         hpath = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << "ubA : " << check_binary(hpath.c_str(), ubA) << std::endl;
+        std::cout << std::setw(30) << std::right << "ubA : " << check_binary(hpath.c_str(), ubA) << std::endl;
     }
 
 #endif
@@ -835,10 +835,10 @@ int RobotData::CalcContactRedistribute(bool init)
         {
             std::cout << "Matrix Check Mode !! Contact Redistribution : " << std::endl;
 
-            std::cout << "H : " << check_binary("/hcontact_mat", H) << std::endl;
-            std::cout << "g : " << check_binary("/gcontact_mat", g) << std::endl;
-            std::cout << "A : " << check_binary("/Acontact_mat", A_) << std::endl;
-            std::cout << "ubA : " << check_binary("/ubAcontact_mat", ubA) << std::endl;
+            std::cout << std::setw(30) << std::right << "H : " << check_binary("/hcontact_mat", H) << std::endl;
+            std::cout << std::setw(30) << std::right << "g : " << check_binary("/gcontact_mat", g) << std::endl;
+            std::cout << std::setw(30) << std::right << "A : " << check_binary("/Acontact_mat", A_) << std::endl;
+            std::cout << std::setw(30) << std::right << "ubA : " << check_binary("/ubAcontact_mat", ubA) << std::endl;
         }
 #endif
         Eigen::VectorXd qpres;
@@ -868,7 +868,7 @@ int RobotData::CalcContactRedistribute(bool init)
             if (check_mat_file_)
             {
 
-                std::cout << "torque_contact_ Calculation : " << check_binary("/torque_contact_", torque_contact_) << std::endl;
+                std::cout << std::setw(30) << std::right << "torque_contact_ Calculation : " << check_binary("/torque_contact_", torque_contact_) << std::endl;
             }
 
 #endif
