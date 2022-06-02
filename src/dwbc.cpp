@@ -86,6 +86,9 @@ void RobotData::AddQP()
 RobotData::RobotData(/* args */)
 {
     torque_limit_set_ = false;
+
+    save_mat_file_ = false;
+    check_mat_file_ = false;
 }
 
 RobotData::~RobotData()
@@ -172,6 +175,52 @@ void RobotData::CalcContactConstraint(bool update)
     }
 
     CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, W, NwJw, W_inv, V2);
+#ifdef CHECKDATA
+    if (save_mat_file_)
+    {
+        write_binary("/J_C", J_C);
+
+        write_binary("/A_inv_", A_inv_);
+
+        write_binary("/Lambda_contact", Lambda_contact);
+
+        write_binary("/J_C_INV_T", J_C_INV_T);
+
+        write_binary("/N_C", N_C);
+
+        write_binary("/W", W);
+
+        write_binary("/NwJw", NwJw);
+
+        write_binary("/W_inv", W_inv);
+
+        write_binary("/V2", V2);
+    }
+
+    if (check_mat_file_)
+    {
+        std::cout << "Matrix Check Mode !! Task Heirarchy : " << std::endl;
+
+        std::cout << "J_C : " << check_binary("/J_C", J_C) << std::endl;
+
+        std::cout << "A_inv_ : " << check_binary("/A_inv_", A_inv_) << std::endl;
+
+        std::cout << "Lambda_contact : " << check_binary("/Lambda_contact", Lambda_contact) << std::endl;
+
+        std::cout << "J_C_INV_T : " << check_binary("/J_C_INV_T", J_C_INV_T) << std::endl;
+
+        std::cout << "N_C : " << check_binary("/N_C", N_C) << std::endl;
+
+        std::cout << "W : " << check_binary("/W", W) << std::endl;
+
+        std::cout << "NwJw : " << check_binary("/NwJw", NwJw) << std::endl;
+
+        std::cout << "W_inv : " << check_binary("/W_inv", W_inv) << std::endl;
+
+        std::cout << "V2 : " << check_binary("/V2", V2) << std::endl;
+    }
+
+#endif
 }
 
 void RobotData::ClearTaskSpace()
@@ -339,7 +388,20 @@ int RobotData::CalcTaskTorque(bool init, bool hqp, bool update_task_space)
             if (i != ts_.size() - 1)
                 ts_[i].CalcNullMatrix(A_inv_, N_C);
         }
+#ifdef CHECKDATA
+        if (save_mat_file_)
+        {
 
+            write_binary("/torque_task_", torque_task_);
+        }
+
+        if (check_mat_file_)
+        {
+
+            std::cout << "torque task : " << check_binary("/torque_task_", torque_task_) << std::endl;
+        }
+
+#endif
         return 1;
     }
     else
@@ -416,12 +478,40 @@ void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
 VectorXd RobotData::CalcGravCompensation()
 {
     CalculateGravityCompensation(A_inv_, W_inv, N_C, J_C_INV_T, G_, torque_grav_, P_C);
+
+#ifdef CHECKDATA
+    if (save_mat_file_)
+    {
+        write_binary("/torque_grav_", torque_grav_);
+    }
+
+    if (check_mat_file_)
+    {
+
+        std::cout << "torque_grav_ : " << check_binary("/torque_grav_", torque_grav_) << std::endl;
+    }
+
+#endif
     return torque_grav_;
 }
 
 void RobotData::CalcGravCompensation(VectorXd &grav_torque)
 {
     CalculateGravityCompensation(A_inv_, W_inv, N_C, J_C_INV_T, G_, grav_torque, P_C);
+
+#ifdef CHECKDATA
+    if (save_mat_file_)
+    {
+        write_binary("/torque_grav_", grav_torque);
+    }
+
+    if (check_mat_file_)
+    {
+
+        std::cout << "torque_grav_ : " << check_binary("/torque_grav_", grav_torque) << std::endl;
+    }
+
+#endif
 }
 
 VectorXd RobotData::getContactForce(const VectorXd &command_torque)
@@ -520,6 +610,44 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
     // qp_.EnableEqualityCondition(0.0001);
 
     VectorXd qpres;
+#ifdef CHECKDATA
+    if (save_mat_file_)
+    {
+        std::string fname = "/h" + std::to_string(ts_.heirarchy_) + "mat";
+
+        write_binary(fname.c_str(), H);
+
+        fname = "/g" + std::to_string(ts_.heirarchy_) + "mat";
+
+        write_binary(fname.c_str(), g);
+
+        fname = "/A" + std::to_string(ts_.heirarchy_) + "mat";
+
+        write_binary(fname.c_str(), A);
+
+        fname = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
+
+        write_binary(fname.c_str(), ubA);
+    }
+
+    if (check_mat_file_)
+    {
+        std::cout << "Matrix Check Mode !! Task Heirarchy : " << ts_.heirarchy_ << std::endl;
+
+        std::string hpath = "/h" + std::to_string(ts_.heirarchy_) + "mat";
+        std::cout << "H : " << check_binary(hpath.c_str(), H) << std::endl;
+
+        hpath = "/g" + std::to_string(ts_.heirarchy_) + "mat";
+        std::cout << "g : " << check_binary(hpath.c_str(), g) << std::endl;
+
+        hpath = "/A" + std::to_string(ts_.heirarchy_) + "mat";
+        std::cout << "A : " << check_binary(hpath.c_str(), A) << std::endl;
+
+        hpath = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
+        std::cout << "ubA : " << check_binary(hpath.c_str(), ubA) << std::endl;
+    }
+
+#endif
 
 #ifdef COMPILE_QPSWIFT
     qpres = qpSwiftSolve(qp_task_[ts_.heirarchy_], variable_size, total_constraint_size, H, g, A, ubA, false);
@@ -543,9 +671,9 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
         std::cout << "task solve failed" << std::endl;
         ts_.f_star_qp_ = VectorXd::Zero(task_dof);
 
-        qp_task_[ts_.heirarchy_].PrintMinProb();
+        // qp_task_[ts_.heirarchy_].PrintMinProb();
 
-        qp_task_[ts_.heirarchy_].PrintSubjectToAx();
+        // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
         return 0;
     }
 #endif
@@ -693,6 +821,26 @@ int RobotData::CalcContactRedistribute(bool init)
         lbA.segment(torque_limit_constraint_size, contact_constraint_size).setConstant(-INFTY);
         ubA.segment(torque_limit_constraint_size, contact_constraint_size) = -bA;
 
+#ifdef CHECKDATA
+
+        if (save_mat_file_)
+        {
+            write_binary("/hcontact_mat", H);
+            write_binary("/gcontact_mat", g);
+            write_binary("/Acontact_mat", A_);
+            write_binary("/ubAcontact_mat", ubA);
+        }
+
+        if (check_mat_file_)
+        {
+            std::cout << "Matrix Check Mode !! Contact Redistribution : " << std::endl;
+
+            std::cout << "H : " << check_binary("/hcontact_mat", H) << std::endl;
+            std::cout << "g : " << check_binary("/gcontact_mat", g) << std::endl;
+            std::cout << "A : " << check_binary("/Acontact_mat", A_) << std::endl;
+            std::cout << "ubA : " << check_binary("/ubAcontact_mat", ubA) << std::endl;
+        }
+#endif
         Eigen::VectorXd qpres;
 
 #ifdef COMPILE_QPSWIFT
@@ -710,6 +858,20 @@ int RobotData::CalcContactRedistribute(bool init)
         if (qp_contact_.SolveQPoases(300, qpres))
         {
             torque_contact_ = NwJw * qpres;
+
+#ifdef CHECKDATA
+            if (save_mat_file_)
+            {
+                write_binary("/torque_contact_", torque_contact_);
+            }
+
+            if (check_mat_file_)
+            {
+
+                std::cout << "torque_contact_ Calculation : " << check_binary("/torque_contact_", torque_contact_) << std::endl;
+            }
+
+#endif
 
             return 1;
         }

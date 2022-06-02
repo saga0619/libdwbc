@@ -18,7 +18,11 @@ int main()
 {
     MyRobotData rd_;
 
-    std::string urdf_path = "../../test/dyros_tocabi.urdf";
+    std::string resource_path = URDF_DIR;
+
+    std::string urdf_name = "/dyros_tocabi.urdf";
+
+    std::string urdf_path = resource_path + urdf_name;
 
     rd_.InitModelData(urdf_path, true, false);
 
@@ -126,6 +130,32 @@ int main()
     int c_res = 0;
     int c_res2 = 0;
 
+    std::cout << " -----------------------------------------------" << std::endl;
+
+    std::cout << " ---- DYNAMICS MATRIX VERIFICATION ---- " << std::endl;
+
+    // Gen Matrix File
+    rd_.check_mat_file_ = true;
+
+    rd_.UpdateKinematics(q, qdot, qddot);
+    rd_.SetContact(true, true);
+
+    rd_.SetTaskSpace(0, fstar_1);
+    rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
+
+    rd_.CalcGravCompensation(); // Calulate Gravity Compensation
+    rd_.CalcTaskTorque(true);
+    rd_.CalcContactRedistribute(true);
+    rd_.check_mat_file_ = false;
+
+
+
+
+    std::cout << " -----------------------------------------------" << std::endl;
+
+    std::cout << " ----STARTING OSF REPEAT TEST---- " << std::endl;
+
+
     for (int i = 0; i < repeat_time; i++)
     {
         qmod.setRandom();
@@ -207,21 +237,11 @@ int main()
 
     std::cout << " -----------------------------------------------" << std::endl;
 
-    std::cout << " fstar qp : " << rd_.ts_[0].f_star_qp_.transpose() << std::endl;
-    std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
-    std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
-    std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
-    std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
-
-    // myjac test
-
-    std::cout << "jac pelv " << std::endl;
-
-    std::cout << rd_.link_[0].jac_ << std::endl;
-
-    std::cout << "left_foot_id pelv " << std::endl;
-
-    std::cout << rd_.link_[left_foot_id].jac_ << std::endl;
+    // std::cout << " fstar qp : " << rd_.ts_[0].f_star_qp_.transpose() << std::endl;
+    // std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
+    // std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
+    // std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
+    // std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
     return 0;
 }

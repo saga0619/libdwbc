@@ -95,6 +95,10 @@ namespace DWBC
 
         bool torque_limit_set_;
 
+
+        bool save_mat_file_;
+        bool check_mat_file_;
+
         VectorXd torque_limit_;
 
         std::vector<Link> link_;
