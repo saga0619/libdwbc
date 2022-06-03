@@ -103,7 +103,7 @@ namespace DWBC
         int rows = J_contact.rows();
         int cols = J_contact.cols();
 
-        lambda_contact = (J_contact * A_inv * J_contact.transpose()).llt().solve(Eigen::MatrixXd::Identity(rows, rows));
+        lambda_contact = (J_contact * A_inv * J_contact.transpose()).inverse();
         J_C_INV_T = lambda_contact * J_contact * A_inv;
         N_C = MatrixXd::Identity(cols, cols) - J_contact.transpose() * J_C_INV_T;
         W = A_inv.bottomRows(cols - 6) * N_C.rightCols(cols - 6);
