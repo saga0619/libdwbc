@@ -36,7 +36,7 @@ int main()
 
     MatrixXd j_tmp;
 
-    int repeat_time = 10000;
+    int repeat_time = 1000;
 
     auto t_start = std::chrono::high_resolution_clock::now();
 
@@ -116,8 +116,6 @@ int main()
     t_start = std::chrono::high_resolution_clock::now();
     VectorXd qr = q;
 
-    repeat_time = 10000;
-
     VectorXd tlim;
 
     tlim.setConstant(rd_.model_dof_, 300);
@@ -148,13 +146,31 @@ int main()
     rd_.CalcContactRedistribute(true);
     rd_.check_mat_file_ = false;
 
+    int rows = rd_.W.rows();
+    int cols = rd_.W.cols();
 
+    Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
+    cod.compute(rd_.W);
 
+    int rank = cod.rank();
+
+    MatrixXd mat_temp = cod.matrixT().topLeftCorner(rank, rank).template triangularView<Upper>();
+
+    std::cout << "rank : " << rank << std::endl
+              << "cod z: " << std::endl;
+    std::cout << cod.matrixZ() << std::endl
+            //   << "cod z: " << std::endl;
+    // std::cout << cod.matrixQ() << std::endl
+              << "cod T: " << std::endl;
+    std::cout <<  mat_temp<< std::endl
+              << "cod QTZ: " << std::endl;
+    std::cout << cod.matrixQTZ() << std::endl;
+    std::cout << "v2 : " << std::endl;
+    std::cout << rd_.V2 << std::endl;
 
     std::cout << " -----------------------------------------------" << std::endl;
 
     std::cout << " ----STARTING OSF REPEAT TEST---- " << std::endl;
-
 
     for (int i = 0; i < repeat_time; i++)
     {
