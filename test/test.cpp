@@ -36,7 +36,7 @@ int main()
 
     MatrixXd j_tmp;
 
-    int repeat_time = 1000;
+    int repeat_time = 10000;
 
     auto t_start = std::chrono::high_resolution_clock::now();
 
