@@ -154,6 +154,7 @@ int main()
     Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
     cod.compute(rd_.W);
 
+
     int rank = cod.rank();
 
     MatrixXd mat_temp = cod.matrixT().topLeftCorner(rank, rank).template triangularView<Upper>();

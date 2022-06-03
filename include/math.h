@@ -63,20 +63,27 @@ namespace Eigen
 
         double num = (mat_get - matrix).norm();
 
-        if (num == 0)
+        if (matrix.hasNaN())
         {
-            return std::string(" OK!");
-        }
-        else if (num < 1.0E-6)
-        {
-            std::string ret = "Similar ( < 1.0E-6)";
-            return ret + std::to_string(num);
+            return std::string(" ERROR Matrix Contains NAN");
         }
         else
         {
+            if (num == 0)
+            {
+                return std::string(" OK!");
+            }
+            else if (num < 1.0E-6)
+            {
+                std::string ret = "Similar ( < 1.0E-6)";
+                return ret + std::to_string(num);
+            }
+            else
+            {
 
-            std::string ret = "Error";
-            return ret + std::to_string(num);
+                std::string ret = "Error";
+                return ret + std::to_string(num);
+            }
         }
     }
 } // Eigen::
