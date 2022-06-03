@@ -148,28 +148,28 @@ int main()
     rd_.check_mat_file_ = false;
 
     // rd_.save_mat_file_ = false;
-    int rows = rd_.W.rows();
-    int cols = rd_.W.cols();
+    // int rows = rd_.W.rows();
+    // int cols = rd_.W.cols();
 
-    Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
-    cod.compute(rd_.W);
+    // Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
+    // cod.compute(rd_.W);
 
 
-    int rank = cod.rank();
+    // int rank = cod.rank();
 
-    MatrixXd mat_temp = cod.matrixT().topLeftCorner(rank, rank).template triangularView<Upper>();
+    // MatrixXd mat_temp = cod.matrixT().topLeftCorner(rank, rank).template triangularView<Upper>();
 
-    std::cout << "rank : " << rank << std::endl
-              << "cod z: " << std::endl;
-    std::cout << cod.matrixZ() << std::endl
-            //   << "cod z: " << std::endl;
-    // std::cout << cod.matrixQ() << std::endl
-              << "cod T: " << std::endl;
-    std::cout <<  mat_temp<< std::endl
-              << "cod QTZ: " << std::endl;
-    std::cout << cod.matrixQTZ() << std::endl;
-    std::cout << "v2 : " << std::endl;
-    std::cout << rd_.V2 << std::endl;
+    // std::cout << "rank : " << rank << std::endl
+    //           << "cod z: " << std::endl;
+    // std::cout << cod.matrixZ() << std::endl
+    //         //   << "cod z: " << std::endl;
+    // // std::cout << cod.matrixQ() << std::endl
+    //           << "cod T: " << std::endl;
+    // std::cout <<  mat_temp<< std::endl
+    //           << "cod QTZ: " << std::endl;
+    // std::cout << cod.matrixQTZ() << std::endl;
+    // std::cout << "v2 : " << std::endl;
+    // std::cout << rd_.V2 << std::endl;
 
     std::cout << " -----------------------------------------------" << std::endl;
 
