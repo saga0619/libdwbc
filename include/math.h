@@ -61,7 +61,7 @@ namespace Eigen
         in.read((char *)mat_get.data(), rows * cols * sizeof(typename Matrix::Scalar));
         in.close();
 
-        double num = (mat_get - matrix).sum();
+        double num = (mat_get - matrix).norm();
 
         if (num == 0)
         {
@@ -69,12 +69,14 @@ namespace Eigen
         }
         else if (num < 1.0E-6)
         {
-            return std::string(" SIMILAR!");
+            std::string ret = "Similar ( < 1.0E-6)";
+            return ret + std::to_string(num);
         }
         else
         {
 
-            return std::string(" ERROR !");
+            std::string ret = "Error";
+            return ret + std::to_string(num);
         }
     }
 } // Eigen::

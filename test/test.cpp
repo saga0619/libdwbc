@@ -134,6 +134,7 @@ int main()
 
     // Gen Matrix File
     rd_.check_mat_file_ = true;
+    // rd_.save_mat_file_ = true;
 
     rd_.UpdateKinematics(q, qdot, qddot);
     rd_.SetContact(true, true);
@@ -146,6 +147,7 @@ int main()
     rd_.CalcContactRedistribute(true);
     rd_.check_mat_file_ = false;
 
+    // rd_.save_mat_file_ = false;
     int rows = rd_.W.rows();
     int cols = rd_.W.cols();
 

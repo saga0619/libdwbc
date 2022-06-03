@@ -629,6 +629,10 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
         fname = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
 
         write_binary(fname.c_str(), ubA);
+
+        fname = "/lbA" + std::to_string(ts_.heirarchy_) + "mat";
+
+        write_binary(fname.c_str(), lbA);
     }
 
     if (check_mat_file_)
@@ -646,6 +650,9 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
 
         hpath = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
         std::cout << std::setw(30) << std::right << "ubA : " << check_binary(hpath.c_str(), ubA) << std::endl;
+
+        hpath = "/lbA" + std::to_string(ts_.heirarchy_) + "mat";
+        std::cout << std::setw(30) << std::right << "lbA : " << check_binary(hpath.c_str(), lbA) << std::endl;
     }
 
 #endif
@@ -830,6 +837,7 @@ int RobotData::CalcContactRedistribute(bool init)
             write_binary("/gcontact_mat", g);
             write_binary("/Acontact_mat", A_);
             write_binary("/ubAcontact_mat", ubA);
+            write_binary("/lbAcontact_mat", lbA);
         }
 
         if (check_mat_file_)
@@ -840,6 +848,7 @@ int RobotData::CalcContactRedistribute(bool init)
             std::cout << std::setw(30) << std::right << "g : " << check_binary("/gcontact_mat", g) << std::endl;
             std::cout << std::setw(30) << std::right << "A : " << check_binary("/Acontact_mat", A_) << std::endl;
             std::cout << std::setw(30) << std::right << "ubA : " << check_binary("/ubAcontact_mat", ubA) << std::endl;
+            std::cout << std::setw(30) << std::right << "lbA : " << check_binary("/lbAcontact_mat", lbA) << std::endl;
         }
 #endif
         Eigen::VectorXd qpres;
