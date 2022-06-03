@@ -30,7 +30,7 @@ namespace DWBC
         contact_direction_ = contact_vector;
 
         contact_plane_x = lx;
-        contact_plane_x = ly;
+        contact_plane_y = ly;
 
         j_contact.setZero(6, md_.qdot_size);
 
