@@ -195,7 +195,7 @@ void RobotData::CalcContactConstraint(bool update)
 
         write_binary("/W_inv", W_inv);
 
-        write_binary("/V2", V2);
+        // write_binary("/V2", V2);
     }
 
     if (check_mat_file_)
@@ -218,7 +218,7 @@ void RobotData::CalcContactConstraint(bool update)
 
         std::cout << std::setw(30) << std::right << "W_inv : " << check_binary("/W_inv", W_inv) << std::endl;
 
-        std::cout << std::setw(30) << std::right << "V2 : " << check_binary("/V2", V2) << std::endl;
+        // std::cout << std::setw(30) << std::right << "V2 : " << check_binary("/V2", V2) << std::endl;
     }
 
 #endif

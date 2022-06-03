@@ -127,7 +127,7 @@ int main()
 
     int c_res = 0;
     int c_res2 = 0;
-
+#ifdef CHECKDATA
     std::cout << " -----------------------------------------------" << std::endl;
 
     std::cout << " ---- DYNAMICS MATRIX VERIFICATION ---- " << std::endl;
@@ -170,7 +170,7 @@ int main()
     // std::cout << cod.matrixQTZ() << std::endl;
     // std::cout << "v2 : " << std::endl;
     // std::cout << rd_.V2 << std::endl;
-
+#endif
     std::cout << " -----------------------------------------------" << std::endl;
 
     std::cout << " ----STARTING OSF REPEAT TEST---- " << std::endl;
@@ -197,7 +197,7 @@ int main()
         // rd_.CalcTaskSpaceTorqueHQPWithThreaded(init); // Calculate Task Spaces...
 
         auto t3 = std::chrono::high_resolution_clock::now();
-        c_res = rd_.CalcTaskTorque(true);
+        c_res = rd_.CalcTaskTorque(init);
         calc_task_res += c_res;
 
         if (c_res == 0)
@@ -215,7 +215,7 @@ int main()
         //           << std::endl;
 
         auto t4 = std::chrono::high_resolution_clock::now();
-        c_res2 = rd_.CalcContactRedistribute(true);
+        c_res2 = rd_.CalcContactRedistribute(init);
         calc_cr_res += c_res2;
         auto t5 = std::chrono::high_resolution_clock::now();
 
@@ -226,7 +226,7 @@ int main()
         //           << std::endl
         //           << i << "done" << std::endl
         //           << std::endl;
-        // init = true;
+        init = false;
 
         ns_uk += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
         ns_sc += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
