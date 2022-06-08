@@ -87,7 +87,6 @@ void RobotData::AddQP()
 RobotData::RobotData(/* args */)
 {
     torque_limit_set_ = false;
-
     save_mat_file_ = false;
     check_mat_file_ = false;
 }
@@ -102,17 +101,20 @@ void RobotData::SetTorqueLimit(const VectorXd &torque_limit)
     torque_limit_ = torque_limit;
 }
 
-void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual)
+void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual, bool update_kinematics)
 {
-    q_ = q_virtual;
-    q_dot_ = q_dot_virtual;
-    q_ddot_ = q_ddot_virtual;
+    q_system_ = q_virtual;
+    q_dot_system_ = q_dot_virtual;
+    q_ddot_system_ = q_ddot_virtual;
 
     A_.setZero();
-    RigidBodyDynamics::UpdateKinematicsCustom(model_, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, q_virtual, A_, false);
-    // A_inv_ = A_.inverse();
-    A_inv_ = A_.llt().solve(Eigen::MatrixXd::Identity(system_dof_, system_dof_)); // Faster than inverse()
+    if (update_kinematics)
+    {
+        RigidBodyDynamics::UpdateKinematicsCustom(model_, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
+        RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, q_virtual, A_, false);
+        // A_inv_ = A_.inverse();
+        A_inv_ = A_.llt().solve(Eigen::MatrixXd::Identity(system_dof_, system_dof_)); // Faster than inverse()
+    }
     J_com_.setZero(3, system_dof_);
     G_.setZero(system_dof_);
     com_pos.setZero();
@@ -150,7 +152,7 @@ void RobotData::UpdateContactConstraint()
 {
     for (int i = 0; i < cc_.size(); i++)
     {
-        cc_[i].Update(model_, q_);
+        cc_[i].Update(model_, q_system_);
     }
 }
 
@@ -269,15 +271,15 @@ void RobotData::UpdateTaskSpace()
     {
         if (ts_[i].task_mode_ == TASK_LINK_6D)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_, ts_[i].task_point_);
+            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
         }
         else if (ts_[i].task_mode_ == TASK_LINK_POSITION)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_, ts_[i].task_point_).topRows(3);
+            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).topRows(3);
         }
         else if (ts_[i].task_mode_ == TASK_LINK_ROTATION)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_, ts_[i].task_point_).bottomRows(3);
+            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).bottomRows(3);
         }
     }
 }
@@ -404,9 +406,9 @@ void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
         for (int i = 0; i < link_.size(); i++)
             std::cout << i << " : " << link_[i].name_ << std::endl;
     }
-    q_.setZero(model_.q_size);
-    q_dot_.setZero(model_.qdot_size);
-    q_ddot_.setZero(model_.qdot_size);
+    q_system_.setZero(model_.q_size);
+    q_dot_system_.setZero(model_.qdot_size);
+    q_ddot_system_.setZero(model_.qdot_size);
 
     A_.setZero(system_dof_, system_dof_);
     A_inv_.setZero(system_dof_, system_dof_);
@@ -905,4 +907,20 @@ VectorXd RobotData::GetControlTorque(bool task_control, bool init)
     VectorXd torque_control;
 
     return torque_control;
+}
+
+void RobotData::CopyKinematicsData(RobotData &target_rd)
+{
+    target_rd.q_system_ = q_system_;
+    target_rd.q_dot_system_ = q_dot_system_;
+    target_rd.q_ddot_system_ = q_ddot_system_;
+
+    target_rd.torque_limit_set_ = torque_limit_set_;
+
+    // memcpy(&target_rd.model_, &model_, sizeof(model_));
+
+    target_rd.model_ = model_;
+
+    target_rd.A_ = A_;
+    target_rd.A_inv_ = A_inv_;
 }

@@ -4,6 +4,10 @@
 #include <fstream>
 #include <Eigen/Dense>
 
+#ifndef RESOURCE_DIR
+#define RESOURCE_DIR " "
+#endif
+
 using namespace Eigen;
 
 template <class Matrix>

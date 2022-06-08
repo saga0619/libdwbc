@@ -42,16 +42,33 @@ namespace DWBC
 
         void UpdateAll(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_);
 
+        /*
+        Update Position and Velocity data of link
+        xpos, rotm, v, w
+        */
         void UpdatePos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_);
 
+        /*
+        Upate Jacobian and COM jacobian of link
+        */
         void UpdateJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_);
+
+        /*
+        Get Jacobian of Specific position
+        */
+        MatrixXd GetPointJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::Vector3d &point);
+
+        // /*
+        // Get Position of
+        // */
+        // Vector3d GetPointPos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::Vector3d &point);
+        
 
         Quaterniond GetQuat();
 
         // void UpdateJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual);
         MatrixXd GetJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual, const Eigen::Vector3d &point_jac);
 
-        MatrixXd GetPointJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::Vector3d &point);
     };
 }
 

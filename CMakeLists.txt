@@ -2,7 +2,7 @@ PROJECT (dwbc)
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
 
-add_compile_options(-std=c++17 -Ofast)
+add_compile_options(-std=c++17 -Ofast -fPIC)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake)
 

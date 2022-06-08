@@ -72,9 +72,9 @@ namespace DWBC
 
         MatrixXd CMM_; /*Centroidal momentum matrix*/
 
-        VectorXd q_;
-        VectorXd q_dot_;
-        VectorXd q_ddot_;
+        VectorXd q_system_;
+        VectorXd q_dot_system_;
+        VectorXd q_ddot_system_;
 
         VectorXd G_;
         VectorXd torque_grav_;
@@ -128,7 +128,7 @@ namespace DWBC
 
         void SetTorqueLimit(const VectorXd &torque_limit); /* Set torque limit */
 
-        void UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual);
+        void UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual, bool update_kinematics = true);
 
         /*
         Add Contact constraint
@@ -208,6 +208,8 @@ namespace DWBC
         int CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
+
+        void CopyKinematicsData(RobotData &target_rd);
 
         /*
 
