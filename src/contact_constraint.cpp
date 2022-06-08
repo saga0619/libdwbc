@@ -14,7 +14,7 @@ namespace DWBC
 
         link_number_ = link_number;
 
-        link_id_ = link_id;
+        rbdl_link_id_ = link_id;
 
         if (contact_type == CONTACT_6D)
         {
@@ -29,12 +29,12 @@ namespace DWBC
 
         contact_direction_ = contact_vector;
 
-        contact_plane_x = lx;
-        contact_plane_y = ly;
+        contact_plane_x_ = lx;
+        contact_plane_y_ = ly;
 
         j_contact.setZero(6, md_.qdot_size);
 
-        SetFrictionRatio(0.2, 0.2, 0.2);
+        SetFrictionRatio(0.2, 0.2);
     }
 
     ContactConstraint::~ContactConstraint()
@@ -43,11 +43,11 @@ namespace DWBC
 
     void ContactConstraint::Update(RigidBodyDynamics::Model &model_, const VectorXd q_virtual_)
     {
-        xc_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, link_id_, contact_point_, false);
-        rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, link_id_, false)).transpose();
+        xc_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, rbdl_link_id_, contact_point_, false);
+        rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, rbdl_link_id_, false)).transpose();
 
         j_contact.setZero();
-        RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, link_id_, contact_point_, j_contact, false);
+        RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_link_id_, contact_point_, j_contact, false);
 
         j_contact.topRows(3).swap(j_contact.bottomRows(3));
     }
@@ -66,21 +66,20 @@ namespace DWBC
         contact = false;
     }
 
-    void ContactConstraint::SetFrictionRatio(double x, double y, double z)
+    void ContactConstraint::SetFrictionRatio(double friction_ratio, double friction_ratio_z)
     {
-        friction_ratio_x = x;
-        friction_ratio_y = y;
-        friction_ratio_z = z;
+        friction_ratio_ = friction_ratio;
+        friction_ratio_z_ = friction_ratio_z;
     }
 
     MatrixXd ContactConstraint::GetZMPConstMatrix4x6()
     {
-        return GetZMPConstMatrix(contact_plane_x, contact_plane_y);
+        return GetZMPConstMatrix(contact_plane_x_, contact_plane_y_);
     }
 
     MatrixXd ContactConstraint::GetForceConstMatrix6x6()
     {
-        return GetForceConstMatrix(friction_ratio_x, friction_ratio_y, friction_ratio_z);
+        return GetForceConstMatrix(friction_ratio_, friction_ratio_z_);
     }
 
     MatrixXd ContactConstraint::GetContactConstMatrix()

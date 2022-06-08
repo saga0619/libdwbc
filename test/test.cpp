@@ -50,17 +50,12 @@ int main()
         q.setRandom();
         qdot.setRandom();
         rd_.UpdateKinematics(q, qdot, qddot);
-
         // std::cout << Vector3d(0, 0, -9.81) << std::endl;
-
         // auto t_midPoint = std::chrono::high_resolution_clock::now();
-
         // for (int i = 0; i < rd_.link_.size(); i++)
         // {
         //     j_tmp = rd_.link_[i].JacCOM();
-
         // }
-
         // mid_consume += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - t_midPoint).count();
     }
 
@@ -88,8 +83,8 @@ int main()
     int left_foot_id = 6;
     int right_foot_id = 12;
 
-    rd_.AddContactConstraint(left_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-    rd_.AddContactConstraint(right_foot_id, CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
 
     rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
     rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
@@ -143,7 +138,7 @@ int main()
     rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
 
     rd_.CalcGravCompensation(); // Calulate Gravity Compensation
-    rd_.CalcTaskTorque(true);
+    rd_.CalcTaskControlTorque(true);
     rd_.CalcContactRedistribute(true);
     rd_.check_mat_file_ = false;
 
@@ -179,7 +174,7 @@ int main()
     {
         qmod.setRandom();
 
-        qr = q + qmod * 0.001;
+        qr = q + qmod * 0.01;
         qr.segment(3, 3).setZero();
         qr(rd_.system_dof_) = 1;
 
@@ -197,7 +192,7 @@ int main()
         // rd_.CalcTaskSpaceTorqueHQPWithThreaded(init); // Calculate Task Spaces...
 
         auto t3 = std::chrono::high_resolution_clock::now();
-        c_res = rd_.CalcTaskTorque(init);
+        c_res = rd_.CalcTaskControlTorque(init);
         calc_task_res += c_res;
 
         if (c_res == 0)

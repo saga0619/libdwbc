@@ -7,14 +7,13 @@
 #include "math.h"
 
 using namespace Eigen;
+
 namespace DWBC
 {
     class Link
     {
-    private:
-        /* data */
     public:
-        Link(/* args */);
+        Link();
         Link(RigidBodyDynamics::Model &model_, const unsigned int link_id);
         ~Link();
 
@@ -31,6 +30,7 @@ namespace DWBC
         Vector3d w;
         Matrix3d rotm;
 
+
         RigidBodyDynamics::Math::SpatialVector vw;
 
         Vector3d com_position_l_;
@@ -46,8 +46,10 @@ namespace DWBC
 
         void UpdateJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_);
 
+        Quaterniond GetQuat();
+
         // void UpdateJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual);
-        MatrixXd UpdateJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual, const Eigen::Vector3d &point_jac);
+        MatrixXd GetJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual, const Eigen::Vector3d &point_jac);
 
         MatrixXd GetPointJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::Vector3d &point);
     };

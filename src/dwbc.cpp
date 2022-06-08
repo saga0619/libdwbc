@@ -282,70 +282,6 @@ void RobotData::UpdateTaskSpace()
     }
 }
 
-void Threadtester(const MatrixXd &A, std::promise<MatrixXd> &retVal)
-{
-    retVal.set_value(PinvCODWBt(A));
-    // retVal.set_value(A);
-}
-
-void RobotData::CalcTaskSpaceTorqueHQPWithThreaded(bool init)
-{
-    UpdateTaskSpace();
-
-    // std::vector<std::future<MatrixXd>> vt_jkt_;
-    std::promise<MatrixXd> p1, p2;
-    std::future<MatrixXd> f2 = p2.get_future();
-    std::future<MatrixXd> f1 = p1.get_future();
-
-    std::thread t1, t2;
-
-    for (int i = 0; i < ts_.size(); i++)
-    {
-        CalculateJKTThreaded(ts_[i].J_task_, A_inv_, N_C, W_inv, ts_[i].Q_, ts_[i].Q_temp_, ts_[i].Lambda_task_);
-
-        // vt_jkt_.push_back(
-        //     std::async(std::launch::async, PinvCODWBt, cref(ts_[i].Q_temp_)));
-
-        ts_[i].J_kt_ = W_inv * ts_[i].Q_.transpose() * PinvCODWBt(std::ref(ts_[i].Q_temp_));
-    }
-
-    // t1 = std::thread(Threadtester, std::ref(ts_[0].Q_temp_), std::ref(p1));
-    // t1.join();
-    // MatrixXd tt = f1.get();
-    // t2 = std::thread(Threadtester, std::ref(ts_[1].Q_temp_), std::ref(p2));
-    MatrixXd temp = PinvCODWBt(std::ref(ts_[0].Q_temp_));
-    // t1.join();
-    // t2.join();
-
-    // ts_[0].J_kt_ = W_inv * ts_[0].Q_.transpose() * f1.get();
-    // ts_[1].J_kt_ = W_inv * ts_[1].Q_.transpose() * f2.get();
-
-    // ts_[0].CalcJKT(A_inv_, N_C, W_inv);
-    // ts_[1].CalcJKT(A_inv_, N_C, W_inv);
-    //  ts_[0].J_kt_ = W_inv * ts_[0].Q_.transpose() * PinvCODWBt(ts_[0].Q_temp_); // PinvCODWB(Q * W_inv * Q.transpose());
-
-    for (int i = 0; i < ts_.size(); i++)
-    {
-        if (i == 0)
-        {
-            CalcTaskTorqueQP(ts_[i], MatrixXd::Identity(model_dof_, model_dof_), torque_grav_, NwJw, J_C_INV_T, P_C, init);
-
-            torque_task_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
-        }
-        else
-        {
-            // ts_[i].J_kt_ = W_inv * ts_[i].Q_.transpose() * vt_jkt_[i - 1].get(); // PinvCODWB(Q * W_inv * Q.transpose());
-
-            CalcTaskTorqueQP(ts_[i], ts_[i - 1].Null_task_, torque_grav_, NwJw, J_C_INV_T, P_C, init);
-
-            torque_task_ += ts_[i - 1].Null_task_ * (ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_));
-        }
-
-        if (i != ts_.size() - 1)
-            ts_[i].CalcNullMatrix(A_inv_, N_C);
-    }
-}
-
 void RobotData::CalcTaskSpace(bool update)
 {
     if (update)
@@ -356,7 +292,7 @@ void RobotData::CalcTaskSpace(bool update)
     }
 }
 
-int RobotData::CalcTaskTorque(bool init, bool hqp, bool update_task_space)
+int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space)
 {
     if (update_task_space)
         CalcTaskSpace();
@@ -371,7 +307,7 @@ int RobotData::CalcTaskTorque(bool init, bool hqp, bool update_task_space)
         {
             if (i == 0)
             {
-                qp_res = CalcTaskTorqueQP(ts_[i], MatrixXd::Identity(model_dof_, model_dof_), torque_grav_, NwJw, J_C_INV_T, P_C, init);
+                qp_res = CalcSingleTaskTorqueWithQP(ts_[i], MatrixXd::Identity(model_dof_, model_dof_), torque_grav_, NwJw, J_C_INV_T, P_C, init);
 
                 if (qp_res == 0)
                     return 0;
@@ -380,7 +316,7 @@ int RobotData::CalcTaskTorque(bool init, bool hqp, bool update_task_space)
             }
             else
             {
-                qp_res = CalcTaskTorqueQP(ts_[i], ts_[i - 1].Null_task_, torque_grav_ + torque_task_, NwJw, J_C_INV_T, P_C, init);
+                qp_res = CalcSingleTaskTorqueWithQP(ts_[i], ts_[i - 1].Null_task_, torque_grav_ + torque_task_, NwJw, J_C_INV_T, P_C, init);
                 if (qp_res == 0)
                     return 0;
                 torque_task_ += ts_[i - 1].Null_task_ * (ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_));
@@ -522,7 +458,7 @@ VectorXd RobotData::getContactForce(const VectorXd &command_torque)
     return cf;
 }
 
-int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
+int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
 {
     // return fstar & contact force;
     int task_dof = ts_.f_star_.size(); // size of task
@@ -685,6 +621,70 @@ int RobotData::CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix
         return 0;
     }
 #endif
+}
+
+void Threadtester(const MatrixXd &A, std::promise<MatrixXd> &retVal)
+{
+    retVal.set_value(PinvCODWBt(A));
+    // retVal.set_value(A);
+}
+
+void RobotData::CalcTaskSpaceTorqueHQPWithThreaded(bool init)
+{
+    UpdateTaskSpace();
+
+    // std::vector<std::future<MatrixXd>> vt_jkt_;
+    std::promise<MatrixXd> p1, p2;
+    std::future<MatrixXd> f2 = p2.get_future();
+    std::future<MatrixXd> f1 = p1.get_future();
+
+    std::thread t1, t2;
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        CalculateJKTThreaded(ts_[i].J_task_, A_inv_, N_C, W_inv, ts_[i].Q_, ts_[i].Q_temp_, ts_[i].Lambda_task_);
+
+        // vt_jkt_.push_back(
+        //     std::async(std::launch::async, PinvCODWBt, cref(ts_[i].Q_temp_)));
+
+        ts_[i].J_kt_ = W_inv * ts_[i].Q_.transpose() * PinvCODWBt(std::ref(ts_[i].Q_temp_));
+    }
+
+    // t1 = std::thread(Threadtester, std::ref(ts_[0].Q_temp_), std::ref(p1));
+    // t1.join();
+    // MatrixXd tt = f1.get();
+    // t2 = std::thread(Threadtester, std::ref(ts_[1].Q_temp_), std::ref(p2));
+    MatrixXd temp = PinvCODWBt(std::ref(ts_[0].Q_temp_));
+    // t1.join();
+    // t2.join();
+
+    // ts_[0].J_kt_ = W_inv * ts_[0].Q_.transpose() * f1.get();
+    // ts_[1].J_kt_ = W_inv * ts_[1].Q_.transpose() * f2.get();
+
+    // ts_[0].CalcJKT(A_inv_, N_C, W_inv);
+    // ts_[1].CalcJKT(A_inv_, N_C, W_inv);
+    //  ts_[0].J_kt_ = W_inv * ts_[0].Q_.transpose() * PinvCODWBt(ts_[0].Q_temp_); // PinvCODWB(Q * W_inv * Q.transpose());
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        if (i == 0)
+        {
+            CalcSingleTaskTorqueWithQP(ts_[i], MatrixXd::Identity(model_dof_, model_dof_), torque_grav_, NwJw, J_C_INV_T, P_C, init);
+
+            torque_task_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
+        }
+        else
+        {
+            // ts_[i].J_kt_ = W_inv * ts_[i].Q_.transpose() * vt_jkt_[i - 1].get(); // PinvCODWB(Q * W_inv * Q.transpose());
+
+            CalcSingleTaskTorqueWithQP(ts_[i], ts_[i - 1].Null_task_, torque_grav_, NwJw, J_C_INV_T, P_C, init);
+
+            torque_task_ += ts_[i - 1].Null_task_ * (ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_));
+        }
+
+        if (i != ts_.size() - 1)
+            ts_[i].CalcNullMatrix(A_inv_, N_C);
+    }
 }
 
 /*
@@ -894,4 +894,15 @@ int RobotData::CalcContactRedistribute(bool init)
         }
 #endif
     }
+}
+
+VectorXd RobotData::GetControlTorque(bool task_control, bool init)
+{
+    if (init)
+    {
+    }
+
+    VectorXd torque_control;
+
+    return torque_control;
 }

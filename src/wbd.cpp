@@ -65,19 +65,19 @@ namespace DWBC
 
         return zmp_const_mat;
     }
-    MatrixXd GetForceConstMatrix(double friction_ratio_x, double friction_ratio_y, double friction_ratio_z)
+    MatrixXd GetForceConstMatrix(double friction_ratio, double friction_ratio_z)
     {
         MatrixXd force_const_matrix = MatrixXd::Zero(6, 6);
 
         force_const_matrix(0, 0) = 1.0;
-        force_const_matrix(0, 2) = -friction_ratio_x;
+        force_const_matrix(0, 2) = -friction_ratio;
         force_const_matrix(1, 0) = -1.0;
-        force_const_matrix(1, 2) = -friction_ratio_x;
+        force_const_matrix(1, 2) = -friction_ratio;
 
         force_const_matrix(2, 1) = 1.0;
-        force_const_matrix(2, 2) = -friction_ratio_y;
+        force_const_matrix(2, 2) = -friction_ratio;
         force_const_matrix(3, 1) = -1.0;
-        force_const_matrix(3, 2) = -friction_ratio_y;
+        force_const_matrix(3, 2) = -friction_ratio;
 
         force_const_matrix(4, 5) = 1.0;
         force_const_matrix(4, 2) = -friction_ratio_z;

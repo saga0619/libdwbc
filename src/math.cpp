@@ -1,27 +1,25 @@
 #include "math.h"
 
 
-
 namespace DWBC
 {
-
-    Matrix3d skew(const Eigen::Vector3d &src)
+    Matrix3d skew(const Vector3d &src)
     {
-        Eigen::Matrix3d skew;
-        skew.setZero();
-        skew(0, 1) = -src[2];
-        skew(0, 2) = src[1];
-        skew(1, 0) = src[2];
-        skew(1, 2) = -src[0];
-        skew(2, 0) = -src[1];
-        skew(2, 1) = src[0];
+        Matrix3d skm;
+        skm.setZero();
+        skm(0, 1) = -src[2];
+        skm(0, 2) = src[1];
+        skm(1, 0) = src[2];
+        skm(1, 2) = -src[0];
+        skm(2, 0) = -src[1];
+        skm(2, 1) = src[0];
 
-        return skew;
+        return skm;
     }
 
     MatrixXd PinvCOD(const MatrixXd &A)
     {
-        Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
+        CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
         cod.setThreshold(COD_THRESHOLD);
         cod.compute(A);
 
@@ -30,7 +28,7 @@ namespace DWBC
 
     void PinvCOD(const MatrixXd &A, MatrixXd &ret)
     {
-        Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
+        CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
         cod.setThreshold(COD_THRESHOLD);
         cod.compute(A);
 
@@ -41,7 +39,7 @@ namespace DWBC
     {
         int rows = A.rows();
         int cols = A.cols();
-        Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
+        CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
         cod.setThreshold(COD_THRESHOLD);
         cod.compute(A);
         int rank = cod.rank();
@@ -51,9 +49,9 @@ namespace DWBC
         ret = cod.pseudoInverse();
     }
 
-    Eigen::Matrix3d rotateWithZ(double yaw_angle)
+    Matrix3d rotateWithZ(double yaw_angle)
     {
-        Eigen::Matrix3d rotate_wth_z(3, 3);
+        Matrix3d rotate_wth_z(3, 3);
 
         rotate_wth_z(0, 0) = cos(yaw_angle);
         rotate_wth_z(1, 0) = sin(yaw_angle);
@@ -69,9 +67,9 @@ namespace DWBC
 
         return rotate_wth_z;
     }
-    Eigen::Matrix3d rotateWithY(double pitch_angle)
+    Matrix3d rotateWithY(double pitch_angle)
     {
-        Eigen::Matrix3d rotate_wth_y(3, 3);
+        Matrix3d rotate_wth_y(3, 3);
 
         rotate_wth_y(0, 0) = cos(pitch_angle);
         rotate_wth_y(1, 0) = 0.0;
@@ -88,9 +86,9 @@ namespace DWBC
         return rotate_wth_y;
     }
 
-    Eigen::Matrix3d rotateWithX(double roll_angle)
+    Matrix3d rotateWithX(double roll_angle)
     {
-        Eigen::Matrix3d rotate_wth_x(3, 3);
+        Matrix3d rotate_wth_x(3, 3);
 
         rotate_wth_x(0, 0) = 1.0;
         rotate_wth_x(1, 0) = 0.0;
@@ -107,9 +105,9 @@ namespace DWBC
         return rotate_wth_x;
     }
 
-    Eigen::Matrix3d AxisTransform2V(const Vector3d &from, const Vector3d &to)
+    Matrix3d AxisTransform2V(const Vector3d &from, const Vector3d &to)
     {
-        Eigen::Vector3d ori, tar;
+        Vector3d ori, tar;
 
         ori = from.normalized();
 

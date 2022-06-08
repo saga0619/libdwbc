@@ -98,7 +98,7 @@ int main()
         rd_.SetContact(true, true);
         rd_.CalcTaskSpaceTorqueHQPWithThreaded(); // Calculate Task Spaces...
         rd_.CalcGravCompensation();               // Calulate Gravity Compensation
-        rd_.CalcTaskTorque(true, init);
+        rd_.CalcTaskControlTorque(true, init);
         rd_.CalcContactRedistribute(init);
 
         init = false;

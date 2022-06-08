@@ -29,7 +29,7 @@ namespace DWBC
      */
     MatrixXd GetZMPConstMatrix(double local_contact_plane_x, double local_contact_plane_y);
 
-    MatrixXd GetForceConstMatrix(double friction_ratio_x, double friction_ratio_y, double friction_ratio_z);
+    MatrixXd GetForceConstMatrix(double friction_ratio, double friction_ratio_z);
     // MatrixXd GetContactToPointAxis()
     // {
 

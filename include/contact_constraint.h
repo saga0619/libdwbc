@@ -16,10 +16,11 @@ using namespace Eigen;
 namespace DWBC
 {
 
-    enum
+    enum CONTACT_TYPE
     {
         CONTACT_6D,
         CONTACT_POINT,
+        CONTACT_LINK,
     };
 
     class ContactConstraint
@@ -30,7 +31,7 @@ namespace DWBC
         bool contact;
 
         Vector3d xc_pos;
-        int link_id_;
+        int rbdl_link_id_; 
         int link_number_;
         Matrix3d rotm;
 
@@ -45,15 +46,14 @@ namespace DWBC
 
         MatrixXd j_contact;
 
-        double contact_plane_x;
-        double contact_plane_y;
+        double contact_plane_x_;
+        double contact_plane_y_;
 
-        double friction_ratio_x;
-        double friction_ratio_y;
-        double friction_ratio_z;
+        double friction_ratio_;
+        double friction_ratio_z_;
 
         ContactConstraint();
-        ContactConstraint(RigidBodyDynamics::Model &md_, int link_number, int link_id, int contact_type, Vector3d contact_point, Vector3d contact_vector, double lx, double ly);
+        ContactConstraint(RigidBodyDynamics::Model &md_, int link_number, int link_id, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_plate_size_x, double contact_plate_size_y);
 
         ~ContactConstraint();
 
@@ -63,7 +63,7 @@ namespace DWBC
         void EnableContact();
 
         void DisableContact();
-        void SetFrictionRatio(double x, double y, double z);
+        void SetFrictionRatio(double friction_ratio, double friction_ratio_z);
         MatrixXd GetZMPConstMatrix4x6();
 
         MatrixXd GetForceConstMatrix6x6();

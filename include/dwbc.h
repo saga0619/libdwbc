@@ -8,6 +8,7 @@
 #include "contact_constraint.h"
 #include "task.h"
 #include "wbd.h"
+#include "util.h"
 
 using namespace Eigen;
 
@@ -95,7 +96,6 @@ namespace DWBC
 
         bool torque_limit_set_;
 
-
         bool save_mat_file_;
         bool check_mat_file_;
 
@@ -111,16 +111,29 @@ namespace DWBC
         std::vector<CQuadraticProgram> qp_task_;
         CQuadraticProgram qp_contact_;
 #endif
+
+        /*
+        Init model data with rbdl
+        verbose 2 : Show all link Information
+        verbose 1 : Show link id information
+        verbose 0 : disable verbose
+        */
+        void InitModelData(std::string urdf_path, bool floating, int verbose);
+
+        /*
+        Calculate Gravity Compensation
+        */
+        VectorXd CalcGravCompensation();
+        void CalcGravCompensation(VectorXd &grav_torque);
+
         void SetTorqueLimit(const VectorXd &torque_limit); /* Set torque limit */
 
         void UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual);
 
-
         /*
         Add Contact constraint
 
-        contact_type: 0: plane contact(6dof) 1: point contact(3dof)
-
+        contact_type: 0: plane contact(6dof) 1: point contact(3dof) 2: line contact (1dof)
         */
         void AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x = 0, double contact_y = 0, bool verbose = false);
 
@@ -180,34 +193,27 @@ namespace DWBC
 
         /*
         Calculate Task Space dynamics
+         if update == true, automatically update TaskSpace Dynamics ( DWBC::RobotData::UpdateTaskSpace(); )
         */
         void CalcTaskSpace(bool update = true);
 
         /*
         Calculate Heirarcical task torque.
         */
-        int CalcTaskTorque(bool init, bool hqp = true, bool update_task_space = true);
+        int CalcTaskControlTorque(bool init, bool hqp = true, bool update_task_space = true);
 
         /*
         Calculate heirarchy task torque
         */
-        int CalcTaskTorqueQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
+        int CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 
         /*
-        Init model data with rbdl
-        verbose 2 : Show all link Information
-        verbose 1 : Show link id information
-        verbose 0 : disable verbose
-        */
-        void InitModelData(std::string urdf_path, bool floating, int verbose);
 
-        /*
-        Calculate Gravity Compensation
         */
-        VectorXd CalcGravCompensation();
-        void CalcGravCompensation(VectorXd &grav_torque);
+
+        VectorXd GetControlTorque(bool task_control = false, bool init = true);
     };
 
     template <typename... Types>
