@@ -7,6 +7,70 @@
 #include <atomic>
 #include <unistd.h>
 
+class tlocker
+{
+public:
+    void producer_lock()
+    {
+        while (lock.test_and_set(std::memory_order_acquire))
+        {
+        }
+    }
+
+    void producer_ready()
+    {
+        counter++;
+        lock.clear(std::memory_order_release);
+    }
+
+    void consumer_wait()
+    {
+        while (true)
+        {
+            if (counter > 0)
+            {
+                while (lock.test_and_set(std::memory_order_acquire))
+                {
+                }
+
+                counter--;
+                break;
+            }
+            else
+            {
+                asm("pause");
+            }
+
+            // if (!lock.test_and_set(std::memory_order_acquire))
+            // {
+            //     if (counter > 0)
+            //     {
+            //         counter--;
+
+            //         break;
+            //     }
+            //     else
+            //     {
+            //         lock.clear(std::memory_order_release);
+            //         std::this_thread::sleep_for(std::chrono::microseconds(20));
+            //     }
+            // }
+        }
+    }
+
+    void consumer_done()
+    {
+        lock.clear(std::memory_order_release);
+    }
+
+private:
+    std::atomic_flag lock = ATOMIC_FLAG_INIT;
+    volatile int counter = 0;
+};
+
+tlocker tlock1;
+tlocker tlock2;
+
 class MyRobotData : public DWBC::RobotData
 {
 public:
@@ -18,13 +82,190 @@ public:
     double control_time;
 
     VectorXd torque_command_;
+
+    // void CopyKinematicsData(MyRobotData &drd)
+    // {
+    //     RobotData::CopyKinematicsData(drd);
+    // }
 };
+
+const int total_run = 10000;
+
+void producer(MyRobotData &mrd, MyRobotData &global_rd)
+{
+
+    VectorXd q;
+    VectorXd qdot;
+    VectorXd qddot;
+
+    q.setZero(mrd.model_.q_size);
+    qdot.setZero(mrd.model_.qdot_size);
+    qddot.setZero(mrd.model_.qdot_size);
+
+    q << 0, 0, 0.92983, 0, 0, 0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0, 0, 0,
+        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+
+    VectorXd qmod;
+    qmod.setZero(mrd.model_.q_size);
+
+    VectorXd qr;
+
+    auto t_start = std::chrono::steady_clock::now();
+
+    auto t500us = std::chrono::microseconds(500);
+    int t_count = 0;
+
+    long t_total = 0;
+
+    while (t_count < total_run)
+    {
+
+        std::this_thread::sleep_until(t_start + t500us * t_count);
+
+        qmod.setRandom();
+        qr = q + qmod * 0.01;
+        qr.segment(3, 3).setZero();
+        qr(mrd.system_dof_) = 1;
+
+        auto t_now = std::chrono::steady_clock::now();
+
+        mrd.UpdateKinematics(qr, qdot, qddot);
+
+        tlock1.producer_lock();
+        mrd.CopyKinematicsData(global_rd);
+        tlock1.producer_ready();
+
+        tlock2.consumer_wait();
+        mrd.torque_command_ = global_rd.torque_command_;
+        tlock2.consumer_done();
+
+        auto t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t_now).count();
+
+        t_total += t_dur;
+
+        t_count++;
+    }
+
+    std::cout << "producer end" << t_total / t_count << std::endl;
+}
+
+void consumer(MyRobotData &local_rd, MyRobotData &global_rd)
+{
+    int c_count = 0;
+
+    bool init_ = true;
+
+    while (true)
+    {
+        tlock1.consumer_wait();
+        global_rd.CopyKinematicsData(local_rd);
+        tlock1.consumer_done();
+
+        // local_rd.UpdateKinematics(local_rd.q_system_, local_rd.q_dot_system_, local_rd.q_ddot_system_, false);
+        local_rd.SetContact(true, true);
+
+        local_rd.CalcGravCompensation(); // Calulate Gravity Compensation
+        local_rd.CalcTaskControlTorque(init_);
+        local_rd.CalcContactRedistribute(init_);
+
+        local_rd.torque_command_ = local_rd.torque_contact_ + local_rd.torque_grav_ + local_rd.torque_task_;
+
+        tlock2.producer_lock();
+        global_rd.torque_command_ = local_rd.torque_command_;
+        tlock2.producer_ready();
+
+        c_count++;
+
+        init_ = false;
+
+        if (c_count == total_run)
+            break;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::cout << "cons end : " << c_count << std::endl;
+}
+
+void alone(MyRobotData &rd1, MyRobotData &rd2)
+{
+    auto ts = std::chrono::steady_clock::now();
+
+    auto t500us = std::chrono::microseconds(500);
+    int t_count = 0;
+
+    long t_total = 0;
+
+    int init2 = true;
+
+    VectorXd q;
+    VectorXd qdot;
+    VectorXd qddot;
+
+    q.setZero(rd1.model_.q_size);
+    qdot.setZero(rd1.model_.qdot_size);
+    qddot.setZero(rd1.model_.qdot_size);
+
+    q << 0, 0, 0.92983, 0, 0, 0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0, 0, 0,
+        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+
+    VectorXd qmod;
+    qmod.setZero(rd1.model_.q_size);
+
+    VectorXd qr;
+
+    while (t_count < 10000)
+    {
+
+        std::this_thread::sleep_until(ts + t500us * t_count);
+
+        qmod.setRandom();
+        qr = q + qmod * 0.01;
+        qr.segment(3, 3).setZero();
+        qr(rd1.system_dof_) = 1;
+
+        auto t_now = std::chrono::steady_clock::now();
+
+        rd1.UpdateKinematics(qr, qdot, qddot);
+
+        rd1.CopyKinematicsData(rd2);
+
+        rd1.CopyKinematicsData(rd2);
+
+        rd2.SetContact(true, true);
+
+        rd2.CalcGravCompensation(); // Calulate Gravity Compensation
+        rd2.CalcTaskControlTorque(init2);
+        rd2.CalcContactRedistribute(init2);
+
+        rd2.torque_command_ = rd2.torque_contact_ + rd2.torque_grav_ + rd2.torque_task_;
+
+        auto t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t_now).count();
+
+        t_total += t_dur;
+
+        t_count++;
+
+        init2 = false;
+    }
+
+    std::cout << "nopc : " << t_total / t_count << std::endl;
+}
 
 using namespace DWBC;
 
 int main()
 {
-    running = true;
+    // running = true;
 
     MyRobotData rd_;
 
@@ -262,6 +503,43 @@ int main()
     // std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
     // std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
     // std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
+
+    MyRobotData rd2_ = MyRobotData();
+
+    rd_.CopyKinematicsData(rd2_);
+
+    MyRobotData rd_global_;
+    MyRobotData rd_producer_;
+    MyRobotData rd_consumer_;
+
+    rd_global_ = rd_;
+    rd_producer_ = rd_;
+    rd_consumer_ = rd_;
+
+    rd2_ = rd_;
+
+    MyRobotData rd3 = rd_;
+
+    std::thread t1;
+    std::thread t2;
+    std::thread t3;
+
+    t3 = std::thread(alone, std::ref(rd2_), std::ref(rd3));
+    t3.join();
+
+    t1 = std::thread(producer, std::ref(rd_producer_), std::ref(rd_global_));
+    t2 = std::thread(consumer, std::ref(rd_consumer_), std::ref(rd_global_));
+
+    t1.join();
+    t2.join();
+
+    // std::cout << rd2_.A_ - rd_.A_ << std::endl;
+    // std::cout << std::endl;
+    // std::cout << rd2_.A_inv_ - rd_.A_inv_ << std::endl;
+    // std::cout << std::endl;
+    // std::cout << "what?" << std::endl;
+
+    //
 
     return 0;
 }

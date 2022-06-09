@@ -60,10 +60,10 @@ namespace DWBC
 
         RigidBodyDynamics::Model model_;
 
-        Vector3d com_pos;
-        Vector3d com_vel;
+        Vector3d com_pos; //COM pos
+        Vector3d com_vel; //COM vel
 
-        MatrixXd J_com_;
+        MatrixXd J_com_; //COM jacobian 
 
         MatrixXd A_;
         MatrixXd A_inv_;

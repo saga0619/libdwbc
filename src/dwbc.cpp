@@ -118,12 +118,27 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     J_com_.setZero(3, system_dof_);
     G_.setZero(system_dof_);
     com_pos.setZero();
-    for (int i = 0; i < link_.size(); i++)
+    for (int i = 0; i < (link_.size() - 1); i++)
     {
         link_[i].UpdateAll(model_, q_virtual, q_dot_virtual);
         J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
         com_pos += link_[i].xpos * link_[i].mass / total_mass_;
     }
+
+    link_.back().xpos = com_pos;
+    link_.back().xipos = com_pos;
+
+    link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
+    link_.back().w = link_[0].w;
+
+    link_.back().jac_.setZero(6, system_dof_);
+    link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
+    link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
+    
+    link_.back().jac_com_ = J_com_;
+
+    link_.back().v = J_com_ * q_dot_system_;
+
     G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
 
     CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
@@ -381,6 +396,11 @@ verbose 0 : disable verbose
 */
 void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
 {
+    if (link_.size() > 0)
+    {
+        std::cout << "WARNING, VECTOR LINK IS NOT ZERO" << std::endl;
+    }
+
     bool rbdl_v = false;
     if (verbose == 2)
     {
@@ -401,10 +421,18 @@ void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
         }
     }
 
+    link_.push_back(Link()); // Add link for COM
+    link_.back().name_ = "COM";
+
     if (verbose == 1)
     {
-        for (int i = 0; i < link_.size(); i++)
-            std::cout << i << " : " << link_[i].name_ << std::endl;
+        int vlink = 0;
+        for (int i = 0; i < link_.size() - 1; i++)
+        {
+            std::cout << vlink << " : " << link_[vlink++].name_ << std::endl;
+        }
+
+        std::cout << vlink << " : " << link_.back().name_ << std::endl;
     }
     q_system_.setZero(model_.q_size);
     q_dot_system_.setZero(model_.qdot_size);
