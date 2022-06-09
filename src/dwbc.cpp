@@ -923,4 +923,18 @@ void RobotData::CopyKinematicsData(RobotData &target_rd)
 
     target_rd.A_ = A_;
     target_rd.A_inv_ = A_inv_;
+
+    if (target_rd.link_.size() != link_.size())
+    {
+        target_rd.link_.reserve(link_.size());
+    }
+    for (int i = 0; i < link_.size(); i++)
+    {
+        target_rd.link_[i] = link_[i];
+    }
+
+    target_rd.G_ = G_;
+    target_rd.CMM_ = CMM_;
+
+    target_rd.B_ = B_;
 }
