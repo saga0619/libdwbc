@@ -261,15 +261,5 @@ int main()
     // std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
     // std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
-    MyRobotData rd2_ = MyRobotData();
-
-    rd_.CopyKinematicsData(rd2_);
-
-    // std::cout << rd2_.A_ - rd_.A_ << std::endl;
-    // std::cout << std::endl;
-    // std::cout << rd2_.A_inv_ - rd_.A_inv_ << std::endl;
-    // std::cout << std::endl;
-    // std::cout << "what?" << std::endl;
-
     return 0;
 }
