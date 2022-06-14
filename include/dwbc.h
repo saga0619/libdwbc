@@ -58,12 +58,14 @@ namespace DWBC
 
         double total_mass_;
 
+        double control_time_;
+
         RigidBodyDynamics::Model model_;
 
-        Vector3d com_pos; //COM pos
-        Vector3d com_vel; //COM vel
+        Vector3d com_pos; // COM pos
+        Vector3d com_vel; // COM vel
 
-        MatrixXd J_com_; //COM jacobian 
+        MatrixXd J_com_; // COM jacobian
 
         MatrixXd A_;
         MatrixXd A_inv_;
@@ -162,6 +164,7 @@ namespace DWBC
         /*
         Calculate Contact Redistribution Torque
         */
+        int CalcContactRedistribute(VectorXd torque_input, bool init = true);
         int CalcContactRedistribute(bool init = true);
 
         /*
@@ -232,12 +235,21 @@ namespace DWBC
         {
             int itr = 0;
 
+            int contact_dof = 0;
             for (auto n : v)
             {
                 // std::cout << "setting " << link_[cc_[itr].link_number_].name_ << " contact : " << bool_cast(n) << std::endl;
-                cc_[itr++].SetContact(n);
+                cc_[itr].SetContact(n);
+
+                if (n == true)
+                {
+                    contact_dof += cc_[itr].contact_dof_;
+                }
+
+                itr++;
             }
 
+            contact_dof_ = contact_dof;
             if (cc_.size() > v.size())
             {
                 for (int i = v.size(); i < cc_.size(); i++)
@@ -246,18 +258,6 @@ namespace DWBC
                     cc_[itr++].SetContact(false);
                 }
             }
-
-            int contact_dof = 0;
-
-            for (int i = 0; i < cc_.size(); i++)
-            {
-                if (cc_[i].contact)
-                {
-                    contact_dof += cc_[i].contact_dof_;
-                }
-            }
-
-            contact_dof_ = contact_dof;
         }
         CalcContactConstraint();
     }

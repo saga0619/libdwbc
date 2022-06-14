@@ -40,21 +40,6 @@ public:
             {
                 asm("pause");
             }
-
-            // if (!lock.test_and_set(std::memory_order_acquire))
-            // {
-            //     if (counter > 0)
-            //     {
-            //         counter--;
-
-            //         break;
-            //     }
-            //     else
-            //     {
-            //         lock.clear(std::memory_order_release);
-            //         std::this_thread::sleep_for(std::chrono::microseconds(20));
-            //     }
-            // }
         }
     }
 
@@ -65,7 +50,7 @@ public:
 
 private:
     std::atomic_flag lock = ATOMIC_FLAG_INIT;
-    volatile int counter = 0;
+    std::atomic_int8_t counter = 0;
 };
 
 tlocker tlock1;
@@ -91,6 +76,7 @@ public:
 
 const int total_run = 10000;
 
+using namespace DWBC;
 void producer(MyRobotData &mrd, MyRobotData &global_rd)
 {
 
@@ -160,6 +146,16 @@ void consumer(MyRobotData &local_rd, MyRobotData &global_rd)
 
     bool init_ = true;
 
+    VectorXd fstar;
+    fstar.setZero(6);
+    fstar(0) = 0.1;
+    fstar(1) = 4.0;
+    fstar(2) = 0.1;
+
+    fstar(3) = 0.1;
+    fstar(4) = -0.1;
+    fstar(5) = 0.1;
+
     while (true)
     {
         tlock1.consumer_wait();
@@ -167,10 +163,21 @@ void consumer(MyRobotData &local_rd, MyRobotData &global_rd)
         tlock1.consumer_done();
 
         // local_rd.UpdateKinematics(local_rd.q_system_, local_rd.q_dot_system_, local_rd.q_ddot_system_, false);
+
         local_rd.SetContact(true, true);
+
+        if (init_)
+        {
+            local_rd.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+            local_rd.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+        }
+
+        local_rd.SetTaskSpace(0, fstar);
+        local_rd.SetTaskSpace(1, fstar.segment(3, 3));
 
         local_rd.CalcGravCompensation(); // Calulate Gravity Compensation
         local_rd.CalcTaskControlTorque(init_);
+
         local_rd.CalcContactRedistribute(init_);
 
         local_rd.torque_command_ = local_rd.torque_contact_ + local_rd.torque_grav_ + local_rd.torque_task_;
@@ -223,6 +230,16 @@ void alone(MyRobotData &rd1, MyRobotData &rd2)
 
     VectorXd qr;
 
+    VectorXd fstar;
+    fstar.setZero(6);
+    fstar(0) = 0.1;
+    fstar(1) = 4.0;
+    fstar(2) = 0.1;
+
+    fstar(3) = 0.1;
+    fstar(4) = -0.1;
+    fstar(5) = 0.1;
+
     while (t_count < 10000)
     {
 
@@ -242,6 +259,14 @@ void alone(MyRobotData &rd1, MyRobotData &rd2)
         rd1.CopyKinematicsData(rd2);
 
         rd2.SetContact(true, true);
+        if (init2)
+        {
+            rd2.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+            rd2.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+        }
+
+        rd2.SetTaskSpace(0, fstar);
+        rd2.SetTaskSpace(1, fstar.segment(3, 3));
 
         rd2.CalcGravCompensation(); // Calulate Gravity Compensation
         rd2.CalcTaskControlTorque(init2);
@@ -260,8 +285,6 @@ void alone(MyRobotData &rd1, MyRobotData &rd2)
 
     std::cout << "nopc : " << t_total / t_count << std::endl;
 }
-
-using namespace DWBC;
 
 int main()
 {
@@ -333,9 +356,12 @@ int main()
 
     rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
     rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+    rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
     rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
     rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
@@ -375,20 +401,30 @@ int main()
 
     std::cout << " ---- DYNAMICS MATRIX VERIFICATION ---- " << std::endl;
 
+    MyRobotData rd2_;
+    rd2_.InitModelData(urdf_path, true, false);
     // Gen Matrix File
-    rd_.check_mat_file_ = true;
+    rd2_.check_mat_file_ = true;
+    rd_.UpdateKinematics(q, qdot, qddot);
+
+    rd_.CopyKinematicsData(rd2_);
     // rd_.save_mat_file_ = true;
 
-    rd_.UpdateKinematics(q, qdot, qddot);
-    rd_.SetContact(true, true);
+    rd2_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd2_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
 
-    rd_.SetTaskSpace(0, fstar_1);
-    rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
+    rd2_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+    rd2_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
-    rd_.CalcGravCompensation(); // Calulate Gravity Compensation
-    rd_.CalcTaskControlTorque(true);
-    rd_.CalcContactRedistribute(true);
-    rd_.check_mat_file_ = false;
+    rd2_.SetContact(true, true);
+
+    rd2_.SetTaskSpace(0, fstar_1);
+    rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
+
+    rd2_.CalcGravCompensation(); // Calulate Gravity Compensation
+    rd2_.CalcTaskControlTorque(true);
+    rd2_.CalcContactRedistribute(true);
+    rd2_.check_mat_file_ = false;
 
     // rd_.save_mat_file_ = false;
     // int rows = rd_.W.rows();
@@ -417,7 +453,7 @@ int main()
 
     std::cout << " ----STARTING OSF REPEAT TEST---- " << std::endl;
 
-    for (int i = 0; i < repeat_time; i++)
+    for (int i = 0; i < 1; i++)
     {
         qmod.setRandom();
 
@@ -429,7 +465,7 @@ int main()
         rd_.UpdateKinematics(qr, qdot, qddot, false);
 
         auto t1 = std::chrono::high_resolution_clock::now();
-        rd_.SetContact(true, true);
+        rd_.SetContact(true, false);
 
         rd_.SetTaskSpace(0, fstar_1);
         rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
@@ -504,27 +540,24 @@ int main()
     // std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
     // std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
-    MyRobotData rd2_ = MyRobotData();
-
-    rd_.CopyKinematicsData(rd2_);
-
     MyRobotData rd_global_;
     MyRobotData rd_producer_;
     MyRobotData rd_consumer_;
+    MyRobotData rd_alone_1;
+    MyRobotData rd_alone_2;
 
-    rd_global_ = rd_;
     rd_producer_ = rd_;
-    rd_consumer_ = rd_;
+    rd_alone_1 = rd_;
 
-    rd2_ = rd_;
-
-    MyRobotData rd3 = rd_;
+    rd_global_.InitModelData(urdf_path, true, false);
+    rd_consumer_.InitModelData(urdf_path, true, false);
+    rd_alone_2.InitModelData(urdf_path, true, false);
 
     std::thread t1;
     std::thread t2;
     std::thread t3;
 
-    t3 = std::thread(alone, std::ref(rd2_), std::ref(rd3));
+    t3 = std::thread(alone, std::ref(rd_alone_1), std::ref(rd_alone_2));
     t3.join();
 
     t1 = std::thread(producer, std::ref(rd_producer_), std::ref(rd_global_));
@@ -532,14 +565,6 @@ int main()
 
     t1.join();
     t2.join();
-
-    // std::cout << rd2_.A_ - rd_.A_ << std::endl;
-    // std::cout << std::endl;
-    // std::cout << rd2_.A_inv_ - rd_.A_inv_ << std::endl;
-    // std::cout << std::endl;
-    // std::cout << "what?" << std::endl;
-
-    //
 
     return 0;
 }

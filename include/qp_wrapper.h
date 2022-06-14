@@ -26,6 +26,7 @@ public:
 
 public:
   void InitializeProblemSize(const int &num_var, const int &num_cons);
+  bool CheckProblemSize(int numbar, int numcons);
   void UpdateMinProblem(const MatrixXd &H, const VectorXd &g);
   void UpdateSubjectToAx(const MatrixXd &A, const VectorXd &lbA, const VectorXd &ubA);
   void UpdateSubjectToX(const VectorXd &lb, const VectorXd &ub);

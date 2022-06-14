@@ -1,5 +1,5 @@
 #include "wbd.h"
-
+#include "iostream"
 namespace DWBC
 {
     MatrixXd PinvCODWBt(const MatrixXd &A)
@@ -101,14 +101,23 @@ namespace DWBC
         MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2)
     {
         int rows = J_contact.rows();
+
         int cols = J_contact.cols();
 
         lambda_contact = (J_contact * A_inv * J_contact.transpose()).inverse();
         J_C_INV_T = lambda_contact * J_contact * A_inv;
         N_C = MatrixXd::Identity(cols, cols) - J_contact.transpose() * J_C_INV_T;
         W = A_inv.bottomRows(cols - 6) * N_C.rightCols(cols - 6);
-        PinvCODWB(W, Winv, V2);
-        NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+
+        if (rows > 6)
+        {
+            PinvCODWB(W, Winv, V2);
+            NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+        }
+        else
+        {
+            PinvCODWB(W, Winv);
+        }
     }
 
     /*
