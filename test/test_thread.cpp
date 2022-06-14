@@ -7,9 +7,54 @@
 #include <atomic>
 #include <unistd.h>
 
-#ifndef URDF_DIR
-#define URDF_DIR ""
-#endif
+class tlocker
+{
+public:
+    void producer_lock()
+    {
+        while (lock.test_and_set(std::memory_order_acquire))
+        {
+        }
+    }
+
+    void producer_ready()
+    {
+        counter++;
+        lock.clear(std::memory_order_release);
+    }
+
+    void consumer_wait()
+    {
+        while (true)
+        {
+            if (counter > 0)
+            {
+                while (lock.test_and_set(std::memory_order_acquire))
+                {
+                }
+
+                counter--;
+                break;
+            }
+            else
+            {
+                asm("pause");
+            }
+        }
+    }
+
+    void consumer_done()
+    {
+        lock.clear(std::memory_order_release);
+    }
+
+private:
+    std::atomic_flag lock = ATOMIC_FLAG_INIT;
+    std::atomic_int8_t counter = 0;
+};
+
+tlocker tlock1;
+tlocker tlock2;
 
 class MyRobotData : public DWBC::RobotData
 {
@@ -32,6 +77,215 @@ public:
 const int total_run = 10000;
 
 using namespace DWBC;
+void producer(MyRobotData &mrd, MyRobotData &global_rd)
+{
+
+    VectorXd q;
+    VectorXd qdot;
+    VectorXd qddot;
+
+    q.setZero(mrd.model_.q_size);
+    qdot.setZero(mrd.model_.qdot_size);
+    qddot.setZero(mrd.model_.qdot_size);
+
+    q << 0, 0, 0.92983, 0, 0, 0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0, 0, 0,
+        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+
+    VectorXd qmod;
+    qmod.setZero(mrd.model_.q_size);
+
+    VectorXd qr;
+
+    auto t_start = std::chrono::steady_clock::now();
+
+    auto t500us = std::chrono::microseconds(500);
+    int t_count = 0;
+
+    long t_total = 0;
+
+    while (t_count < total_run)
+    {
+
+        std::this_thread::sleep_until(t_start + t500us * t_count);
+
+        qmod.setRandom();
+        qr = q + qmod * 0.01;
+        qr.segment(3, 3).setZero();
+        qr(mrd.system_dof_) = 1;
+
+        auto t_now = std::chrono::steady_clock::now();
+
+        mrd.UpdateKinematics(qr, qdot, qddot);
+
+        tlock1.producer_lock();
+        mrd.CopyKinematicsData(global_rd);
+        tlock1.producer_ready();
+
+        tlock2.consumer_wait();
+        mrd.torque_command_ = global_rd.torque_command_;
+        tlock2.consumer_done();
+
+        auto t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t_now).count();
+
+        t_total += t_dur;
+
+        t_count++;
+    }
+
+    std::cout << "producer end" << t_total / t_count << std::endl;
+}
+
+void consumer(MyRobotData &local_rd, MyRobotData &global_rd)
+{
+    int c_count = 0;
+
+    bool init_ = true;
+
+    VectorXd fstar;
+    fstar.setZero(6);
+    fstar(0) = 0.1;
+    fstar(1) = 4.0;
+    fstar(2) = 0.1;
+
+    fstar(3) = 0.1;
+    fstar(4) = -0.1;
+    fstar(5) = 0.1;
+
+    while (true)
+    {
+        tlock1.consumer_wait();
+        global_rd.CopyKinematicsData(local_rd);
+        tlock1.consumer_done();
+
+        // local_rd.UpdateKinematics(local_rd.q_system_, local_rd.q_dot_system_, local_rd.q_ddot_system_, false);
+
+        local_rd.SetContact(true, true);
+
+        if (init_)
+        {
+            local_rd.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+            local_rd.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+        }
+
+        local_rd.SetTaskSpace(0, fstar);
+        local_rd.SetTaskSpace(1, fstar.segment(3, 3));
+
+        local_rd.CalcGravCompensation(); // Calulate Gravity Compensation
+        local_rd.CalcTaskControlTorque(init_);
+
+        local_rd.CalcContactRedistribute(init_);
+
+        local_rd.torque_command_ = local_rd.torque_contact_ + local_rd.torque_grav_ + local_rd.torque_task_;
+
+        tlock2.producer_lock();
+        global_rd.torque_command_ = local_rd.torque_command_;
+        tlock2.producer_ready();
+
+        c_count++;
+
+        init_ = false;
+
+        if (c_count == total_run)
+            break;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::cout << "cons end : " << c_count << std::endl;
+}
+
+void alone(MyRobotData &rd1, MyRobotData &rd2)
+{
+    auto ts = std::chrono::steady_clock::now();
+
+    auto t500us = std::chrono::microseconds(500);
+    int t_count = 0;
+
+    long t_total = 0;
+
+    int init2 = true;
+
+    VectorXd q;
+    VectorXd qdot;
+    VectorXd qddot;
+
+    q.setZero(rd1.model_.q_size);
+    qdot.setZero(rd1.model_.qdot_size);
+    qddot.setZero(rd1.model_.qdot_size);
+
+    q << 0, 0, 0.92983, 0, 0, 0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0, 0, 0,
+        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+
+    VectorXd qmod;
+    qmod.setZero(rd1.model_.q_size);
+
+    VectorXd qr;
+
+    VectorXd fstar;
+    fstar.setZero(6);
+    fstar(0) = 0.1;
+    fstar(1) = 4.0;
+    fstar(2) = 0.1;
+
+    fstar(3) = 0.1;
+    fstar(4) = -0.1;
+    fstar(5) = 0.1;
+
+    while (t_count < 10000)
+    {
+
+        std::this_thread::sleep_until(ts + t500us * t_count);
+
+        qmod.setRandom();
+        qr = q + qmod * 0.01;
+        qr.segment(3, 3).setZero();
+        qr(rd1.system_dof_) = 1;
+
+        auto t_now = std::chrono::steady_clock::now();
+
+        rd1.UpdateKinematics(qr, qdot, qddot);
+
+        rd1.CopyKinematicsData(rd2);
+
+        rd1.CopyKinematicsData(rd2);
+
+        rd2.SetContact(true, true);
+        if (init2)
+        {
+            rd2.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+            rd2.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+        }
+
+        rd2.SetTaskSpace(0, fstar);
+        rd2.SetTaskSpace(1, fstar.segment(3, 3));
+
+        rd2.CalcGravCompensation(); // Calulate Gravity Compensation
+        rd2.CalcTaskControlTorque(init2);
+        rd2.CalcContactRedistribute(init2);
+
+        rd2.torque_command_ = rd2.torque_contact_ + rd2.torque_grav_ + rd2.torque_task_;
+
+        auto t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t_now).count();
+
+        t_total += t_dur;
+
+        t_count++;
+
+        init2 = false;
+    }
+
+    std::cout << "nopc : " << t_total / t_count << std::endl;
+}
+
 int main()
 {
     // running = true;
@@ -56,7 +310,7 @@ int main()
 
     MatrixXd j_tmp;
 
-    int repeat_time = 10000;
+    int repeat_time = 1000;
 
     auto t_start = std::chrono::high_resolution_clock::now();
 
@@ -199,7 +453,7 @@ int main()
 
     std::cout << " ----STARTING OSF REPEAT TEST---- " << std::endl;
 
-    for (int i = 0; i < repeat_time; i++)
+    for (int i = 0; i < 1; i++)
     {
         qmod.setRandom();
 
@@ -208,10 +462,10 @@ int main()
         qr(rd_.system_dof_) = 1;
 
         auto t0 = std::chrono::high_resolution_clock::now();
-        rd_.UpdateKinematics(qr, qdot, qddot);
+        rd_.UpdateKinematics(qr, qdot, qddot, false);
 
         auto t1 = std::chrono::high_resolution_clock::now();
-        rd_.SetContact(true, true);
+        rd_.SetContact(true, false);
 
         rd_.SetTaskSpace(0, fstar_1);
         rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
@@ -227,6 +481,17 @@ int main()
         if (c_res == 0)
             break;
 
+        // if (c_res == 0)
+        // {
+        //     std::cout << "error at " << i << std::endl;
+        //     std::cout << qr.transpose() << std::endl;
+        // }
+
+        // std::cout << std::endl
+        //           << std::endl
+        //           << i << "contact calc" << std::endl
+        //           << std::endl;
+
         auto t4 = std::chrono::high_resolution_clock::now();
         c_res2 = rd_.CalcContactRedistribute(init);
         calc_cr_res += c_res2;
@@ -235,6 +500,10 @@ int main()
         if (c_res2 == 0)
             break;
 
+        // std::cout << std::endl
+        //           << std::endl
+        //           << i << "done" << std::endl
+        //           << std::endl;
         init = false;
 
         ns_uk += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
@@ -264,6 +533,38 @@ int main()
     std::cout << "contact redis  qp : " << calc_cr_res << std::endl;
 
     std::cout << " -----------------------------------------------" << std::endl;
+
+    // std::cout << " fstar qp : " << rd_.ts_[0].f_star_qp_.transpose() << std::endl;
+    // std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
+    // std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
+    // std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
+    // std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
+
+    MyRobotData rd_global_;
+    MyRobotData rd_producer_;
+    MyRobotData rd_consumer_;
+    MyRobotData rd_alone_1;
+    MyRobotData rd_alone_2;
+
+    rd_producer_ = rd_;
+    rd_alone_1 = rd_;
+
+    rd_global_.InitModelData(urdf_path, true, false);
+    rd_consumer_.InitModelData(urdf_path, true, false);
+    rd_alone_2.InitModelData(urdf_path, true, false);
+
+    std::thread t1;
+    std::thread t2;
+    std::thread t3;
+
+    t3 = std::thread(alone, std::ref(rd_alone_1), std::ref(rd_alone_2));
+    t3.join();
+
+    t1 = std::thread(producer, std::ref(rd_producer_), std::ref(rd_global_));
+    t2 = std::thread(consumer, std::ref(rd_consumer_), std::ref(rd_global_));
+
+    t1.join();
+    t2.join();
 
     return 0;
 }

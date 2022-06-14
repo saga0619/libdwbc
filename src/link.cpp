@@ -9,6 +9,7 @@ namespace DWBC
 
     Link::Link(RigidBodyDynamics::Model &model_, const unsigned int link_id)
     {
+        id = link_id;
         link_id_ = link_id;
         inertia = model_.mBodies[link_id_].mInertia;
         mass = model_.mBodies[link_id_].mMass;
@@ -65,6 +66,11 @@ namespace DWBC
     Quaterniond Link::GetQuat()
     {
         return Quaterniond(rotm);
+    }
+
+    void Link::GetPointPos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_, Eigen::Vector3d &local_pos, Eigen::Vector3d &global_pos)
+    {
+        global_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, id, local_pos, false);
     }
 
     MatrixXd Link::GetJacDot(RigidBodyDynamics::Model &model, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual, const Eigen::Vector3d &point_jac)

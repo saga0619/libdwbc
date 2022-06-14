@@ -8,7 +8,6 @@
 #ifndef WBHQP_MATH_H
 #define WBHQP_MATH_H
 
-
 #include <Eigen/Dense>
 
 #define COD_THRESHOLD 1.0E-6
@@ -25,6 +24,33 @@ namespace DWBC
     Matrix3d rotateWithX(double roll_angle);
     Matrix3d AxisTransform2V(const Vector3d &from, const Vector3d &to);
     const char *bool_cast(const bool b);
+    Vector3d QuinticSpline(
+        double time,      ///< Current time
+        double time_0,    ///< Start time
+        double time_f,    ///< End time
+        double x_0,       ///< Start state
+        double x_dot_0,   ///< Start state dot
+        double x_ddot_0,  ///< Start state ddot
+        double x_f,       ///< End state
+        double x_dot_f,   ///< End state
+        double x_ddot_f); ///< End state ddot
+    Matrix3d rotationCubic(double time,
+                           double time_0,
+                           double time_f,
+                           const Eigen::Matrix3d &rotation_0,
+                           const Eigen::Matrix3d &rotation_f);
+
+    double cubic(double time,    ///< Current time
+                 double time_0,  ///< Start time
+                 double time_f,  ///< End time
+                 double x_0,     ///< Start state
+                 double x_f,     ///< End state
+                 double x_dot_0, ///< Start state dot
+                 double x_dot_f  ///< End state dot
+    );
+
+    Vector3d GetPhi(Matrix3d current_rotation, Matrix3d desired_rotation);
+    
 }
 
 #endif

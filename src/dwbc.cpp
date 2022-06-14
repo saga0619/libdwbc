@@ -134,7 +134,6 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     link_.back().jac_.setZero(6, system_dof_);
     link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
     link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
-    
     link_.back().jac_com_ = J_com_;
 
     link_.back().v = J_com_ * q_dot_system_;
@@ -145,6 +144,8 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
 
     B_.setZero(system_dof_);
     RigidBodyDynamics::NonlinearEffects(model_, q_virtual, q_dot_virtual, B_);
+
+    UpdateContactConstraint();
 }
 
 void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
@@ -173,11 +174,11 @@ void RobotData::UpdateContactConstraint()
 
 void RobotData::CalcContactConstraint(bool update)
 {
-    if (update)
-        UpdateContactConstraint();
+    // if (update)
+    //     UpdateContactConstraint();
     // int contact_dof
 
-    if (J_C.rows() != contact_dof_)
+    if (J_C.rows() != contact_dof_ || J_C.cols() != system_dof_)
     {
         J_C.setZero(contact_dof_, system_dof_);
     }
@@ -280,6 +281,11 @@ void RobotData::SetTaskSpace(int heirarchy, const MatrixXd &f_star, const Matrix
     }
 }
 
+// void RobotData::SetTaskTrajectory(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task)
+// {
+
+// }
+
 void RobotData::UpdateTaskSpace()
 {
     for (int i = 0; i < ts_.size(); i++)
@@ -287,14 +293,46 @@ void RobotData::UpdateTaskSpace()
         if (ts_[i].task_mode_ == TASK_LINK_6D)
         {
             ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
+
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_,
+                                     link_[ts_[i].link_number_].xpos + link_[ts_[i].link_number_].rotm * ts_[i].task_point_,
+                                     link_[ts_[i].link_number_].v + link_[ts_[i].link_number_].w.cross(ts_[i].task_point_));
+            }
+
+            if (ts_[i].traj_rot_set)
+            {
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_number_].rotm, link_[ts_[i].link_number_].w);
+            }
         }
         else if (ts_[i].task_mode_ == TASK_LINK_POSITION)
         {
             ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).topRows(3);
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_,
+                                     link_[ts_[i].link_number_].xpos + link_[ts_[i].link_number_].rotm * ts_[i].task_point_,
+                                     link_[ts_[i].link_number_].v + link_[ts_[i].link_number_].w.cross(ts_[i].task_point_));
+            }
         }
         else if (ts_[i].task_mode_ == TASK_LINK_ROTATION)
         {
             ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).bottomRows(3);
+            if (ts_[i].traj_rot_set)
+            {
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_number_].rotm, link_[ts_[i].link_number_].w);
+            }
+        }
+        else if (ts_[i].task_mode_ == TASK_COM_POSITION)
+        {
+            ts_[i].J_task_ = link_.back().jac_.topRows(3);
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_,
+                                     link_[ts_[i].link_number_].xpos,
+                                     link_[ts_[i].link_number_].v);
+            }
         }
     }
 }
@@ -502,10 +540,18 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
 
     for (int i = 0; i < contact_index; i++)
     {
-        total_contact_dof += cc_[i].contact_dof_;
-        contact_constraint_size += cc_[i].constraint_number_;
+        if (cc_[i].contact)
+        {
+            total_contact_dof += cc_[i].contact_dof_;
+            contact_constraint_size += cc_[i].constraint_number_;
+        }
     }
     contact_dof += total_contact_dof;
+
+    if (contact_dof < 0)
+    {
+        contact_dof = 0;
+    }
 
     int variable_size = task_dof + contact_dof;
 
@@ -529,12 +575,14 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     if (torque_limit_set_)
     {
         A.block(0, 0, model_size, task_dof) = Ntorque_task;
-        A.block(0, task_dof, model_size, contact_dof) = NwJw;
+        if (contact_dof > 0)
+            A.block(0, task_dof, model_size, contact_dof) = NwJw;
         // lbA.segment(0, model_size) = -torque_limit_ - torque_prev - Ntorque_task * ts_.f_star_;
-        ubA.segment(0, model_size) = torque_limit_ - torque_prev - Ntorque_task * ts_.f_star_;
+        ubA.segment(0, model_size) = torque_limit_ - (torque_prev + Ntorque_task * ts_.f_star_);
 
         A.block(model_size, 0, model_size, task_dof) = -Ntorque_task;
-        A.block(model_size, task_dof, model_size, contact_dof) = -NwJw;
+        if (contact_dof > 0)
+            A.block(model_size, task_dof, model_size, contact_dof) = -NwJw;
         // lbA.segment(model_size, model_size) = -torque_limit_ - torque_prev - Ntorque_task * ts_.f_star_;
         ubA.segment(model_size, model_size) = torque_limit_ + torque_prev + Ntorque_task * ts_.f_star_;
 
@@ -551,20 +599,24 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     int contact_idx = 0;
     for (int i = 0; i < cc_.size(); i++)
     {
-        A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose();
-        A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
+        if (cc_[i].contact)
+        {
+            A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose();
+            A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
 
-        A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
-        A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+            A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
+            A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
 
-        const_idx += cc_[i].constraint_number_;
-        contact_idx += cc_[i].contact_dof_;
+            const_idx += cc_[i].constraint_number_;
+            contact_idx += cc_[i].contact_dof_;
+        }
     }
 
     Eigen::MatrixXd Atemp = A_const_a * A_rot * J_C_INV_T.rightCols(model_size);
     // t[3] = std::chrono::steady_clock::now();
     A.block(torque_limit_constraint_size, 0, contact_constraint_size, task_dof) = -Atemp * Ntorque_task;
-    A.block(torque_limit_constraint_size, task_dof, contact_constraint_size, contact_dof) = -Atemp * NwJw;
+    if (contact_dof > 0)
+        A.block(torque_limit_constraint_size, task_dof, contact_constraint_size, contact_dof) = -Atemp * NwJw;
     // t[4] = std::chrono::steady_clock::now();
 
     Eigen::VectorXd bA = A_const_a * (A_rot * P_C) - Atemp * (torque_prev + Ntorque_task * ts_.f_star_);
@@ -628,8 +680,17 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     ts_.f_star_qp_ = qpres.segment(0, task_dof);
     return 1;
 #else
-    if (init_trigger)
+    if (qp_task_[ts_.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
+    {
+        if (init_trigger)
+        {
+            qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+        }
+    }
+    else
+    {
         qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    }
 
     qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
     qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
@@ -638,6 +699,8 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     if (qp_task_[ts_.heirarchy_].SolveQPoases(300, qpres))
     {
         ts_.f_star_qp_ = qpres.segment(0, task_dof);
+
+        ts_.contact_qp_ = qpres.segment(task_dof, contact_dof);
         return 1;
     }
     else
@@ -745,6 +808,11 @@ torque_contact = nwjw * des_Force
 */
 int RobotData::CalcContactRedistribute(bool init)
 {
+    return CalcContactRedistribute(torque_grav_ + torque_task_, init);
+}
+
+int RobotData::CalcContactRedistribute(VectorXd torque_input, bool init)
+{
     int contact_index = cc_.size();  // size of contact link
     int total_contact_dof = 0;       // size of contact dof
     int contact_dof = -6;            // total_contact_dof - 6, (free contact space)
@@ -754,8 +822,11 @@ int RobotData::CalcContactRedistribute(bool init)
 
     for (int i = 0; i < contact_index; i++)
     {
-        total_contact_dof += cc_[i].contact_dof_;
-        contact_constraint_size += cc_[i].constraint_number_;
+        if (cc_[i].contact)
+        {
+            total_contact_dof += cc_[i].contact_dof_;
+            contact_constraint_size += cc_[i].constraint_number_;
+        }
     }
     contact_dof += total_contact_dof;
 
@@ -764,15 +835,7 @@ int RobotData::CalcContactRedistribute(bool init)
     int variable_number = contact_dof;                                                  // total size of qp variable
     int total_constraint_size = contact_constraint_size + torque_limit_constraint_size; // total size of constraint
 
-    VectorXd control_torque = torque_grav_ + torque_task_;
-
-    if (contact_dof == 0)
-    {
-        torque_contact_ = VectorXd::Zero(model_size);
-
-        return 1;
-    }
-    else
+    if (contact_dof > 0)
     {
         MatrixXd H, H_temp;
         VectorXd g;
@@ -782,30 +845,33 @@ int RobotData::CalcContactRedistribute(bool init)
         int acc_cdof = 0;
         for (int i = 0; i < contact_index; i++)
         {
-            Vector3d vec_origin, vec_target;
-            vec_origin = cc_[i].rotm.rightCols(1);
-            vec_target = (com_pos - cc_[i].xc_pos).normalized();
-            Matrix3d cm = AxisTransform2V(vec_origin, vec_target);
-
-            cm.setIdentity(); // comment this line to redistribute contact force with COM based vector
-
-            if (cc_[i].contact_type_ == CONTACT_6D)
+            if (cc_[i].contact)
             {
-                crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = crot_matrix.block(acc_cdof + 3, acc_cdof + 3, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
-                RotW(acc_cdof + 2, acc_cdof + 2) = 0;
-                acc_cdof += cc_[i].contact_dof_;
-            }
-            else if (cc_[i].contact_type_ == CONTACT_POINT)
-            {
-                crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
-                RotW(acc_cdof + 2, acc_cdof + 2) = 0;
-                acc_cdof += cc_[i].contact_dof_;
+                Vector3d vec_origin, vec_target;
+                vec_origin = cc_[i].rotm.rightCols(1);
+                vec_target = (com_pos - cc_[i].xc_pos).normalized();
+                Matrix3d cm = AxisTransform2V(vec_origin, vec_target);
+
+                cm.setIdentity(); // comment this line to redistribute contact force with COM based vector
+
+                if (cc_[i].contact_type_ == CONTACT_6D)
+                {
+                    crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = crot_matrix.block(acc_cdof + 3, acc_cdof + 3, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
+                    RotW(acc_cdof + 2, acc_cdof + 2) = 0;
+                    acc_cdof += cc_[i].contact_dof_;
+                }
+                else if (cc_[i].contact_type_ == CONTACT_POINT)
+                {
+                    crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
+                    RotW(acc_cdof + 2, acc_cdof + 2) = 0;
+                    acc_cdof += cc_[i].contact_dof_;
+                }
             }
         }
-
+        J_C_INV_T.rightCols(model_size) * NwJw;
         H_temp = RotW * crot_matrix * J_C_INV_T.rightCols(model_size) * NwJw;
         H = H_temp.transpose() * H_temp;
-        g = (RotW * crot_matrix * (J_C_INV_T.rightCols(model_size) * control_torque - P_C)).transpose() * H_temp;
+        g = (RotW * crot_matrix * (J_C_INV_T.rightCols(model_size) * torque_input - P_C)).transpose() * H_temp;
 
         MatrixXd A_qp;
         VectorXd lbA, ubA;
@@ -817,11 +883,11 @@ int RobotData::CalcContactRedistribute(bool init)
         {
             A_qp.block(0, 0, model_size, contact_dof) = NwJw;
             // lbA.segment(0, model_size) = -torque_limit_ - control_torque;
-            ubA.segment(0, model_size) = torque_limit_ - control_torque;
+            ubA.segment(0, model_size) = torque_limit_ - torque_input;
 
             A_qp.block(0, 0, model_size, contact_dof) = -NwJw;
             // lbA.segment(0, model_size) = -torque_limit_ - control_torque;
-            ubA.segment(0, model_size) = torque_limit_ + control_torque;
+            ubA.segment(0, model_size) = torque_limit_ + torque_input;
 
             lbA.segment(0, torque_limit_constraint_size).setConstant(-INFTY);
         }
@@ -836,14 +902,17 @@ int RobotData::CalcContactRedistribute(bool init)
         int contact_idx = 0;
         for (int i = 0; i < contact_index; i++)
         {
-            A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose(); // rd_.ee_[i].rotm.transpose();
-            A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
+            if (cc_[i].contact)
+            {
+                A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose(); // rd_.ee_[i].rotm.transpose();
+                A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
 
-            A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
-            A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+                A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
+                A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
 
-            const_idx += cc_[i].constraint_number_;
-            contact_idx += cc_[i].contact_dof_;
+                const_idx += cc_[i].constraint_number_;
+                contact_idx += cc_[i].contact_dof_;
+            }
 
             // specific vector on Global axis
             // [0 0 -1]T *
@@ -852,7 +921,7 @@ int RobotData::CalcContactRedistribute(bool init)
         }
 
         Eigen::MatrixXd Atemp = A_const_a * A_rot * J_C_INV_T.rightCols(model_size);
-        Eigen::VectorXd bA = A_const_a * (A_rot * P_C) - Atemp * control_torque;
+        Eigen::VectorXd bA = A_const_a * (A_rot * P_C) - Atemp * torque_input;
 
         A_qp.block(torque_limit_constraint_size, 0, contact_constraint_size, contact_dof) = -Atemp * NwJw;
 
@@ -890,12 +959,21 @@ int RobotData::CalcContactRedistribute(bool init)
         return 1;
 
 #else
-
-        if (init)
+        if (qp_contact_.CheckProblemSize(variable_number, total_constraint_size))
+        {
+            if (init)
+            {
+                qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+            }
+        }
+        else
+        {
             qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+        }
+
         qp_contact_.UpdateMinProblem(H, g);
         qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
-        if (qp_contact_.SolveQPoases(300, qpres))
+        if (qp_contact_.SolveQPoases(600, qpres))
         {
             torque_contact_ = NwJw * qpres;
 
@@ -924,6 +1002,12 @@ int RobotData::CalcContactRedistribute(bool init)
         }
 #endif
     }
+    else
+    {
+        torque_contact_ = VectorXd::Zero(model_size);
+
+        return 1;
+    }
 }
 
 VectorXd RobotData::GetControlTorque(bool task_control, bool init)
@@ -939,11 +1023,14 @@ VectorXd RobotData::GetControlTorque(bool task_control, bool init)
 
 void RobotData::CopyKinematicsData(RobotData &target_rd)
 {
+    target_rd.control_time_ = control_time_;
     target_rd.q_system_ = q_system_;
     target_rd.q_dot_system_ = q_dot_system_;
     target_rd.q_ddot_system_ = q_ddot_system_;
 
     target_rd.torque_limit_set_ = torque_limit_set_;
+
+    target_rd.torque_limit_ = torque_limit_;
 
     // memcpy(&target_rd.model_, &model_, sizeof(model_));
 
@@ -954,12 +1041,22 @@ void RobotData::CopyKinematicsData(RobotData &target_rd)
 
     if (target_rd.link_.size() != link_.size())
     {
-        target_rd.link_.reserve(link_.size());
+        target_rd.link_.resize(link_.size());
     }
-    for (int i = 0; i < link_.size(); i++)
+
+    std::copy(link_.begin(), link_.end(), target_rd.link_.begin());
+
+    if (target_rd.cc_.size() != cc_.size())
     {
-        target_rd.link_[i] = link_[i];
+
+        target_rd.cc_.resize(cc_.size());
+
+        for (int i = 0; i < cc_.size(); i++)
+        {
+            cc_[i].contact = target_rd.cc_[i].contact;
+        }
     }
+    std::copy(cc_.begin(), cc_.end(), target_rd.cc_.begin());
 
     target_rd.G_ = G_;
     target_rd.CMM_ = CMM_;

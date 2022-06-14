@@ -7,10 +7,6 @@
 #include <atomic>
 #include <unistd.h>
 
-#ifndef URDF_DIR
-#define URDF_DIR ""
-#endif
-
 class MyRobotData : public DWBC::RobotData
 {
 public:
@@ -22,19 +18,13 @@ public:
     double control_time;
 
     VectorXd torque_command_;
-
-    // void CopyKinematicsData(MyRobotData &drd)
-    // {
-    //     RobotData::CopyKinematicsData(drd);
-    // }
 };
 
-const int total_run = 10000;
-
 using namespace DWBC;
+
 int main()
 {
-    // running = true;
+    running = true;
 
     MyRobotData rd_;
 
@@ -56,7 +46,7 @@ int main()
 
     MatrixXd j_tmp;
 
-    int repeat_time = 10000;
+    int repeat_time = 1000;
 
     auto t_start = std::chrono::high_resolution_clock::now();
 
@@ -102,12 +92,9 @@ int main()
 
     rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
     rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-    rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-    rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
     rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
     rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
-
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;
@@ -147,30 +134,20 @@ int main()
 
     std::cout << " ---- DYNAMICS MATRIX VERIFICATION ---- " << std::endl;
 
-    MyRobotData rd2_;
-    rd2_.InitModelData(urdf_path, true, false);
     // Gen Matrix File
-    rd2_.check_mat_file_ = true;
-    rd_.UpdateKinematics(q, qdot, qddot);
-
-    rd_.CopyKinematicsData(rd2_);
+    rd_.check_mat_file_ = true;
     // rd_.save_mat_file_ = true;
 
-    rd2_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-    rd2_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.UpdateKinematics(q, qdot, qddot);
+    rd_.SetContact(true, true);
 
-    rd2_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
-    rd2_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+    rd_.SetTaskSpace(0, fstar_1);
+    rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
 
-    rd2_.SetContact(true, true);
-
-    rd2_.SetTaskSpace(0, fstar_1);
-    rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
-    rd2_.CalcGravCompensation(); // Calulate Gravity Compensation
-    rd2_.CalcTaskControlTorque(true);
-    rd2_.CalcContactRedistribute(true);
-    rd2_.check_mat_file_ = false;
+    rd_.CalcGravCompensation(); // Calulate Gravity Compensation
+    rd_.CalcTaskControlTorque(true);
+    rd_.CalcContactRedistribute(true);
+    rd_.check_mat_file_ = false;
 
     // rd_.save_mat_file_ = false;
     // int rows = rd_.W.rows();
@@ -208,7 +185,7 @@ int main()
         qr(rd_.system_dof_) = 1;
 
         auto t0 = std::chrono::high_resolution_clock::now();
-        rd_.UpdateKinematics(qr, qdot, qddot);
+        rd_.UpdateKinematics(qr, qdot, qddot, false);
 
         auto t1 = std::chrono::high_resolution_clock::now();
         rd_.SetContact(true, true);
@@ -227,6 +204,17 @@ int main()
         if (c_res == 0)
             break;
 
+        // if (c_res == 0)
+        // {
+        //     std::cout << "error at " << i << std::endl;
+        //     std::cout << qr.transpose() << std::endl;
+        // }
+
+        // std::cout << std::endl
+        //           << std::endl
+        //           << i << "contact calc" << std::endl
+        //           << std::endl;
+
         auto t4 = std::chrono::high_resolution_clock::now();
         c_res2 = rd_.CalcContactRedistribute(init);
         calc_cr_res += c_res2;
@@ -235,6 +223,10 @@ int main()
         if (c_res2 == 0)
             break;
 
+        // std::cout << std::endl
+        //           << std::endl
+        //           << i << "done" << std::endl
+        //           << std::endl;
         init = false;
 
         ns_uk += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
@@ -264,6 +256,12 @@ int main()
     std::cout << "contact redis  qp : " << calc_cr_res << std::endl;
 
     std::cout << " -----------------------------------------------" << std::endl;
+
+    // std::cout << " fstar qp : " << rd_.ts_[0].f_star_qp_.transpose() << std::endl;
+    // std::cout << " Grav Torque : " << rd_.torque_grav_.transpose() << std::endl;
+    // std::cout << " Task Torque : " << rd_.torque_task_.transpose() << std::endl;
+    // std::cout << "contact Torque : " << rd_.torque_contact_.transpose() << std::endl;
+    // std::cout << "contact force after : " << rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_).transpose() << std::endl;
 
     return 0;
 }

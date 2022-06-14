@@ -18,6 +18,18 @@ void CQuadraticProgram::Initialize()
     _num_cons = 1;
 }
 
+bool CQuadraticProgram::CheckProblemSize(int numbar, int numcons)
+{
+    if ((_num_var == numbar) && (_num_cons == numcons))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 void CQuadraticProgram::InitializeProblemSize(const int &num_var, const int &num_cons)
 {
     _QPprob = SQProblem(num_var, num_cons);
@@ -239,10 +251,45 @@ int CQuadraticProgram::SolveQPoases(const int &num_max_iter, VectorXd &solv, boo
 
     if (m_status != SUCCESSFUL_RETURN)
     {
-        std::cout << "QP solve error from hotstart : " << m_status << std::endl;
+        std::cout << "QP solve error from hotstart ! trying with init...  " << m_status << std::endl;
+
         // PrintMinProb();
         // PrintSubjectToAx();
         // PrintSubjectTox();
+        // _options.setToMPC();
+
+        //_options.boundTolerance = 1E-6;
+        //_options.boundRelaxation = 1E-4;
+        // _options.printLevel = PL_LOW;
+        // _options.initialStatusBounds = ST_INACTIVE;
+        _QPprob = SQProblem(_num_var, _num_cons);
+        _options.setToReliable();
+        _options.printLevel = PL_MEDIUM;
+        // _options.
+
+        _QPprob.setOptions(_options);
+
+        nWSR = nWSR * 10;
+
+        // std::cout << "QP init" << std::endl;
+
+        if (_bool_constraint_Ax == true && _bool_constraint_x == true)
+        {
+            m_status = _QPprob.init(H_realt, g_realt, A_realt, lb_realt, ub_realt, lbA_realt, ubA_realt, nWSR);
+        }
+        else if (_bool_constraint_Ax == true && _bool_constraint_x == false)
+        {
+            m_status = _QPprob.init(H_realt, g_realt, A_realt, 0, 0, lbA_realt, ubA_realt, nWSR);
+        }
+        else if (_bool_constraint_Ax == false && _bool_constraint_x == true)
+        {
+            m_status = _QPprob.init(H_realt, g_realt, 0, lb_realt, ub_realt, 0, 0, nWSR);
+        }
+        else
+        {
+            m_status = _QPprob.init(H_realt, g_realt, 0, 0, 0, 0, 0, nWSR);
+        }
+        _bInitialized = true;
     }
 
     real_t Xopt_realt[_num_var];

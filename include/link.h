@@ -37,6 +37,7 @@ namespace DWBC
         Matrix3d inertia;
 
         unsigned int link_id_;
+        unsigned int id;
 
         double mass;
 
@@ -61,8 +62,7 @@ namespace DWBC
         // /*
         // Get Position of
         // */
-        // Vector3d GetPointPos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::Vector3d &point);
-        
+        void GetPointPos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_, Eigen::Vector3d &local_pos, Eigen::Vector3d &global_pos);
 
         Quaterniond GetQuat();
 
