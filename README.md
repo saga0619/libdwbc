@@ -1,5 +1,7 @@
 operational space whole-body control library.
+
 based on,
+
 Lee, Yisoo, et al. "Computationally Efficient HQP-based Whole-body Control Exploiting the Operational-space Formulation." 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). IEEE, 2021.
 
 
