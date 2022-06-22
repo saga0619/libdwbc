@@ -86,8 +86,8 @@ int main()
     fstar_1(0) = 0.1;
     fstar_1(1) = 2.0;
     fstar_1(2) = 0.1;
-    rd_.SetTaskSpace(0, fstar_1);
-    rd_.SetTaskSpace(1, Vector3d::Zero());
+    //rd_.SetTaskSpace(0, fstar_1);
+    //rd_.SetTaskSpace(1, Vector3d::Zero());
 
     t_start = std::chrono::high_resolution_clock::now();
 
@@ -96,9 +96,11 @@ int main()
     for (int i = 0; i < repeat_time; i++)
     {
         rd_.SetContact(true, true);
-        rd_.CalcTaskSpaceTorqueHQPWithThreaded(); // Calculate Task Spaces...
-        rd_.CalcGravCompensation();               // Calulate Gravity Compensation
-        rd_.CalcTaskControlTorque(true, init);
+        // rd_.CalcTaskSpaceTorqueHQPWithThreaded(); // Calculate Task Spaces...
+        rd_.SetTaskSpace(0,fstar_1);
+	rd_.SetTaskSpace(1,fstar_1.segment(3,3));
+	rd_.CalcGravCompensation();               // Calulate Gravity Compensation
+        rd_.CalcTaskControlTorque(init);
         rd_.CalcContactRedistribute(init);
 
         init = false;
