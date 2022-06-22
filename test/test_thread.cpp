@@ -107,6 +107,8 @@ void producer(MyRobotData &mrd, MyRobotData &global_rd)
     int t_count = 0;
 
     long t_total = 0;
+    int t_min = 1000000;
+    int t_max = 0;
 
     while (t_count < total_run)
     {
@@ -132,12 +134,22 @@ void producer(MyRobotData &mrd, MyRobotData &global_rd)
 
         auto t_dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t_now).count();
 
+        if (t_dur > t_max)
+        {
+            t_max = t_total;
+        }
+
+        if (t_dur < t_min)
+        {
+            t_min = t_dur;
+        }
+
         t_total += t_dur;
 
         t_count++;
     }
 
-    std::cout << "producer end" << t_total / t_count << std::endl;
+    std::cout << "producer end, calc avg : " << t_total / t_count << "us, min : " << t_min << "us, max : " << t_max << "us " << std::endl;
 }
 
 void consumer(MyRobotData &local_rd, MyRobotData &global_rd)
