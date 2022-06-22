@@ -81,6 +81,12 @@ install(EXPORT dwbc-export
     EXPORT_LINK_INTERFACE_LIBRARIES
     )
 
+install(EXPORT dwbc-export
+    FILE dwbc-config.cmake
+    DESTINATION share/cmake/dwbc/
+    EXPORT_LINK_INTERFACE_LIBRARIES
+    )
+
 export(
     EXPORT dwbc-export
     FILE "${CMAKE_CURRENT_BINARY_DIR}/dwbc-targets.cmake"
