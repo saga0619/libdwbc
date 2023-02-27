@@ -122,7 +122,7 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     {
         link_[i].UpdateAll(model_, q_virtual, q_dot_virtual);
         J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
-        com_pos += link_[i].xpos * link_[i].mass / total_mass_;
+        com_pos += link_[i].xipos * link_[i].mass / total_mass_;
     }
 
     link_.back().xpos = com_pos;
@@ -174,8 +174,8 @@ void RobotData::UpdateContactConstraint()
 
 void RobotData::CalcContactConstraint(bool update)
 {
-    // if (update)
-    //     UpdateContactConstraint();
+    if (update)
+         UpdateContactConstraint();
     // int contact_dof
 
     if (J_C.rows() != contact_dof_ || J_C.cols() != system_dof_)
