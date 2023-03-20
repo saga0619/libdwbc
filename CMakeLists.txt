@@ -71,7 +71,7 @@ INSTALL (TARGETS dwbc
 	INCLUDES        DESTINATION include
     )
 
-install(FILES ${dwbc_header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dwbc)
+install(FILES ${dwbc_header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdwbc)
 
 include(CMakePackageConfigHelpers)
 
@@ -91,8 +91,5 @@ export(
     EXPORT dwbc-export
     FILE "${CMAKE_CURRENT_BINARY_DIR}/dwbc-targets.cmake"
 )
-
-# compile test program
-add_subdirectory(test)
 
 
