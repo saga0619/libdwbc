@@ -1,4 +1,8 @@
-#include "math.h"
+#include "dwbc_math.h"
+
+using namespace Eigen;
+
+
 
 namespace DWBC
 {

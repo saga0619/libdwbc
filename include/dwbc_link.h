@@ -4,7 +4,7 @@
 #include "rbdl/rbdl.h"
 #include <iostream>
 #include <Eigen/Dense>
-#include "math.h"
+#include "dwbc_math.h"
 
 using namespace Eigen;
 

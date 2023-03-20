@@ -1,4 +1,4 @@
-#include "wbd.h"
+#include "dwbc_wbd.h"
 #include "iostream"
 namespace DWBC
 {

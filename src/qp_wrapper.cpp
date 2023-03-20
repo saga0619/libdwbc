@@ -1,5 +1,5 @@
 #ifndef COMPILE_QPSWIFT
-#include "qp_wrapper.h"
+#include "dwbc_qp_wrapper.h"
 
 using namespace DWBC;
 

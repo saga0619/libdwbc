@@ -2,8 +2,8 @@
 #define WBHQP_TASK_H
 
 #include <Eigen/Dense>
-#include "wbd.h"
-#include "math.h"
+#include "dwbc_wbd.h"
+#include "dwbc_math.h"
 
 using namespace Eigen;
 

@@ -4,11 +4,11 @@
 #include <rbdl/addons/urdfreader/urdfreader.h>
 #include <cstdarg>
 
-#include "link.h"
-#include "contact_constraint.h"
-#include "task.h"
-#include "wbd.h"
-#include "util.h"
+#include "dwbc_link.h"
+#include "dwbc_contact_constraint.h"
+#include "dwbc_task.h"
+#include "dwbc_wbd.h"
+#include "dwbc_util.h"
 
 using namespace Eigen;
 
@@ -27,7 +27,7 @@ public:
         : TaskSpace(task_mode, heirarchy, link_number, link_id, task_point, model_dof) {}
 };
 #else
-#include "qp_wrapper.h"
+#include "dwbc_qp_wrapper.h"
 // class TaskSpaceQP : public DWBC::TaskSpace
 // {
 // public:
