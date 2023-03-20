@@ -51,6 +51,9 @@ namespace DWBC
 
     Vector3d GetPhi(Matrix3d current_rotation, Matrix3d desired_rotation);
     
+
+    MatrixXd spatialTransformMatrix(const Vector3d &pos, const Matrix3d &rot);
+    
 }
 
 #endif

@@ -289,4 +289,17 @@ namespace DWBC
 
         return -phi;
     }
+
+    MatrixXd spatialTransformMatrix(const Vector3d &pos, const Matrix3d &rot)
+    {
+        Eigen::MatrixXd sp_mat = Eigen::MatrixXd::Zero(6, 6);
+
+        sp_mat.block<3, 3>(0, 0) = rot;
+        sp_mat.block<3, 3>(3, 3) = rot;
+        sp_mat.block<3, 3>(0, 3) = skew(pos) * rot;
+
+
+        return sp_mat;
+    }
+
 }

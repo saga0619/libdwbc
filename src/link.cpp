@@ -125,4 +125,32 @@ namespace DWBC
         return G;
     }
 
+    MatrixXd Link::GetSpatialTranform()
+    {
+        return spatialTransformMatrix(xpos, rotm);
+    }
+
+    MatrixXd Link::GetAdjointMatrix()
+    {
+        MatrixXd adjoint = MatrixXd::Zero(6, 6);
+
+        adjoint.block(0, 0, 3, 3) = rotm;
+        adjoint.block(3, 3, 3, 3) = rotm;
+        adjoint.block(3, 0, 3, 3) = skew(xpos) * rotm;
+
+        return adjoint;
+    }
+
+    MatrixXd Link::GetSpatialInertiaMatrix()
+    {
+        MatrixXd i_temp = MatrixXd::Zero(6, 6);
+
+        i_temp.block(0, 0, 3, 3) = inertia + mass * skew(com_position_l_) * skew(com_position_l_).transpose();
+        i_temp.block(0, 3, 3, 3) = mass * skew(com_position_l_);
+        i_temp.block(3, 0, 3, 3) = mass * skew(com_position_l_).transpose();
+        i_temp.block(3, 3, 3, 3) = mass * Matrix3d::Identity();
+
+        return i_temp;
+    }
+
 }

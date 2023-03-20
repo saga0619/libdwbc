@@ -77,6 +77,13 @@ namespace DWBC
         // void UpdateJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual);
         MatrixXd GetJacDot(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual, const Eigen::VectorXd &q_dot_virtual, const Eigen::Vector3d &point_jac);
 
+        // Get spatial transform matrix 6x6 from link to base, Matrix * local_spacial_vector = global_spatial_vector
+        MatrixXd GetSpatialTranform();
+
+        // Get adjoint matrix 6x6 from link to base, Matrix * local_spacial_vector = global_spatial_vector
+        MatrixXd GetAdjointMatrix();
+
+        MatrixXd GetSpatialInertiaMatrix();
     };
 }
 

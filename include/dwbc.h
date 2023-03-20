@@ -172,6 +172,12 @@ namespace DWBC
         */
         VectorXd getContactForce(const VectorXd &command_torque);
 
+
+        /*
+        Calculate Angular Momentum Matrix
+        */
+        MatrixXd CalcAngularMomentumMatrix();
+
         /*
         Add Task Space
         */

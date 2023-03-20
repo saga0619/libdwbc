@@ -459,6 +459,28 @@ void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
         }
     }
 
+    for (int i = 0; i < link_.size(); i++)
+    {
+        link_[i].parent_id_ = 0;
+        link_[i].child_id_.clear();
+        link_[i].link_id_ = i;
+    }
+
+    for (int i = 0; i < link_.size(); i++)
+    {
+        int temp_parent_body_id = model_.lambda[link_[i].body_id_];
+
+        for (int j = 0; j < link_.size(); j++)
+        {
+            if (temp_parent_body_id == link_[j].body_id_)
+            {
+
+                link_[i].parent_id_ = j;
+                link_[j].child_id_.push_back(i);
+            }
+        }
+    }
+
     link_.push_back(Link()); // Add link for COM
     link_.back().name_ = "COM";
 
@@ -1019,6 +1041,32 @@ VectorXd RobotData::GetControlTorque(bool task_control, bool init)
     VectorXd torque_control;
 
     return torque_control;
+}
+
+MatrixXd RobotData::CalcAngularMomentumMatrix()
+{
+    Eigen::MatrixXd H_C = MatrixXd::Zero(6,system_dof_);
+
+    for(int i=0;model_dof_;i++)
+    {
+        Eigen::MatrixXd rotm = MatrixXd::Identity(6,6);
+        rotm.block(0,0,3,3) = link_[i].rotm;
+        rotm.block(3,3,3,3) = link_[i].rotm;
+
+        link_[i].GetSpatialInertiaMatrix();
+
+        Eigen::MatrixXd j_temp = MatrixXd::Zero(6,model_dof_);
+        j_temp.topRows(3) = link_[i].jac_.bottomRows(3);
+        j_temp.bottomRows(3) = link_[i].jac_.topRows(3);
+
+        H_C += link_[i].GetSpatialTranform() * link_[i].GetSpatialInertiaMatrix() * rotm.transpose() * j_temp;
+    }
+
+    DWBC::Link com_;
+    com_.rotm = Eigen::MatrixXd::Identity(3,3);
+    com_.xpos = link_[model_dof_].xpos;
+    
+    return com_.GetAdjointMatrix().transpose() * H_C;
 }
 
 void RobotData::CopyKinematicsData(RobotData &target_rd)
