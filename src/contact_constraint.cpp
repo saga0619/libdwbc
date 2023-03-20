@@ -1,4 +1,4 @@
-#include "contact_constraint.h"
+#include "dwbc_contact_constraint.h"
 
 namespace DWBC
 {
@@ -14,7 +14,7 @@ namespace DWBC
 
         link_number_ = link_number;
 
-        rbdl_link_id_ = link_id;
+        rbdl_body_id_ = link_id;
 
         if (contact_type == CONTACT_6D)
         {
@@ -43,11 +43,11 @@ namespace DWBC
 
     void ContactConstraint::Update(RigidBodyDynamics::Model &model_, const VectorXd q_virtual_)
     {
-        xc_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, rbdl_link_id_, contact_point_, false);
-        rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, rbdl_link_id_, false)).transpose();
+        xc_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, rbdl_body_id_, contact_point_, false);
+        rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, rbdl_body_id_, false)).transpose();
 
         j_contact.setZero();
-        RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_link_id_, contact_point_, j_contact, false);
+        RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_body_id_, contact_point_, j_contact, false);
 
         j_contact.topRows(3).swap(j_contact.bottomRows(3));
     }

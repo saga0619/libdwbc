@@ -18,7 +18,7 @@ namespace DWBC
     }
 
     // Typical pos/rot task initialzer
-    TaskSpace::TaskSpace(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point, int model_dof)
+    TaskSpace::TaskSpace(int task_mode, int heirarchy, int link_number, int body_id, const Vector3d &task_point, int model_dof)
     {
         task_mode_ = task_mode;
 
@@ -26,7 +26,7 @@ namespace DWBC
 
         link_number_ = link_number; // vector number
 
-        link_id_ = link_id; // rbdl link id
+        body_id_ = body_id; // rbdl body id
 
         model_size_ = model_dof;
 

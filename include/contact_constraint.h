@@ -31,7 +31,7 @@ namespace DWBC
         bool contact;
 
         Vector3d xc_pos;
-        int rbdl_link_id_; 
+        int rbdl_body_id_; 
         int link_number_;
         Matrix3d rotm;
 

@@ -36,8 +36,16 @@ namespace DWBC
         Vector3d com_position_l_;
         Matrix3d inertia;
 
+        // id of body from rbdl
+        unsigned int body_id_;
+
+        // id of parent link
+        unsigned int parent_id_;
+
+        std::vector<unsigned int> child_id_;
+
+        // id of current link
         unsigned int link_id_;
-        unsigned int id;
 
         double mass;
 

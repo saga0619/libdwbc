@@ -151,7 +151,7 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
 void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
 {
 
-    cc_.push_back(ContactConstraint(model_, link_number, link_[link_number].link_id_, contact_type, contact_point, contact_vector, contact_x, contact_y));
+    cc_.push_back(ContactConstraint(model_, link_number, link_[link_number].body_id_, contact_type, contact_point, contact_vector, contact_x, contact_y));
 
     if (verbose)
     {
@@ -263,7 +263,7 @@ void RobotData::AddTaskSpace(int task_mode, int link_number, Vector3d task_point
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
 
-    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].link_id_, task_point, model_dof_));
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].body_id_, task_point, model_dof_));
 
     AddQP();
 }

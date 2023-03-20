@@ -30,7 +30,7 @@ namespace DWBC
         unsigned int task_dof_;
         unsigned int heirarchy_;
         unsigned int link_number_;
-        unsigned int link_id_;
+        unsigned int body_id_;
 
         unsigned int task_mode_;
 
