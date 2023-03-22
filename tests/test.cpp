@@ -85,12 +85,12 @@ int main()
 
     q.setZero();
     q << 0, 0, 0.92983, 0, 0, 0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.1, 0.0, -0.24, 0.5, -0.6, 0.0,
+        0.05, 0.0, -0.21, 0.7, -0.31, 0.0,
         0, 0, 0,
-        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0.2, 0.5, 1.5, -1.27, -1.2, 0, -1, 0,
         0, 0,
-        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+        -0.3, -0.3, -1.5, 1.27, 1.3, 0.1, 1.3, 0, 1;
 
     // q << 0, 0, 0, 8.72949e-06, -0.000191618, -3.56927e-07, 7.21486e-07, -1.14801e-07, -0.233464, 0.581483, -0.348292, -1.31239e-06, -1.15455e-07, -4.6496e-07, -0.233484, 0.581517, -0.348293, -1.16079e-06, -3.29457e-07, -0.000329052, -1.22101e-07, 0.300002, 0.300095, 1.5, -1.27, -1.00115, 2.3016e-07, -1, -3.5045e-08, 1.36636e-06, -0.000406735, -0.300001, -0.300095, -1.5, 1.27, 1.00115, -4.30943e-08, 1, 5.41439e-09, 1;
 
@@ -110,13 +110,17 @@ int main()
 
     VectorXd fstar_1;
     fstar_1.setZero(6);
-    fstar_1(0) = 0.1;
-    fstar_1(1) = 4.0;
+    fstar_1(0) = 0.4;
+    fstar_1(1) = 2.0;
     fstar_1(2) = 0.1;
 
-    fstar_1(3) = 0.1;
+    fstar_1(3) = 0.3;
     fstar_1(4) = -0.1;
     fstar_1(5) = 0.1;
+
+    VectorXd fstar_2;
+    fstar_2.setZero(3);
+    fstar_2 << 0.1, 0.1, 0.1;
 
     bool init = true;
 
@@ -150,11 +154,11 @@ int main()
     MyRobotData rd2_;
     rd2_.InitModelData(urdf_path, true, false);
     // Gen Matrix File
-    rd2_.check_mat_file_ = true;
+    // rd2_.check_mat_file_ = true;
     rd_.UpdateKinematics(q, qdot, qddot);
 
     rd_.CopyKinematicsData(rd2_);
-    // rd_.save_mat_file_ = true;
+    rd2_.save_mat_file_ = true;
 
     rd2_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
     rd2_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
@@ -165,14 +169,14 @@ int main()
     rd2_.SetContact(true, true);
 
     rd2_.SetTaskSpace(0, fstar_1);
-    rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
+    rd2_.SetTaskSpace(1, fstar_2);
 
     rd2_.CalcGravCompensation(); // Calulate Gravity Compensation
     rd2_.CalcTaskControlTorque(true);
     rd2_.CalcContactRedistribute(true);
-    rd2_.check_mat_file_ = false;
+    // rd2_.check_mat_file_ = false;
 
-    // rd_.save_mat_file_ = false;
+    rd2_.save_mat_file_ = false;
     // int rows = rd_.W.rows();
     // int cols = rd_.W.cols();
 

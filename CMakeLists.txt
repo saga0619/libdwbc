@@ -23,8 +23,8 @@ ENDIF()
 find_package(RBDL REQUIRED)
 find_package(Eigen3 3.0.0 REQUIRED)
 
-ADD_DEFINITIONS(-DURDF_DIR=\"${PROJECT_SOURCE_DIR}/test\")
-ADD_DEFINITIONS(-DRESOURCE_DIR=\"${PROJECT_SOURCE_DIR}/test/Matrix\")
+ADD_DEFINITIONS(-DURDF_DIR=\"${PROJECT_SOURCE_DIR}/tests\")
+ADD_DEFINITIONS(-DRESOURCE_DIR=\"${PROJECT_SOURCE_DIR}/tests/cases\")
 
 IF(CHECK_DATA)
     ADD_DEFINITIONS(-DCHECKDATA)
@@ -91,5 +91,8 @@ export(
     EXPORT dwbc-export
     FILE "${CMAKE_CURRENT_BINARY_DIR}/dwbc-targets.cmake"
 )
+
+# compile test program
+add_subdirectory(tests)
 
 

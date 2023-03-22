@@ -8,7 +8,7 @@
 #include "dwbc_contact_constraint.h"
 #include "dwbc_task.h"
 #include "dwbc_wbd.h"
-#include "dwbc_util.h"
+// #include "dwbc_util.h"
 
 using namespace Eigen;
 
@@ -52,8 +52,13 @@ namespace DWBC
         RobotData(/* args */);
         ~RobotData();
 
+        // degree of freedom including floating base
         unsigned int system_dof_;
+        
+        // degree of freedom of robot model
         unsigned int model_dof_;
+
+        // degree of freedom of contact
         unsigned int contact_dof_;
 
         double total_mass_;

@@ -1,3 +1,0 @@
-wip 
-
-Todo 1. gtest function....
