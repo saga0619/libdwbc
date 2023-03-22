@@ -8,9 +8,14 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake)
 
 
 set(CMAKE_INTERFACE_CURRENT_DIR_IN_INTERFACE ON)
-set(USE_QPSWIFT OFF)
-set(CHECK_DATA OFF)
+
+OPTION (USE_QPSWIFT "Run with QPSWIFT" OFF)
+OPTION (CHECK_DATA OFF)
+OPTION (RUN_TEST "Run calculation test of libdwbc" OFF)
+
 include(GNUInstallDirs)
+
+
 
 IF(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 	MESSAGE(STATUS "Setting build type to 'Release' as none was specified.")
@@ -93,6 +98,7 @@ export(
 )
 
 # compile test program
-add_subdirectory(tests)
-
+IF(RUN_TEST)
+    add_subdirectory(tests)
+ENDIF()
 
