@@ -21,6 +21,11 @@ make
 sudo make install
 ```
 
+### Unit Test and Benchmark
+```sh
+cmake -D RUN_TEST=ON ..
+```
+
 ### How to play with
 see [example](https://github.com/saga0619/dyros_hqp_lib/tree/main/example)
 
