@@ -1130,7 +1130,7 @@ void RobotData::DeleteLink(int link_idx, bool verbose)
 
     if (link_[link_idx].child_id_.size() > 0)
     {
-        std::cout << "link : " << link_idx << "has child link : "  << link_[link_idx].child_id_.size() << " delete children link first. "<<std::endl;
+        std::cout << "link : " << link_idx << "has child link : " << link_[link_idx].child_id_.size() << " delete children link first. " << std::endl;
     }
 
     // for (int i = 0; i < link_[link_idx].child_id_.size(); i++)
@@ -1350,7 +1350,7 @@ void RobotData::DeleteLink(int link_idx, bool verbose)
     // }
 
     // Re update model data
-    InitAfterModelMod(0, link_idx);
+    InitAfterModelMod(DELETE_LINK, link_idx);
 
     if (verbose)
     {
@@ -1368,6 +1368,40 @@ void RobotData::DeleteLink(int link_idx, bool verbose)
     custom_joint_index(-1)
 
 */
+void RobotData::AddLink(int parent_id, const char *link_name, int joint_type, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
+{
+}
+
+void RobotData::AddLink(int parent_body_id, const char *link_name, int joint_type, const Vector3d &joint_axis, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
+{
+    // int parent_body_id = link_[parent_id].body_id_;
+
+    if (joint_type == JOINT_FIXED) // If joint type is fixed
+    {
+    }
+    else if (joint_type == JOINT_REVOLUTE) // If joint type is revolute
+    {
+        RigidBodyDynamics::Math::Vector3d com_pos_rbdl = com_position;
+        RigidBodyDynamics::Math::Matrix3d inertia_rbdl = inertia;
+        RigidBodyDynamics::Body Body(body_mass, com_pos_rbdl, inertia_rbdl);
+        RigidBodyDynamics::Joint joint(RigidBodyDynamics::JointTypeRevolute, joint_axis);
+        RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm;
+        RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
+
+        model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
+
+        //find the corresponding link id with parent_id
+
+        int parent_link_id = getLinkID(model_.GetBodyName(parent_body_id).c_str());
+
+
+        InitAfterModelMod(ADD_LINK_WITH_REVOLUTE_JOINT, parent_link_id, verbose);
+    }
+    else if (joint_type == JOINT_FLOATING) // if joint type is floating
+    {
+    }
+}
+
 void RobotData::AddLink(const char *parent_name, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
 {
     int link_id = getLinkID(parent_name);
@@ -1392,13 +1426,31 @@ void RobotData::AddLink(int parent_body_id, const char *link_name, const Matrix3
 
     // std::cout << parent_id << "pid" << std::endl;
 
-    InitAfterModelMod(1, parent_id, verbose);
+    InitAfterModelMod(ADD_LINK_WITH_FIXED_JOINT, parent_id, verbose);
 }
 
 void RobotData::AddLink(Link &link, bool verbose)
 {
     int parent_body_id = model_.GetBodyId(link_[link.parent_id_].name_.c_str());
     AddLink(parent_body_id, link.name_.c_str(), link.parent_rotm, link.parent_trans, link.mass, link.com_position_l_, link.inertia, verbose);
+}
+
+void RobotData::AddLink(Link &link, int joint_type, const Vector3d &joint_axis, bool verbose)
+{
+    if (verbose)
+        std::cout << "Attaching link : " << link.name_ << " to parent : " << link_[link.parent_id_].name_ << std::endl;
+    // std::cout << "Desired parent : " << link_[link.parent_id_].name_ << std::endl;
+
+    int parent_body_id = model_.GetBodyId(link_[link.parent_id_].name_.c_str());
+
+    if (joint_type == JOINT_FIXED) // If joint type is fixed
+    {
+        AddLink(parent_body_id, link.name_.c_str(), link.parent_rotm, link.parent_trans, link.mass, link.com_position_l_, link.inertia, verbose);
+    }
+    else if (joint_type == JOINT_REVOLUTE) // If joint type is rev
+    {
+        AddLink(parent_body_id, link.name_.c_str(), 1, joint_axis, link.joint_rotm, link.joint_trans, link.mass, link.com_position_l_, link.inertia, verbose);
+    }
 }
 
 void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
@@ -1411,7 +1463,7 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
 
     // delete link for link vector
 
-    if (mode == 0)
+    if (mode == DELETE_LINK)
     {
         int deleted_id = change_link_id;
         int deleted_body_id = corresponding_body_id;
@@ -1517,7 +1569,7 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
         //     }
         // }
     }
-    else if (mode == 1)
+    else if (mode == ADD_LINK_WITH_FIXED_JOINT)
     {
         // Link added with fixed joint.
         int parent_id = change_link_id;
@@ -1527,6 +1579,37 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
         link_[parent_id].com_position_l_ = model_.mBodies[added_parent_body_id].mCenterOfMass;
         link_[parent_id].mass = model_.mBodies[added_parent_body_id].mMass;
         link_[parent_id].inertia = model_.mBodies[added_parent_body_id].mInertia;
+    }
+    else if (mode == ADD_LINK_WITH_REVOLUTE_JOINT)
+    {
+        // Link added with revolute joint.
+
+        int body_id = model_.previously_added_body_id;
+        int parent_body_id = corresponding_body_id;
+        int parent_link_id = change_link_id;
+
+        // Insert Link() before the last element of link_
+        link_.insert(link_.end() - 1, Link(model_, body_id));
+
+        int added_link_id = link_.size() - 2;
+        link_[added_link_id].link_id_ = added_link_id;
+
+        // Add Children infromation to parent link
+        link_[parent_link_id].child_id_.push_back(added_link_id);
+
+        link_[added_link_id].parent_id_ = parent_link_id;
+
+        // test
+        // for (int i = 0; i < link_.size(); i++)
+        // {
+        //     std::cout << "link_[" << i << "].link_id_ : " << link_[i].link_id_ << "link name : " << link_[i].name_ << std::endl;
+        // }
+
+        link_[added_link_id].Print();
+    }
+    else if (mode == ADD_LINK_WITH_FLOATING_JOINT)
+    {
+        // Link Added with floating joint
     }
 
     q_system_.setZero(model_.q_size);
@@ -1591,7 +1674,7 @@ int RobotData::getLinkID(std::string link_name)
 
 void RobotData::printLinkInfo()
 {
-    for (int i = 0; i < link_.size(); i++)
+    for (int i = 0; i < link_.size() - 1; i++)
     {
         // print link id, link name, parent link id, child link list,
         // print link position, orientation, mass, inertia

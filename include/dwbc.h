@@ -45,6 +45,22 @@ public:
 
 namespace DWBC
 {
+    enum
+    {
+        JOINT_FLOATING,
+        JOINT_REVOLUTE,
+        JOINT_PRISMATIC,
+        JOINT_FIXED
+    };
+
+    enum
+    {
+        ADD_LINK,
+        ADD_LINK_WITH_FIXED_JOINT,
+        ADD_LINK_WITH_REVOLUTE_JOINT,
+        ADD_LINK_WITH_FLOATING_JOINT,
+        DELETE_LINK,
+    };
 
     class RobotData
     {
@@ -244,7 +260,22 @@ namespace DWBC
 
         void AddLink(const char *parent_name, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
         void AddLink(int parent_id, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
+        void AddLink(int parent_id, const char *link_name, int joint_type, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
+        void AddLink(int parent_id, const char *link_name, int joint_type, const Vector3d &joint_axis, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
+
+        /*
+        joint_type : 0 : fixed joint, 1 : revolute joint, 2:prismatic, 3: floating joint
+
+        */
+        void AddLink(Link &link, int joint_type, const Vector3d &joint_axis, bool verbose = false);
+
+        /*
+        just for fixed joint
+        */
         void AddLink(Link &link, bool verbose = false);
+
+        // void AddLinkWithJoint()
+
         /*
             mode 0 : init after deleted model
             mode 1 : init after added model with fixed joint
