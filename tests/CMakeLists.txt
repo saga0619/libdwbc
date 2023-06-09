@@ -21,7 +21,7 @@ OPTION (RUN_AUTOMATIC_TESTS "Run automatic tests" ON)
 
 IF(RUN_AUTOMATIC_TESTS)
     ADD_CUSTOM_COMMAND(TARGET dwbc_tests POST_BUILD
-        COMMAND ./tests/dwbc_tests
+        COMMAND ./tests/dwbc_tests -v high
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Running automatic tests"
     )

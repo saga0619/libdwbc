@@ -103,6 +103,22 @@ void RobotData::SetTorqueLimit(const VectorXd &torque_limit)
 
 void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual, bool update_kinematics)
 {
+    // check q size and q_dot size
+    if (model_.q_size != q_virtual.size())
+    {
+        std::cout << "q size is not matched : qsize : " << model_.q_size << " input size : " << q_virtual.size() << std::endl;
+        return;
+    }
+    if (model_.qdot_size != q_dot_virtual.size())
+    {
+        std::cout << "q_dot size is not matched" << std::endl;
+        return;
+    }
+    if (model_.qdot_size != q_ddot_virtual.size())
+    {
+        std::cout << "q_ddot size is not matched" << std::endl;
+        return;
+    }
     q_system_ = q_virtual;
     q_dot_system_ = q_dot_virtual;
     q_ddot_system_ = q_ddot_virtual;
@@ -150,7 +166,14 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
 
 void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
 {
-
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].link_number_ == link_number)
+        {
+            std::cout << "Contact Constraint Already Exist for Link : " << link_[link_number].name_ << std::endl;
+            return;
+        }
+    }
     cc_.push_back(ContactConstraint(model_, link_number, link_[link_number].body_id_, contact_type, contact_point, contact_vector, contact_x, contact_y));
 
     if (verbose)
@@ -158,7 +181,40 @@ void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d
         std::cout << "#" << (cc_.size() - 1) << " Contact Constraint Added : " << link_[link_number].name_ << std::endl;
     }
 }
+void RobotData::AddContactConstraint(const char *link_name, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
+{
+    int link_number = -1;
+    for (int i = 0; i < link_.size(); i++)
+    {
+        // compare the name of link and link_name string and return the index of link
+        // ignore the case of character
+        if (strcasecmp(link_[i].name_.c_str(), link_name) == 0)
+        {
+            link_number = i;
+            break;
+        }
+    }
+    if (link_number == -1)
+    {
+        std::cout << "Link Name is Wrong : " << link_name << std::endl;
+        return;
+    }
 
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].link_number_ == link_number)
+        {
+            std::cout << "Contact Constraint Already Exist for Link : " << link_[link_number].name_ << std::endl;
+            return;
+        }
+    }
+    cc_.push_back(ContactConstraint(model_, link_number, link_[link_number].body_id_, contact_type, contact_point, contact_vector, contact_x, contact_y));
+
+    if (verbose)
+    {
+        std::cout << "#" << (cc_.size() - 1) << " Contact Constraint Added : " << link_[link_number].name_ << std::endl;
+    }
+}
 void RobotData::ClearContactConstraint()
 {
     cc_.clear();
@@ -172,12 +228,11 @@ void RobotData::UpdateContactConstraint()
     }
 }
 
-void RobotData::CalcContactConstraint(bool update)
+int RobotData::CalcContactConstraint(bool update)
 {
     if (update)
-         UpdateContactConstraint();
+        UpdateContactConstraint();
     // int contact_dof
-
     if (J_C.rows() != contact_dof_ || J_C.cols() != system_dof_)
     {
         J_C.setZero(contact_dof_, system_dof_);
@@ -193,53 +248,19 @@ void RobotData::CalcContactConstraint(bool update)
         }
     }
 
-    CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, W, NwJw, W_inv, V2);
-#ifdef CHECKDATA
-    if (save_mat_file_)
-    {
-        write_binary("/J_C", J_C);
+    Lambda_contact.setZero(contact_dof_, contact_dof_);
+    J_C_INV_T.setZero(contact_dof_, system_dof_);
+    N_C.setZero(system_dof_, system_dof_);
 
-        write_binary("/A_inv_", A_inv_);
+    W.setZero(model_dof_, model_dof_);
+    W_inv.setZero(model_dof_, model_dof_);
 
-        write_binary("/Lambda_contact", Lambda_contact);
+    int contact_null_dof = contact_dof_ - 6;
 
-        write_binary("/J_C_INV_T", J_C_INV_T);
+    V2.setZero(contact_null_dof, model_dof_);
+    NwJw.setZero(model_dof_, model_dof_);
 
-        write_binary("/N_C", N_C);
-
-        write_binary("/W", W);
-
-        write_binary("/NwJw", NwJw);
-
-        write_binary("/W_inv", W_inv);
-
-        // write_binary("/V2", V2);
-    }
-
-    if (check_mat_file_)
-    {
-        std::cout << std::setw(30) << std::right << "Matrix Check Mode !! Task Heirarchy : " << std::endl;
-
-        std::cout << std::setw(30) << std::right << "J_C : " << check_binary("/J_C", J_C) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "A_inv_ : " << check_binary("/A_inv_", A_inv_) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "Lambda_contact : " << check_binary("/Lambda_contact", Lambda_contact) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "J_C_INV_T : " << check_binary("/J_C_INV_T", J_C_INV_T) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "N_C : " << check_binary("/N_C", N_C) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "W : " << check_binary("/W", W) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "NwJw : " << check_binary("/NwJw", NwJw) << std::endl;
-
-        std::cout << std::setw(30) << std::right << "W_inv : " << check_binary("/W_inv", W_inv) << std::endl;
-
-        // std::cout << std::setw(30) << std::right << "V2 : " << check_binary("/V2", V2) << std::endl;
-    }
-
-#endif
+    return CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, W, NwJw, W_inv, V2);
 }
 
 void RobotData::ClearTaskSpace()
@@ -254,7 +275,7 @@ void RobotData::AddTaskSpace(int task_mode, int task_dof, bool verbose)
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added with mode " << taskmode_str[task_mode] << std::endl;
 
-    ts_.push_back(TaskSpace(task_mode, ts_.size(), task_dof, system_dof_));
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), task_dof));
 
     AddQP();
 }
@@ -263,11 +284,57 @@ void RobotData::AddTaskSpace(int task_mode, int link_number, Vector3d task_point
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
 
-    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].body_id_, task_point, model_dof_));
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        if (ts_[i].link_id_ == link_number)
+        {
+            std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
+            return;
+        }
+    }
+
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].body_id_, task_point));
 
     AddQP();
 }
 
+void RobotData::AddTaskSpace(int task_mode, const char *link_name, Vector3d task_point, bool verbose)
+{
+    int link_number = -1;
+
+    for (int i = 0; i < link_.size(); i++)
+    {
+        // compare the name of link and link_name
+        //  ignore the case of nmame
+        if (strcasecmp(link_[i].name_.c_str(), link_name) == 0)
+        {
+            link_number = i;
+            break;
+        }
+    }
+
+    if (link_number == -1)
+    {
+        std::cout << "Link Name is not Correct" << std::endl;
+        return;
+    }
+
+    if (verbose)
+        std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        if (ts_[i].link_id_ == link_number)
+        {
+            std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
+            return;
+        }
+    }
+
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].body_id_, task_point));
+
+    AddQP();
+}
 void RobotData::SetTaskSpace(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task)
 {
     if (heirarchy >= ts_.size())
@@ -292,36 +359,36 @@ void RobotData::UpdateTaskSpace()
     {
         if (ts_[i].task_mode_ == TASK_LINK_6D)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
+            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
 
             if (ts_[i].traj_pos_set)
             {
                 ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_number_].xpos + link_[ts_[i].link_number_].rotm * ts_[i].task_point_,
-                                     link_[ts_[i].link_number_].v + link_[ts_[i].link_number_].w.cross(ts_[i].task_point_));
+                                     link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
+                                     link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
             }
 
             if (ts_[i].traj_rot_set)
             {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_number_].rotm, link_[ts_[i].link_number_].w);
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
             }
         }
         else if (ts_[i].task_mode_ == TASK_LINK_POSITION)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).topRows(3);
+            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).topRows(3);
             if (ts_[i].traj_pos_set)
             {
                 ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_number_].xpos + link_[ts_[i].link_number_].rotm * ts_[i].task_point_,
-                                     link_[ts_[i].link_number_].v + link_[ts_[i].link_number_].w.cross(ts_[i].task_point_));
+                                     link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
+                                     link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
             }
         }
         else if (ts_[i].task_mode_ == TASK_LINK_ROTATION)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_number_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).bottomRows(3);
+            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).bottomRows(3);
             if (ts_[i].traj_rot_set)
             {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_number_].rotm, link_[ts_[i].link_number_].w);
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
             }
         }
         else if (ts_[i].task_mode_ == TASK_COM_POSITION)
@@ -330,8 +397,8 @@ void RobotData::UpdateTaskSpace()
             if (ts_[i].traj_pos_set)
             {
                 ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_number_].xpos,
-                                     link_[ts_[i].link_number_].v);
+                                     link_[ts_[i].link_id_].xpos,
+                                     link_[ts_[i].link_id_].v);
             }
         }
     }
@@ -380,20 +447,7 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
             if (i != ts_.size() - 1)
                 ts_[i].CalcNullMatrix(A_inv_, N_C);
         }
-#ifdef CHECKDATA
-        if (save_mat_file_)
-        {
 
-            write_binary("/torque_task_", torque_task_);
-        }
-
-        if (check_mat_file_)
-        {
-
-            std::cout << std::setw(30) << std::right << "torque task : " << check_binary("/torque_task_", torque_task_) << std::endl;
-        }
-
-#endif
         return 1;
     }
     else
@@ -432,22 +486,40 @@ verbose 2 : Show all link Information
 verbose 1 : Show link id information
 verbose 0 : disable verbose
 */
-void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
+void RobotData::LoadModelData(std::string urdf_path, bool floating, int verbose)
 {
     if (link_.size() > 0)
     {
         std::cout << "WARNING, VECTOR LINK IS NOT ZERO" << std::endl;
     }
-
     bool rbdl_v = false;
     if (verbose == 2)
     {
         rbdl_v = true;
     }
-
     RigidBodyDynamics::Addons::URDFReadFromFile(urdf_path.c_str(), &model_, floating, rbdl_v);
+
+    InitModelData(verbose);
+}
+
+void RobotData::InitModelData(int verbose)
+{
+    ts_.clear();
+    cc_.clear();
+    link_.clear();
+    qp_task_.clear();
+
+    qp_contact_ = CQuadraticProgram();
+
     system_dof_ = model_.dof_count;
     model_dof_ = system_dof_ - 6;
+
+    if (verbose)
+    {
+        std::cout << "System DOF : " << system_dof_ << std::endl;
+        std::cout << "Model DOF : " << model_dof_ << std::endl;
+        std::cout << "Model.dof : " << model_.dof_count << std::endl;
+    }
 
     total_mass_ = 0;
     for (int i = 0; i < model_.mBodies.size(); i++)
@@ -489,7 +561,8 @@ void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
         int vlink = 0;
         for (int i = 0; i < link_.size() - 1; i++)
         {
-            std::cout << vlink << " : " << link_[vlink++].name_ << std::endl;
+            std::cout << vlink << " : " << link_[vlink].name_ << std::endl;
+            std::cout << "mass : " << link_[vlink].mass << " body id : " << link_[vlink].body_id_ << " parent id : " << link_[vlink++].parent_id_ << std::endl;
         }
 
         std::cout << vlink << " : " << link_.back().name_ << std::endl;
@@ -498,47 +571,29 @@ void RobotData::InitModelData(std::string urdf_path, bool floating, int verbose)
     q_dot_system_.setZero(model_.qdot_size);
     q_ddot_system_.setZero(model_.qdot_size);
 
+    J_com_.setZero(6, system_dof_);
+
     A_.setZero(system_dof_, system_dof_);
     A_inv_.setZero(system_dof_, system_dof_);
+
+    G_.setZero(system_dof_);
+    torque_grav_.setZero(model_dof_);
+    torque_task_.setZero(model_dof_);
+    torque_contact_.setZero(model_dof_);
+
+    torque_limit_.setZero(model_dof_);
 }
 
 VectorXd RobotData::CalcGravCompensation()
 {
     CalculateGravityCompensation(A_inv_, W_inv, N_C, J_C_INV_T, G_, torque_grav_, P_C);
 
-#ifdef CHECKDATA
-    if (save_mat_file_)
-    {
-        write_binary("/torque_grav_", torque_grav_);
-    }
-
-    if (check_mat_file_)
-    {
-
-        std::cout << std::setw(30) << std::right << "torque_grav_ : " << check_binary("/torque_grav_", torque_grav_) << std::endl;
-    }
-
-#endif
     return torque_grav_;
 }
 
 void RobotData::CalcGravCompensation(VectorXd &grav_torque)
 {
     CalculateGravityCompensation(A_inv_, W_inv, N_C, J_C_INV_T, G_, grav_torque, P_C);
-
-#ifdef CHECKDATA
-    if (save_mat_file_)
-    {
-        write_binary("/torque_grav_", grav_torque);
-    }
-
-    if (check_mat_file_)
-    {
-
-        std::cout << std::setw(30) << std::right << "torque_grav_ : " << check_binary("/torque_grav_", grav_torque) << std::endl;
-    }
-
-#endif
 }
 
 VectorXd RobotData::getContactForce(const VectorXd &command_torque)
@@ -651,51 +706,6 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     // qp_.EnableEqualityCondition(0.0001);
 
     VectorXd qpres;
-#ifdef CHECKDATA
-    if (save_mat_file_)
-    {
-        std::string fname = "/h" + std::to_string(ts_.heirarchy_) + "mat";
-
-        write_binary(fname.c_str(), H);
-
-        fname = "/g" + std::to_string(ts_.heirarchy_) + "mat";
-
-        write_binary(fname.c_str(), g);
-
-        fname = "/A" + std::to_string(ts_.heirarchy_) + "mat";
-
-        write_binary(fname.c_str(), A);
-
-        fname = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
-
-        write_binary(fname.c_str(), ubA);
-
-        fname = "/lbA" + std::to_string(ts_.heirarchy_) + "mat";
-
-        write_binary(fname.c_str(), lbA);
-    }
-
-    if (check_mat_file_)
-    {
-        std::cout << "Matrix Check Mode !! Task Heirarchy : " << ts_.heirarchy_ << std::endl;
-
-        std::string hpath = "/h" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << std::setw(30) << std::right << "H : " << check_binary(hpath.c_str(), H) << std::endl;
-
-        hpath = "/g" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << std::setw(30) << std::right << "g : " << check_binary(hpath.c_str(), g) << std::endl;
-
-        hpath = "/A" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << std::setw(30) << std::right << "A : " << check_binary(hpath.c_str(), A) << std::endl;
-
-        hpath = "/ubA" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << std::setw(30) << std::right << "ubA : " << check_binary(hpath.c_str(), ubA) << std::endl;
-
-        hpath = "/lbA" + std::to_string(ts_.heirarchy_) + "mat";
-        std::cout << std::setw(30) << std::right << "lbA : " << check_binary(hpath.c_str(), lbA) << std::endl;
-    }
-
-#endif
 
 #ifdef COMPILE_QPSWIFT
     qpres = qpSwiftSolve(qp_task_[ts_.heirarchy_], variable_size, total_constraint_size, H, g, A, ubA, false);
@@ -950,28 +960,6 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool init)
         lbA.segment(torque_limit_constraint_size, contact_constraint_size).setConstant(-INFTY);
         ubA.segment(torque_limit_constraint_size, contact_constraint_size) = -bA;
 
-#ifdef CHECKDATA
-
-        if (save_mat_file_)
-        {
-            write_binary("/hcontact_mat", H);
-            write_binary("/gcontact_mat", g);
-            write_binary("/Acontact_mat", A_);
-            write_binary("/ubAcontact_mat", ubA);
-            write_binary("/lbAcontact_mat", lbA);
-        }
-
-        if (check_mat_file_)
-        {
-            std::cout << "Matrix Check Mode !! Contact Redistribution : " << std::endl;
-
-            std::cout << std::setw(30) << std::right << "H : " << check_binary("/hcontact_mat", H) << std::endl;
-            std::cout << std::setw(30) << std::right << "g : " << check_binary("/gcontact_mat", g) << std::endl;
-            std::cout << std::setw(30) << std::right << "A : " << check_binary("/Acontact_mat", A_) << std::endl;
-            std::cout << std::setw(30) << std::right << "ubA : " << check_binary("/ubAcontact_mat", ubA) << std::endl;
-            std::cout << std::setw(30) << std::right << "lbA : " << check_binary("/lbAcontact_mat", lbA) << std::endl;
-        }
-#endif
         Eigen::VectorXd qpres;
 
 #ifdef COMPILE_QPSWIFT
@@ -998,20 +986,6 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool init)
         if (qp_contact_.SolveQPoases(600, qpres))
         {
             torque_contact_ = NwJw * qpres;
-
-#ifdef CHECKDATA
-            if (save_mat_file_)
-            {
-                write_binary("/torque_contact_", torque_contact_);
-            }
-
-            if (check_mat_file_)
-            {
-
-                std::cout << std::setw(30) << std::right << "torque_contact_ Calculation : " << check_binary("/torque_contact_", torque_contact_) << std::endl;
-            }
-
-#endif
 
             return 1;
         }
@@ -1045,17 +1019,17 @@ VectorXd RobotData::GetControlTorque(bool task_control, bool init)
 
 MatrixXd RobotData::CalcAngularMomentumMatrix()
 {
-    Eigen::MatrixXd H_C = MatrixXd::Zero(6,system_dof_);
+    Eigen::MatrixXd H_C = MatrixXd::Zero(6, system_dof_);
 
-    for(int i=0;model_dof_;i++)
+    for (int i = 0; model_dof_; i++)
     {
-        Eigen::MatrixXd rotm = MatrixXd::Identity(6,6);
-        rotm.block(0,0,3,3) = link_[i].rotm;
-        rotm.block(3,3,3,3) = link_[i].rotm;
+        Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
+        rotm.block(0, 0, 3, 3) = link_[i].rotm;
+        rotm.block(3, 3, 3, 3) = link_[i].rotm;
 
         link_[i].GetSpatialInertiaMatrix();
 
-        Eigen::MatrixXd j_temp = MatrixXd::Zero(6,model_dof_);
+        Eigen::MatrixXd j_temp = MatrixXd::Zero(6, model_dof_);
         j_temp.topRows(3) = link_[i].jac_.bottomRows(3);
         j_temp.bottomRows(3) = link_[i].jac_.topRows(3);
 
@@ -1063,9 +1037,9 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
     }
 
     DWBC::Link com_;
-    com_.rotm = Eigen::MatrixXd::Identity(3,3);
+    com_.rotm = Eigen::MatrixXd::Identity(3, 3);
     com_.xpos = link_[model_dof_].xpos;
-    
+
     return com_.GetAdjointMatrix().transpose() * H_C;
 }
 
@@ -1106,8 +1080,537 @@ void RobotData::CopyKinematicsData(RobotData &target_rd)
     }
     std::copy(cc_.begin(), cc_.end(), target_rd.cc_.begin());
 
+    if (target_rd.ts_.size() != ts_.size())
+    {
+        target_rd.ts_.resize(ts_.size());
+        target_rd.qp_task_.resize(qp_task_.size());
+    }
+
+    std::copy(ts_.begin(), ts_.end(), target_rd.ts_.begin());
+    std::copy(qp_task_.begin(), qp_task_.end(), target_rd.qp_task_.begin());
+
     target_rd.G_ = G_;
+
     target_rd.CMM_ = CMM_;
 
     target_rd.B_ = B_;
+}
+
+void RobotData::DeleteLink(std::string link_name, bool verbose)
+{
+    // Edit rd link
+
+    // find link index with strcasecmp
+    int link_idx = -1;
+    for (int i = 0; i < link_.size(); i++)
+    {
+        if (strcasecmp(link_[i].name_.c_str(), link_name.c_str()) == 0)
+        {
+            link_idx = i;
+            break;
+        }
+    }
+
+    if (link_idx == -1)
+    {
+        std::cout << "link name is not exist" << std::endl;
+        return;
+    }
+
+    // find child link of link_idx and delete
+
+    DeleteLink(link_idx, verbose);
+}
+
+void RobotData::DeleteLink(int link_idx, bool verbose)
+{
+    // if child link exist delete child link
+    if (verbose)
+        std::cout << "delete link : " << link_idx << link_[link_idx].name_ << std::endl;
+
+    if (link_[link_idx].child_id_.size() > 0)
+    {
+        std::cout << "link : " << link_idx << "has child link : "  << link_[link_idx].child_id_.size() << " delete children link first. "<<std::endl;
+    }
+
+    // for (int i = 0; i < link_[link_idx].child_id_.size(); i++)
+    // {
+
+    //     DeleteLink(link_[link_idx].child_id_[i], verbose);
+    // }
+
+    // int rbdl_id = link_[link_idx].body_id_;
+
+    int rbdl_id = model_.GetBodyId(link_[link_idx].name_.c_str());
+
+    model_.hdotc.erase(model_.hdotc.begin() + rbdl_id);
+    model_.hc.erase(model_.hc.begin() + rbdl_id);
+    model_.Ic.erase(model_.Ic.begin() + rbdl_id);
+    model_.I.erase(model_.I.begin() + rbdl_id);
+
+    model_.f.erase(model_.f.begin() + rbdl_id);
+
+    model_.U.erase(model_.U.begin() + rbdl_id);
+    model_.pA.erase(model_.pA.begin() + rbdl_id);
+    model_.IA.erase(model_.IA.begin() + rbdl_id);
+    model_.c.erase(model_.c.begin() + rbdl_id);
+
+    model_.X_T.erase(model_.X_T.begin() + rbdl_id);
+
+    model_.multdof3_S.erase(model_.multdof3_S.begin() + rbdl_id);
+    model_.multdof3_U.erase(model_.multdof3_U.begin() + rbdl_id);
+    model_.multdof3_Dinv.erase(model_.multdof3_Dinv.begin() + rbdl_id);
+    model_.multdof3_u.erase(model_.multdof3_u.begin() + rbdl_id);
+
+    model_.S.erase(model_.S.begin() + rbdl_id); // joint motion subspace
+
+    model_.X_J.erase(model_.X_J.begin() + rbdl_id); //
+    model_.v_J.erase(model_.v_J.begin() + rbdl_id); //
+    model_.c_J.erase(model_.c_J.begin() + rbdl_id); //
+
+    model_.v.erase(model_.v.begin() + rbdl_id); // spatial velocity
+    model_.a.erase(model_.a.begin() + rbdl_id); // spatial acceleration
+
+    // std::cout << "model.mjoint dof : " << model_.mJoints[rbdl_id].mDoFCount << std::endl;
+    // std::cout << "before model_.dof_count : " << model_.dof_count << std::endl;
+    int joint_dof_count = model_.mJoints[rbdl_id].mDoFCount;
+    model_.dof_count = model_.dof_count - joint_dof_count;
+
+    // std::cout << "model.mjoint dof : " << model_.mJoints[rbdl_id].mDoFCount << std::endl;
+    // std::cout << "after model_.dof_count : " << model_.dof_count << std::endl;
+
+    int multdof3_joint_counter = 0;
+    int mCustomJoint_joint_counter = 0;
+    for (unsigned int i = 1; i < model_.mJoints.size(); i++)
+    {
+        if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeSpherical)
+        {
+            model_.multdof3_w_index[i] = model_.dof_count + multdof3_joint_counter;
+            multdof3_joint_counter++;
+        }
+    }
+
+    model_.q_size = model_.dof_count + multdof3_joint_counter;
+
+    model_.qdot_size = model_.qdot_size - joint_dof_count;
+
+    int parent_id = model_.lambda[rbdl_id];
+
+    for (int i = 0; i < model_.mu[parent_id].size(); i++)
+    {
+        if (model_.mu[parent_id][i] == rbdl_id)
+        {
+            model_.mu[parent_id].erase(model_.mu[parent_id].begin() + i);
+            break;
+        }
+    }
+
+    model_.X_lambda.erase(model_.X_lambda.begin() + rbdl_id); // parent to child transform
+    model_.X_base.erase(model_.X_base.begin() + rbdl_id);     // base to child transform
+    model_.mBodies.erase(model_.mBodies.begin() + rbdl_id);   // body information
+
+    for (int i = 0; i < model_.lambda.size(); i++)
+    {
+        if (model_.lambda[i] > rbdl_id)
+        {
+            model_.lambda[i]--;
+        }
+    }
+
+    for (int i = 0; i < model_.mu.size(); i++)
+    {
+        for (int j = 0; j < model_.mu[i].size(); j++)
+        {
+            if (model_.mu[i][j] > rbdl_id)
+            {
+                model_.mu[i][j]--;
+            }
+        }
+    }
+
+    model_.mu.erase(model_.mu.begin() + rbdl_id); // children id of given body. in this case, mu is empty.
+
+    model_.lambda.erase(model_.lambda.begin() + rbdl_id); // parent id
+
+    // model_.lambda_q.erase(model_.lambda_q.begin() + rbdl_id); // parent id
+
+    int joint_idx = model_.mJoints[rbdl_id].q_index;
+
+    for (int i = 0; i < joint_dof_count; i++)
+    {
+        model_.lambda_q.erase(model_.lambda_q.begin() + joint_idx + i);
+    }
+
+    for (int i = 0; i < model_.lambda_q.size(); i++)
+    {
+        if (model_.lambda_q[i] > joint_idx)
+        {
+            model_.lambda_q[i] = model_.lambda_q[i] - joint_dof_count;
+        }
+    }
+
+    for (int i = 0; i < model_.mJoints.size(); i++)
+    {
+        if (model_.mJoints[i].q_index > joint_idx)
+        {
+            model_.mJoints[i].q_index = model_.mJoints[i].q_index - joint_dof_count;
+        }
+    }
+
+    model_.multdof3_w_index.erase(model_.multdof3_w_index.begin() + rbdl_id);
+    model_.mJoints.erase(model_.mJoints.begin() + rbdl_id); // joint information
+
+    model_.mJointUpdateOrder.clear();
+
+    // update the joint order computation
+    std::vector<std::pair<RigidBodyDynamics::JointType, unsigned int>> joint_types;
+    for (unsigned int i = 0; i < model_.mJoints.size(); i++)
+    {
+        joint_types.push_back(
+            std::pair<RigidBodyDynamics::JointType, unsigned int>(model_.mJoints[i].mJointType, i));
+        model_.mJointUpdateOrder.push_back(model_.mJoints[i].mJointType);
+    }
+
+    model_.mJointUpdateOrder.clear();
+    RigidBodyDynamics::JointType current_joint_type = RigidBodyDynamics::JointTypeUndefined;
+    while (joint_types.size() != 0)
+    {
+        current_joint_type = joint_types[0].first;
+
+        std::vector<std::pair<RigidBodyDynamics::JointType, unsigned int>>::iterator type_iter =
+            joint_types.begin();
+
+        while (type_iter != joint_types.end())
+        {
+            if (type_iter->first == current_joint_type)
+            {
+                model_.mJointUpdateOrder.push_back(type_iter->second);
+                type_iter = joint_types.erase(type_iter);
+            }
+            else
+            {
+                ++type_iter;
+            }
+        }
+    }
+
+    // Edit fixed body
+
+    for (int i = 0; i < model_.mFixedBodies.size(); i++)
+    {
+        if (model_.mFixedBodies[i].mMovableParent > rbdl_id)
+        {
+            model_.mFixedBodies[i].mMovableParent--;
+        }
+    }
+
+    // std::cout << "model_.fixed_body_discriminator : " << model_.fixed_body_discriminator << std::endl;
+    // std::cout << "model_.mFixedBodies.size() : " << model_.mFixedBodies.size() << std::endl;
+
+    // std::cout << "model_.mFixedBodies[0].mMovableParent : " << model_.mFixedBodies[0].mMovableParent << std::endl;
+    // std::cout << "model_.mFixedBodies[0].mParentTransform : " << model_.mFixedBodies[0].mParentTransform << std::endl;
+
+    // std::cout << " Delete done." << std::endl;
+    // // find parent link and delete child link info
+    // int parent_id = link_[link_idx].parent_id_;
+
+    // for (int i = 0; i < link_[parent_id].child_id_.size(); i++)
+    // {
+    //     // if child id is same with link_idx delete child id
+    //     if (link_[parent_id].child_id_[i] == link_idx)
+    //     {
+    //         link_[parent_id].child_id_.erase(link_[parent_id].child_id_.begin() + i);
+    //         break;
+    //     }
+    // }
+    // // delete link
+    // link_.erase(link_.begin() + link_idx);
+
+    // print the data in mbodynamemap
+
+    // for (auto it = model_.mBodyNameMap.begin(); it != model_.mBodyNameMap.end(); it++)
+    // {
+    //     std::cout << "key : " << it->first << " value : " << it->second << std::endl;
+    // }
+
+    model_.mBodyNameMap.erase(link_[link_idx].name_);
+
+    // edit the value in mbodynamemap, if value is bigger than rbdl_id, value - 1
+    for (auto it = model_.mBodyNameMap.begin(); it != model_.mBodyNameMap.end(); it++)
+    {
+        if (it->second > rbdl_id)
+        {
+            it->second--;
+        }
+    }
+    // std::cout << "check change" << std::endl;
+    // for (auto it = model_.mBodyNameMap.begin(); it != model_.mBodyNameMap.end(); it++)
+    // {
+    //     std::cout << "key : " << it->first << " value : " << it->second << std::endl;
+    // }
+
+    // Re update model data
+    InitAfterModelMod(0, link_idx);
+
+    if (verbose)
+    {
+        std::cout << "Delete Link done." << std::endl;
+    }
+}
+/*
+    joint_frame : translation, rotation (1x3, 3x3)
+    Joint Axes
+    Jointtype : // RigidBodyDynamics::{JointTypeRevoluteX .... }
+    jointDofcount : //
+        // How to create Joint ? RigidBodyDynamics::Joint()
+        //
+    q_index
+    custom_joint_index(-1)
+
+*/
+void RobotData::AddLink(const char *parent_name, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
+{
+    int link_id = getLinkID(parent_name);
+    int parent_body_id = model_.GetBodyId(link_[link_id].name_.c_str());
+
+    AddLink(parent_body_id, link_name, joint_rotm, joint_trans, body_mass, com_position, inertia, verbose);
+}
+
+void RobotData::AddLink(int parent_body_id, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
+{
+    RigidBodyDynamics::Math::Vector3d com_pos_rbdl = com_position;
+    RigidBodyDynamics::Math::Matrix3d inertia_rbdl = inertia;
+    RigidBodyDynamics::Body Body(body_mass, com_pos_rbdl, inertia_rbdl);
+    RigidBodyDynamics::Joint joint(RigidBodyDynamics::JointTypeFixed);
+    RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm;
+    RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
+
+    model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
+    // if (init)
+    //     InitAfterModelMod(false, );
+    int parent_id = getLinkID(model_.GetBodyName(parent_body_id));
+
+    // std::cout << parent_id << "pid" << std::endl;
+
+    InitAfterModelMod(1, parent_id, verbose);
+}
+
+void RobotData::AddLink(Link &link, bool verbose)
+{
+    int parent_body_id = model_.GetBodyId(link_[link.parent_id_].name_.c_str());
+    AddLink(parent_body_id, link.name_.c_str(), link.parent_rotm, link.parent_trans, link.mass, link.com_position_l_, link.inertia, verbose);
+}
+
+void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
+{
+    int change_link_id = link_id;
+    int corresponding_body_id = link_[change_link_id].body_id_;
+
+    system_dof_ = model_.dof_count;
+    model_dof_ = system_dof_ - 6;
+
+    // delete link for link vector
+
+    if (mode == 0)
+    {
+        int deleted_id = change_link_id;
+        int deleted_body_id = corresponding_body_id;
+
+        Link link_deleted = link_[deleted_id];
+        link_.erase(link_.begin() + deleted_id);
+
+        int parent_id = link_deleted.parent_id_;
+
+        total_mass_ = total_mass_ - link_deleted.mass;
+        link_.back().mass = total_mass_;
+
+        for (int i = 0; i < link_.size() - 1; i++)
+        {
+            if (link_[i].body_id_ > deleted_body_id)
+            {
+                link_[i].body_id_--;
+            }
+
+            if (link_[i].link_id_ > deleted_id)
+            {
+                link_[i].link_id_--;
+            }
+
+            if (link_[i].parent_id_ > deleted_id)
+            {
+                link_[i].parent_id_--;
+            }
+        }
+
+        // deleted link had parent link. that link has a children information of deleted link. delete that children information
+
+        for (int i = 0; i < link_[parent_id].child_id_.size(); i++)
+        {
+            if (link_[parent_id].child_id_[i] == deleted_id)
+            {
+                link_[parent_id].child_id_.erase(link_[parent_id].child_id_.begin() + i);
+                break;
+            }
+        }
+
+        // since the link id has changed, the child link id of the parent link must be changed.
+        for (int i = 0; i < link_.size(); i++)
+        {
+            for (int j = 0; j < link_[i].child_id_.size(); j++)
+            {
+                if (link_[i].child_id_[j] > deleted_id)
+                {
+                    link_[i].child_id_[j]--;
+                }
+            }
+        }
+
+        int deleted_task_id = -1;
+
+        for (int i = 0; i < ts_.size(); i++)
+        {
+            if (ts_[i].link_id_ == deleted_id)
+            {
+                deleted_task_id = i;
+                ts_.erase(ts_.begin() + i);
+            }
+        }
+
+        if (deleted_task_id >= 0)
+        {
+            if (verbose)
+            {
+                std::cout << "Task " << deleted_task_id << " is deleted" << std::endl;
+            }
+
+            for (int i = 0; i < ts_.size(); i++)
+            {
+                if (ts_[i].heirarchy_ > deleted_task_id)
+                {
+                    ts_[i].heirarchy_--;
+                }
+
+                if (ts_[i].link_id_ > deleted_id)
+                {
+                    ts_[i].link_id_--;
+                }
+            }
+
+            qp_task_.erase(qp_task_.begin() + deleted_task_id);
+        }
+
+        // for (int i = 0; i < cc_.size(); i++)
+        // {
+        //     if (cc_[i].link_number_ == deleted_id)
+        //     {
+        //         cc_.erase(cc_.begin() + i);
+        //         i--;
+        //     }
+        //     else if (cc_[i].link_number_ > deleted_id)
+        //     {
+        //         cc_[i].link_number_--;
+        //     }
+
+        //     if (cc_[i].rbdl_body_id_ > deleted_body_id)
+        //     {
+        //         cc_[i].rbdl_body_id_--;
+        //     }
+        // }
+    }
+    else if (mode == 1)
+    {
+        // Link added with fixed joint.
+        int parent_id = change_link_id;
+        int added_parent_body_id = corresponding_body_id;
+
+        // Change the inertial information of parent link
+        link_[parent_id].com_position_l_ = model_.mBodies[added_parent_body_id].mCenterOfMass;
+        link_[parent_id].mass = model_.mBodies[added_parent_body_id].mMass;
+        link_[parent_id].inertia = model_.mBodies[added_parent_body_id].mInertia;
+    }
+
+    q_system_.setZero(model_.q_size);
+    q_dot_system_.setZero(model_.qdot_size);
+    q_ddot_system_.setZero(model_.qdot_size);
+
+    J_com_.setZero(6, system_dof_);
+
+    A_.setZero(system_dof_, system_dof_);
+    A_inv_.setZero(system_dof_, system_dof_);
+
+    G_.setZero(system_dof_);
+    torque_grav_.setZero(model_dof_);
+    torque_task_.setZero(model_dof_);
+    torque_contact_.setZero(model_dof_);
+
+    torque_limit_.setZero(model_dof_);
+
+    // for (int i = 0; i < qp_task_.size(); i++)
+    // {
+    //     qp_task_[i] = CQuadraticProgram();
+    // }
+
+    // qp_contact_ = CQuadraticProgram();
+}
+
+void RobotData::ChangeLinkToFixedJoint(std::string link_name, bool verbose)
+{
+    // find corresponding link
+    int link_idx = getLinkID(link_name);
+
+    // save link and delete link
+    Link link = link_[link_idx];
+    if (verbose)
+    {
+        std::cout << "Delete link id : " << link_idx << std::endl;
+        link.Print();
+    }
+
+    DeleteLink(link_name, verbose);
+
+    // Add link
+    AddLink(link, verbose);
+    if (verbose)
+        std::cout << "Deleted Link : " << link_name << " and Added Link : " << link_name << " as fixed joint." << std::endl;
+}
+
+int RobotData::getLinkID(std::string link_name)
+{
+    // get link id from link name, use strcasecmp
+    for (int i = 0; i < link_.size(); i++)
+    {
+        if (strcasecmp(link_[i].name_.c_str(), link_name.c_str()) == 0)
+        {
+            return i;
+        }
+    }
+
+    std::cout << "There is no link name : " << link_name << std::endl;
+    return -1;
+}
+
+void RobotData::printLinkInfo()
+{
+    for (int i = 0; i < link_.size(); i++)
+    {
+        // print link id, link name, parent link id, child link list,
+        // print link position, orientation, mass, inertia
+        // print link jacobian
+        std::cout << "------" << std::endl;
+        std::cout << "link id : " << i << " rbdl id : " << link_[i].body_id_ << " link name : " << link_[i].name_ << " parent id : " << link_[i].parent_id_ << " child id : ";
+        for (int j = 0; j < link_[i].child_id_.size(); j++)
+        {
+            std::cout << link_[i].child_id_[j] << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "link position : " << link_[i].xpos.transpose() << "link mass : " << link_[i].mass << std::endl
+                  << "link orientation : " << std::endl
+                  << link_[i].rotm << std::endl;
+        // std::cout << " link inertia : " << link_[i].inertia << std::endl;
+        // std::cout << "link jacobian : " << link_[i].jac_ << std::endl;
+        std::cout << "joint frame E : " << model_.X_T[link_[i].body_id_].E << std::endl;
+        std::cout << "joint frame r : " << model_.X_T[link_[i].body_id_].r.transpose() << std::endl;
+
+        std::cout << std::endl;
+    }
 }

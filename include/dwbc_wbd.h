@@ -21,7 +21,7 @@ namespace DWBC
 
     void PinvCODWB(const MatrixXd &A, MatrixXd &ret);
 
-    void PinvCODWB(const MatrixXd &A, MatrixXd &ret, MatrixXd &V2);
+    void PinvCODWB(const MatrixXd &A, MatrixXd &ret, MatrixXd &V2, int force_rank = -1);
 
     /*
      * Contact Constraint Computation
@@ -40,7 +40,7 @@ namespace DWBC
      * input  : j_c, A_inv
      * output : lambda_c, J_c_inv_T, N_c, W, W_inv, V2, NwJw
      */
-    void CalculateContactConstraint(
+    int CalculateContactConstraint(
         const MatrixXd &J_contact, const MatrixXd &A_inv,
         MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2);
 

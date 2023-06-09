@@ -6,29 +6,25 @@ namespace DWBC
         task_mode_ = TASK_NULL;
     }
 
-    TaskSpace::TaskSpace(int task_mode, int heirarchy, int task_dof, int model_dof)
+    TaskSpace::TaskSpace(int task_mode, int heirarchy, int task_dof)
     {
         task_dof_ = task_dof;
 
         task_mode_ = task_mode;
 
         heirarchy_ = heirarchy;
-
-        model_size_ = model_dof;
     }
 
     // Typical pos/rot task initialzer
-    TaskSpace::TaskSpace(int task_mode, int heirarchy, int link_number, int body_id, const Vector3d &task_point, int model_dof)
+    TaskSpace::TaskSpace(int task_mode, int heirarchy, int link_number, int body_id, const Vector3d &task_point)
     {
         task_mode_ = task_mode;
 
         heirarchy_ = heirarchy;
 
-        link_number_ = link_number; // vector number
+        link_id_ = link_number; // vector number
 
-        body_id_ = body_id; // rbdl body id
-
-        model_size_ = model_dof;
+        // body_id_ = body_id; // rbdl body id
 
         if (task_mode == TASK_LINK_6D)
         {
@@ -75,7 +71,8 @@ namespace DWBC
 
     void TaskSpace::CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C)
     {
-        CalculateTaskNullSpace(J_kt_, Lambda_task_, J_task_, A_inv, N_C, MatrixXd::Identity(model_size_, model_size_), Null_task_);
+        int model_size = J_task_.cols() - 6;
+        CalculateTaskNullSpace(J_kt_, Lambda_task_, J_task_, A_inv, N_C, MatrixXd::Identity(model_size, model_size), Null_task_);
     }
 
     void TaskSpace::SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired)

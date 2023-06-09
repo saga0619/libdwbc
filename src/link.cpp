@@ -5,6 +5,7 @@ namespace DWBC
 
     Link::Link(/* args */)
     {
+        body_id_ = -1;
     }
 
     Link::Link(RigidBodyDynamics::Model &model_, const unsigned int body_id)
@@ -13,9 +14,10 @@ namespace DWBC
         inertia = model_.mBodies[body_id_].mInertia;
         mass = model_.mBodies[body_id_].mMass;
         com_position_l_ = model_.mBodies[body_id_].mCenterOfMass;
-        jac_.setZero(6, model_.qdot_size);
-        jac_com_.setZero(6, model_.qdot_size);
         name_ = model_.GetBodyName(body_id_);
+
+        joint_rotm = model_.X_T[body_id_].E;
+        joint_trans = model_.X_T[body_id_].r;
     }
 
     Link::~Link()
@@ -37,15 +39,21 @@ namespace DWBC
 
         v = vw.segment(3, 3);
         w = vw.segment(0, 3);
+        parent_rotm = model_.X_lambda[body_id_].E;
+        parent_trans = model_.X_lambda[body_id_].r;
+
+        // std::cout << name_ << std::endl;
+        // std::cout << parent_rotm << std::endl;
+        // std::cout << parent_trans << std::endl;
     }
 
     void Link::UpdateJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_)
     {
-        jac_.setZero();
+        jac_.setZero(6, model_.qdot_size);
         RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, body_id_, Eigen::Vector3d::Zero(), jac_, false);
         jac_.topRows(3).swap(jac_.bottomRows(3));
 
-        jac_com_.setZero();
+        jac_com_.setZero(6, model_.qdot_size);
         RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, body_id_, com_position_l_, jac_com_, false);
         jac_com_.topRows(3).swap(jac_com_.bottomRows(3));
     }
@@ -151,6 +159,23 @@ namespace DWBC
         i_temp.block(3, 3, 3, 3) = mass * Matrix3d::Identity();
 
         return i_temp;
+    }
+    using namespace std;
+
+    void Link::Print()
+    {
+        cout << "link name : " << name_ << endl;
+        cout << "rbdl id : " << body_id_ << endl;
+        cout << "link mass : " << mass << endl;
+        cout << "link com : " << com_position_l_.transpose() << endl;
+        cout << "link inertia : " << inertia << endl;
+        // cout << "link xpos : " << xpos << endl;
+        // cout << "link rotm : " << rotm << endl;
+        cout << "joint trans : " << joint_trans.transpose() << endl;
+        cout << "join rotm : " << joint_rotm << endl;
+
+        cout << "parent trans : " << parent_trans.transpose() << endl;
+        cout << "parent torm : " << parent_rotm << endl;
     }
 
 }

@@ -30,6 +30,11 @@ namespace DWBC
         Vector3d w;
         Matrix3d rotm;
 
+        Vector3d joint_trans;
+        Matrix3d joint_rotm;
+
+        Vector3d parent_trans;
+        Matrix3d parent_rotm;
 
         RigidBodyDynamics::Math::SpatialVector vw;
 
@@ -84,6 +89,9 @@ namespace DWBC
         MatrixXd GetAdjointMatrix();
 
         MatrixXd GetSpatialInertiaMatrix();
+
+        // Print Link Data
+        void Print();
     };
 }
 

@@ -2,7 +2,7 @@ PROJECT (dwbc)
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
 
-add_compile_options(-std=c++17 -O -fPIC)
+add_compile_options(-std=c++17 -g)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake)
 
@@ -10,7 +10,6 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake)
 set(CMAKE_INTERFACE_CURRENT_DIR_IN_INTERFACE ON)
 
 OPTION (USE_QPSWIFT "Run with QPSWIFT" OFF)
-OPTION (CHECK_DATA OFF)
 OPTION (RUN_TEST "Run calculation test of libdwbc" OFF)
 
 include(GNUInstallDirs)
@@ -31,9 +30,6 @@ find_package(Eigen3 3.0.0 REQUIRED)
 ADD_DEFINITIONS(-DURDF_DIR=\"${PROJECT_SOURCE_DIR}/tests\")
 ADD_DEFINITIONS(-DRESOURCE_DIR=\"${PROJECT_SOURCE_DIR}/tests/cases\")
 
-IF(CHECK_DATA)
-    ADD_DEFINITIONS(-DCHECKDATA)
-ENDIF()
 IF(USE_QPSWIFT)
     find_package(qpSWIFT REQUIRED)
     ADD_DEFINITIONS(-DCOMPILE_QPSWIFT)
@@ -102,3 +98,4 @@ IF(RUN_TEST)
     add_subdirectory(tests)
 ENDIF()
 
+add_subdirectory(tests/sp_test)

@@ -21,6 +21,11 @@ namespace DWBC
             contact_dof_ = 6;
             constraint_number_ = CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE; // + CONTACT_CONSTRAINT_PRESS;
         }
+        else if (contact_type == CONTACT_LINE)
+        {
+            contact_dof_ = 5;
+            constraint_number_ = CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE; // + CONTACT_CONSTRAINT_PRESS;
+        }
         else if (contact_type == CONTACT_POINT)
         {
             contact_dof_ = 3;
@@ -46,7 +51,7 @@ namespace DWBC
         xc_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, rbdl_body_id_, contact_point_, false);
         rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, rbdl_body_id_, false)).transpose();
 
-        j_contact.setZero();
+        j_contact.setZero(6, model_.qdot_size);
         RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_body_id_, contact_point_, j_contact, false);
 
         j_contact.topRows(3).swap(j_contact.bottomRows(3));

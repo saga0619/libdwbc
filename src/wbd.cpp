@@ -29,14 +29,23 @@ namespace DWBC
         ret = cod.pseudoInverse();
     }
 
-    void PinvCODWB(const MatrixXd &A, MatrixXd &ret, MatrixXd &V2)
+    void PinvCODWB(const MatrixXd &A, MatrixXd &ret, MatrixXd &V2, int force_rank)
     {
         int rows = A.rows();
         int cols = A.cols();
         Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(rows, cols);
         cod.setThreshold(COD_THRESHOLD);
         cod.compute(A);
-        int rank = cod.rank();
+        int rank;
+        if (force_rank > 0)
+        {
+            rank = force_rank;
+        }
+        else
+        {
+            rank = cod.rank();
+        }
+
         MatrixXd Vtemp = cod.householderQ().transpose();
         V2 = (Vtemp).block(rank, 0, rows - rank, cols);
 
@@ -96,12 +105,11 @@ namespace DWBC
      * input  : j_c, A_inv
      * output : lambda_c, J_c_inv_T, N_c, W, W_inv, V2, NwJw
      */
-    void CalculateContactConstraint(
+    int CalculateContactConstraint(
         const MatrixXd &J_contact, const MatrixXd &A_inv,
         MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2)
     {
-        int rows = J_contact.rows();
-
+        int rows = J_contact.rows(); // rows == contact_dof
         int cols = J_contact.cols();
 
         lambda_contact = (J_contact * A_inv * J_contact.transpose()).inverse();
@@ -111,12 +119,24 @@ namespace DWBC
 
         if (rows > 6)
         {
-            PinvCODWB(W, Winv, V2);
-            NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+            PinvCODWB(W, Winv, V2, cols - (rows));
+
+            if (rows - 6 == V2.rows())
+            {
+                NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+                return 1;
+            }
+            else
+            {
+                NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+                std::cout << "Contact Space Factorization Error : Required contact null dimension : " << J_contact.rows() - 6 << " factorization rank : " << V2.rows() << std::endl;
+                return 0;
+            }
         }
         else
         {
             PinvCODWB(W, Winv);
+            return 1;
         }
     }
 

@@ -21,6 +21,7 @@ namespace DWBC
         CONTACT_6D,
         CONTACT_POINT,
         CONTACT_LINK,
+        CONTACT_LINE,
     };
 
     class ContactConstraint
