@@ -45,20 +45,13 @@ public:
 
 namespace DWBC
 {
-    enum
-    {
-        JOINT_FLOATING,
-        JOINT_REVOLUTE,
-        JOINT_PRISMATIC,
-        JOINT_FIXED
-    };
 
     enum
     {
         ADD_LINK,
         ADD_LINK_WITH_FIXED_JOINT,
         ADD_LINK_WITH_REVOLUTE_JOINT,
-        ADD_LINK_WITH_FLOATING_JOINT,
+        ADD_LINK_WITH_6DOF_JOINT,
         DELETE_LINK,
     };
 
@@ -127,6 +120,7 @@ namespace DWBC
         VectorXd torque_limit_;
 
         std::vector<Link> link_;
+        std::vector<Joint> joint_;
         std::vector<ContactConstraint> cc_;
         std::vector<TaskSpace> ts_;
 #ifdef COMPILE_QPSWIFT
@@ -258,40 +252,38 @@ namespace DWBC
         void DeleteLink(std::string link_name, bool verbose = false);
         void DeleteLink(int link_number, bool verbose = false);
 
-        void AddLink(const char *parent_name, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
-        void AddLink(int parent_id, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
-        void AddLink(int parent_id, const char *link_name, int joint_type, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
         void AddLink(int parent_id, const char *link_name, int joint_type, const Vector3d &joint_axis, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
 
         /*
-        joint_type : 0 : fixed joint, 1 : revolute joint, 2:prismatic, 3: floating joint
-
+        joint_type :
+            JOINT_FLOATING,
+            JOINT_REVOLUTE,
+            JOINT_PRISMATIC,
+            JOINT_FIXED
         */
-        void AddLink(Link &link, int joint_type, const Vector3d &joint_axis, bool verbose = false);
+        void AddLink(const Joint &joint, const Link &link, bool verbose = false);
+        // void AddLink(Link &link, int joint_type, const Vector3d &joint_axis, bool verbose = false);
 
         /*
-        just for fixed joint
-        */
-        void AddLink(Link &link, bool verbose = false);
-
-        // void AddLinkWithJoint()
-
-        /*
-            mode 0 : init after deleted model
-            mode 1 : init after added model with fixed joint
-            mode 2 : init after added model with rev joint
+        MODE :
+            ADD_LINK,
+            ADD_LINK_WITH_FIXED_JOINT,
+            ADD_LINK_WITH_REVOLUTE_JOINT,
+            ADD_LINK_WITH_FLOATING_JOINT,
+            DELETE_LINK,
         */
         void InitAfterModelMod(int mode, int link_id, bool verbose = false);
 
         void ChangeLinkToFixedJoint(std::string link_name, bool verbose = false);
 
-        /*
-
-        */
         void printLinkInfo();
         int getLinkID(std::string link_name);
 
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
+        void CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints);
+        void UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints);
+        void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
+        void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, double com_mass, bool verbose = false);
     };
 
     template <typename... Types>

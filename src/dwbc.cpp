@@ -139,6 +139,9 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
         link_[i].UpdateAll(model_, q_virtual, q_dot_virtual);
         J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
         com_pos += link_[i].xipos * link_[i].mass / total_mass_;
+
+        joint_[i].parent_rotation_ = model_.X_lambda[link_[i].body_id_].E.transpose();
+        joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
     }
 
     link_.back().xpos = com_pos;
@@ -519,6 +522,9 @@ void RobotData::InitModelData(int verbose)
         std::cout << "System DOF : " << system_dof_ << std::endl;
         std::cout << "Model DOF : " << model_dof_ << std::endl;
         std::cout << "Model.dof : " << model_.dof_count << std::endl;
+
+        std::cout << "Model.mBodies.size() : " << model_.mBodies.size() << std::endl;
+        std::cout << "Model.mJoints.size() : " << model_.mJoints.size() << std::endl;
     }
 
     total_mass_ = 0;
@@ -527,6 +533,32 @@ void RobotData::InitModelData(int verbose)
         if (model_.mBodies[i].mMass != 0) // if body has mass,
         {
             link_.push_back(Link(model_, i));
+            if (model_.mJoints[i].mJointType >= RigidBodyDynamics::JointTypeRevoluteX && model_.mJoints[i].mJointType <= RigidBodyDynamics::JointTypeRevoluteZ)
+            {
+                joint_.push_back(Joint(JOINT_REVOLUTE, model_.mJoints[i].mJointAxes[0].segment(0, 3)));
+                joint_.back().joint_rotation_ = link_.back().joint_rotm;
+                joint_.back().joint_translation_ = link_.back().joint_trans;
+            }
+            else if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeRevolute || model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeHelical)
+            {
+
+                joint_.push_back(Joint(JOINT_REVOLUTE, model_.mJoints[i].mJointAxes[0].segment(0, 3)));
+                joint_.back().joint_rotation_ = link_.back().joint_rotm;
+                joint_.back().joint_translation_ = link_.back().joint_trans;
+            }
+            else if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeFloatingBase || model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeSpherical)
+            {
+                joint_.push_back(Joint(JOINT_FLOATING_BASE));
+            }
+            else
+            {
+
+                std::cout << "JOINT TYPE at initializing Link & Joint vector : " << model_.mJoints[i].mJointType << " with dof : " << model_.mJoints[i].mDoFCount << " at link : " << link_.back().name_ << std::endl;
+                std::cout << model_.mJoints[i].mJointAxes[0] << std::endl;
+                joint_.push_back(Joint());
+            }
+            // joint_.push_back(Joint())
+
             total_mass_ += model_.mBodies[i].mMass;
         }
     }
@@ -1021,13 +1053,15 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
 {
     Eigen::MatrixXd H_C = MatrixXd::Zero(6, system_dof_);
 
+    Eigen::MatrixXd H_I = MatrixXd::Zero(6, 6);
+
     for (int i = 0; model_dof_; i++)
     {
         Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
         rotm.block(0, 0, 3, 3) = link_[i].rotm;
         rotm.block(3, 3, 3, 3) = link_[i].rotm;
 
-        link_[i].GetSpatialInertiaMatrix();
+        // link_[i].GetSpatialInertiaMatrix(); >> Spatial inertia matrix : Inertia tensor from the origin of the link.
 
         Eigen::MatrixXd j_temp = MatrixXd::Zero(6, model_dof_);
         j_temp.topRows(3) = link_[i].jac_.bottomRows(3);
@@ -1039,6 +1073,8 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
     DWBC::Link com_;
     com_.rotm = Eigen::MatrixXd::Identity(3, 3);
     com_.xpos = link_[model_dof_].xpos;
+
+    //
 
     return com_.GetAdjointMatrix().transpose() * H_C;
 }
@@ -1130,7 +1166,19 @@ void RobotData::DeleteLink(int link_idx, bool verbose)
 
     if (link_[link_idx].child_id_.size() > 0)
     {
-        std::cout << "link : " << link_idx << "has child link : " << link_[link_idx].child_id_.size() << " delete children link first. " << std::endl;
+        int init_child_size = link_[link_idx].child_id_.size();
+        int deleted_idx = 1;
+
+        for (int i = 0; i < link_[link_idx].child_id_.size(); i++)
+        {
+            if (verbose)
+            {
+                std::cout << "delete child link : " << deleted_idx << "/" << init_child_size << " child id : " << link_[link_idx].child_id_[i] << " " << link_[link_[link_idx].child_id_[i]].name_ << std::endl;
+            }
+            DeleteLink(link_[link_idx].child_id_[i], verbose);
+            i--;
+            deleted_idx++;
+        }
     }
 
     // for (int i = 0; i < link_[link_idx].child_id_.size(); i++)
@@ -1368,16 +1416,69 @@ void RobotData::DeleteLink(int link_idx, bool verbose)
     custom_joint_index(-1)
 
 */
-void RobotData::AddLink(int parent_id, const char *link_name, int joint_type, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
+
+void RobotData::AddLink(const Joint &joint, const Link &link, bool verbose)
 {
+    if (verbose)
+    {
+        std::cout << "ADDLINK : " << link.name_ << " with mass : " << link.mass << std::endl;
+        std::cout << "Attaching Link to " << link_[link.parent_id_].name_ << std::endl;
+        std::cout << "Inertia : " << std::endl;
+        std::cout << link.inertia.transpose() << std::endl;
+
+        std::cout << "Joint type : ";
+        if (joint.joint_type_ == JOINT_FIXED)
+        {
+            std::cout << " FIXED JOINT " << std::endl;
+        }
+        else if (joint.joint_type_ == JOINT_REVOLUTE)
+        {
+            std::cout << " REVOLUTE JOINT " << std::endl;
+            std::cout << " With Axis : " << joint.joint_axis_.transpose() << std::endl;
+        }
+        else if (joint.joint_type_ == JOINT_FLOATING_BASE)
+        {
+            std::cout << " FLOATING JOINT " << std::endl;
+            std::cout << " With Axis : " << joint.joint_axis_.transpose() << std::endl;
+        }
+        else if (joint.joint_type_ == JOINT_6DOF)
+        {
+            std::cout << " 6DOF JOINT " << std::endl;
+        }
+        std::cout << " Joint Axis position : " << joint.joint_translation_.transpose() << std::endl;
+        std::cout << " Joint Axis rotation : " << std::endl
+                  << joint.joint_rotation_ << std::endl;
+        std::cout << " Joint Axis parent position : " << joint.parent_translation_.transpose() << std::endl;
+        std::cout << " Joint Axis parent rotation : " << std::endl
+                  << joint.parent_rotation_ << std::endl;
+    }
+
+    if (joint.joint_type_ == JOINT_FIXED)
+    {
+        AddLink(link.parent_id_, link.name_.c_str(), JOINT_FIXED, joint.joint_axis_, joint.parent_rotation_, joint.parent_translation_, link.mass, link.com_position_l_, link.inertia, verbose);
+    }
+    else
+    {
+        AddLink(link.parent_id_, link.name_.c_str(), joint.joint_type_, joint.joint_axis_, joint.joint_rotation_, joint.joint_translation_, link.mass, link.com_position_l_, link.inertia, verbose);
+    }
 }
 
-void RobotData::AddLink(int parent_body_id, const char *link_name, int joint_type, const Vector3d &joint_axis, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
+void RobotData::AddLink(int parent_link_id, const char *link_name, int joint_type, const Vector3d &joint_axis, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
 {
-    // int parent_body_id = link_[parent_id].body_id_;
+    int parent_body_id = link_[parent_link_id].body_id_;
 
     if (joint_type == JOINT_FIXED) // If joint type is fixed
     {
+        RigidBodyDynamics::Math::Vector3d com_pos_rbdl = com_position;
+        RigidBodyDynamics::Math::Matrix3d inertia_rbdl = inertia;
+        RigidBodyDynamics::Body Body(body_mass, com_pos_rbdl, inertia_rbdl);
+        RigidBodyDynamics::Joint joint(RigidBodyDynamics::JointTypeFixed);
+        RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm.transpose();
+        RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
+
+        model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
+
+        InitAfterModelMod(ADD_LINK_WITH_FIXED_JOINT, parent_link_id, verbose);
     }
     else if (joint_type == JOINT_REVOLUTE) // If joint type is revolute
     {
@@ -1385,76 +1486,46 @@ void RobotData::AddLink(int parent_body_id, const char *link_name, int joint_typ
         RigidBodyDynamics::Math::Matrix3d inertia_rbdl = inertia;
         RigidBodyDynamics::Body Body(body_mass, com_pos_rbdl, inertia_rbdl);
         RigidBodyDynamics::Joint joint(RigidBodyDynamics::JointTypeRevolute, joint_axis);
-        RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm;
+        RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm.transpose();
         RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
 
         model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
 
-        //find the corresponding link id with parent_id
-
-        int parent_link_id = getLinkID(model_.GetBodyName(parent_body_id).c_str());
-
-
         InitAfterModelMod(ADD_LINK_WITH_REVOLUTE_JOINT, parent_link_id, verbose);
     }
-    else if (joint_type == JOINT_FLOATING) // if joint type is floating
+    else if (joint_type == JOINT_6DOF) // if joint type is floating
     {
+        RigidBodyDynamics::Math::Vector3d com_pos_rbdl = com_position;
+        RigidBodyDynamics::Math::Matrix3d inertia_rbdl = inertia;
+
+        RigidBodyDynamics::Body Body(body_mass, com_pos_rbdl, inertia_rbdl);
+
+        RigidBodyDynamics::Joint joint = RigidBodyDynamics::Joint(
+            RigidBodyDynamics::Math::SpatialVector(0., 0., 0., 1., 0., 0.),
+            RigidBodyDynamics::Math::SpatialVector(0., 0., 0., 0., 1., 0.),
+            RigidBodyDynamics::Math::SpatialVector(0., 0., 0., 0., 0., 1.),
+            RigidBodyDynamics::Math::SpatialVector(1., 0., 0., 0., 0., 0.),
+            RigidBodyDynamics::Math::SpatialVector(0., 1., 0., 0., 0., 0.),
+            RigidBodyDynamics::Math::SpatialVector(0., 0., 1., 0., 0., 0.));
+
+        RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm.transpose();
+        RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
+
+        model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
+        InitAfterModelMod(ADD_LINK_WITH_REVOLUTE_JOINT, parent_link_id, verbose);
     }
-}
-
-void RobotData::AddLink(const char *parent_name, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
-{
-    int link_id = getLinkID(parent_name);
-    int parent_body_id = model_.GetBodyId(link_[link_id].name_.c_str());
-
-    AddLink(parent_body_id, link_name, joint_rotm, joint_trans, body_mass, com_position, inertia, verbose);
-}
-
-void RobotData::AddLink(int parent_body_id, const char *link_name, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose)
-{
-    RigidBodyDynamics::Math::Vector3d com_pos_rbdl = com_position;
-    RigidBodyDynamics::Math::Matrix3d inertia_rbdl = inertia;
-    RigidBodyDynamics::Body Body(body_mass, com_pos_rbdl, inertia_rbdl);
-    RigidBodyDynamics::Joint joint(RigidBodyDynamics::JointTypeFixed);
-    RigidBodyDynamics::Math::Matrix3d joint_rotm_rbdl = joint_rotm;
-    RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
-
-    model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
-    // if (init)
-    //     InitAfterModelMod(false, );
-    int parent_id = getLinkID(model_.GetBodyName(parent_body_id));
-
-    // std::cout << parent_id << "pid" << std::endl;
-
-    InitAfterModelMod(ADD_LINK_WITH_FIXED_JOINT, parent_id, verbose);
-}
-
-void RobotData::AddLink(Link &link, bool verbose)
-{
-    int parent_body_id = model_.GetBodyId(link_[link.parent_id_].name_.c_str());
-    AddLink(parent_body_id, link.name_.c_str(), link.parent_rotm, link.parent_trans, link.mass, link.com_position_l_, link.inertia, verbose);
-}
-
-void RobotData::AddLink(Link &link, int joint_type, const Vector3d &joint_axis, bool verbose)
-{
-    if (verbose)
-        std::cout << "Attaching link : " << link.name_ << " to parent : " << link_[link.parent_id_].name_ << std::endl;
-    // std::cout << "Desired parent : " << link_[link.parent_id_].name_ << std::endl;
-
-    int parent_body_id = model_.GetBodyId(link_[link.parent_id_].name_.c_str());
-
-    if (joint_type == JOINT_FIXED) // If joint type is fixed
+    else
     {
-        AddLink(parent_body_id, link.name_.c_str(), link.parent_rotm, link.parent_trans, link.mass, link.com_position_l_, link.inertia, verbose);
-    }
-    else if (joint_type == JOINT_REVOLUTE) // If joint type is rev
-    {
-        AddLink(parent_body_id, link.name_.c_str(), 1, joint_axis, link.joint_rotm, link.joint_trans, link.mass, link.com_position_l_, link.inertia, verbose);
+        std::cout << "Error : Wrong joint type" << std::endl;
     }
 }
 
 void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
 {
+    if (verbose)
+    {
+        std::cout << "re-initialize model" << std::endl;
+    }
     int change_link_id = link_id;
     int corresponding_body_id = link_[change_link_id].body_id_;
 
@@ -1470,6 +1541,7 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
 
         Link link_deleted = link_[deleted_id];
         link_.erase(link_.begin() + deleted_id);
+        joint_.erase(joint_.begin() + deleted_id);
 
         int parent_id = link_deleted.parent_id_;
 
@@ -1605,10 +1677,25 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
         //     std::cout << "link_[" << i << "].link_id_ : " << link_[i].link_id_ << "link name : " << link_[i].name_ << std::endl;
         // }
 
-        link_[added_link_id].Print();
+        if (verbose)
+            link_[added_link_id].Print();
     }
-    else if (mode == ADD_LINK_WITH_FLOATING_JOINT)
+    else if (mode == ADD_LINK_WITH_6DOF_JOINT)
     {
+        int body_id = model_.previously_added_body_id;
+        int parent_body_id = corresponding_body_id;
+        int parent_link_id = change_link_id;
+
+        // Insert Link() before the last element of link_
+        link_.insert(link_.end() - 1, Link(model_, body_id));
+
+        int added_link_id = link_.size() - 2;
+        link_[added_link_id].link_id_ = added_link_id;
+
+        // Add Children infromation to parent link
+        link_[parent_link_id].child_id_.push_back(added_link_id);
+
+        link_[added_link_id].parent_id_ = parent_link_id;
         // Link Added with floating joint
     }
 
@@ -1649,10 +1736,13 @@ void RobotData::ChangeLinkToFixedJoint(std::string link_name, bool verbose)
         link.Print();
     }
 
+    Joint joint = joint_[link_idx];
+    joint.joint_type_ = JOINT_FIXED;
+
     DeleteLink(link_name, verbose);
 
     // Add link
-    AddLink(link, verbose);
+    AddLink(joint, link);
     if (verbose)
         std::cout << "Deleted Link : " << link_name << " and Added Link : " << link_name << " as fixed joint." << std::endl;
 }
@@ -1696,4 +1786,169 @@ void RobotData::printLinkInfo()
 
         std::cout << std::endl;
     }
+}
+
+void RobotData::CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints)
+{
+}
+
+void RobotData::UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints)
+{
+    if (vmodel.q_size != q_virtual.size())
+    {
+        std::cout << "vmodel.q_size != q_virtual.size()" << std::endl;
+        return;
+    }
+
+    if (vmodel.qdot_size != q_dot_virtual.size())
+    {
+        std::cout << "vmodel.qdot_size != q_dot_virtual.size()" << std::endl;
+        return;
+    }
+
+    Eigen::MatrixXd A_v_;
+
+    A_v_.setZero(vmodel.qdot_size, vmodel.qdot_size);
+
+    RigidBodyDynamics::UpdateKinematicsCustom(vmodel, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(vmodel, q_virtual, A_v_, false);
+
+    for (int i = 0; i < links.size(); i++)
+    {
+        links[i].UpdateAll(vmodel, q_virtual, q_dot_virtual);
+        joints[i].parent_rotation_ = vmodel.X_lambda[links[i].body_id_].E.transpose();
+        joints[i].parent_translation_ = vmodel.X_lambda[links[i].body_id_].r;
+    }
+}
+
+void RobotData::CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass)
+{
+    // With updated link infomation, assume that the every joint is fixed joint
+    // Calculate the virtual inertia matrix
+
+    // make copy of links
+
+    std::vector<Link> links_copy = links;
+
+    // find end effector
+
+    int child_number = -1;
+    int link_num = 0;
+
+    std::vector<int> end_effector_link_id;
+
+    // print all links name, parent id, child id, mass, xpos, mass, inertia
+    // std::cout << "All links info" << std::endl;
+    // for (int i = 0; i < links_copy.size(); i++)
+    // {
+    //     std::cout << "link id : " << i << " link name : " << links_copy[i].name_ << " parent id : " << links_copy[i].parent_id_ << " child id : ";
+    //     for (int j = 0; j < links_copy[i].child_id_.size(); j++)
+    //     {
+    //         std::cout << links_copy[i].child_id_[j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    //     std::cout << "link position : " << links_copy[i].xpos.transpose() << "link mass : " << links_copy[i].mass << std::endl
+    //               << "link orientation : " << std::endl
+    //               << links_copy[i].rotm << std::endl;
+    //     std::cout << " link inertia : " << links_copy[i].inertia << std::endl;
+    //     std::cout << std::endl;
+    // }
+
+    while (true) // repeat until the links_copy has only one link, which is the base link
+    {
+        if (links_copy.size() == 1)
+        {
+            break;
+        }
+
+        for (int i = links_copy.size() - 1; i >= 0; i--)
+        {
+            if (links_copy[i].child_id_.size() == 0)
+            {
+                // ee found!
+                // std::cout << std::endl;
+                // std::cout << i << "th link is end effector " << links_copy[i].name_ << " mass : " << links_copy[i].mass << std::endl;
+
+                int parent_id_of_ee = links_copy[i].parent_id_;
+                // std::cout << "Adding link " << links_copy[i].name_ << " to " << links_copy[parent_id_of_ee].name_ << std::endl;
+
+                // find child id from parent link and delete the child id from the vector
+                for (int j = 0; j < links_copy[parent_id_of_ee].child_id_.size(); j++)
+                {
+                    if (links_copy[parent_id_of_ee].child_id_[j] == i)
+                    {
+                        links_copy[parent_id_of_ee].child_id_.erase(links_copy[parent_id_of_ee].child_id_.begin() + j);
+                        break;
+                    }
+                }
+
+                // std::cout << "parent before : " << links_copy[parent_id_of_ee].com_position_l_.transpose() << std::endl;
+                // std::cout << links_copy[parent_id_of_ee].mass << std::endl;
+
+                links_copy[parent_id_of_ee].AddLink(links_copy[i], joints[i].parent_rotation_, joints[i].parent_translation_);
+
+                // std::cout << "parent after : " << links_copy[parent_id_of_ee].com_position_l_.transpose() << std::endl;
+                // std::cout << links_copy[parent_id_of_ee].mass << std::endl;
+
+                links_copy.erase(links_copy.begin() + i);
+
+                break;
+            }
+        }
+    }
+
+    // std::cout<<"end"<<std::endl;
+
+    // std::cout << "" << links_copy[0].name_ << " mass : " << links_copy[0].mass << std::endl;
+    // std::cout << "base pos : " << links_copy[0].xpos.transpose() << std::endl;
+    // std::cout << "com pos : " << links_copy[0].com_position_l_.transpose() << std::endl;
+    // std::cout << links_copy[0].inertia << std::endl;
+
+    new_inertia = links_copy[0].inertia;
+    new_com = links_copy[0].xpos + links_copy[0].rotm * links_copy[0].com_position_l_;
+    new_mass = links_copy[0].mass;
+}
+
+void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, double com_mass, bool verbose)
+{
+    int link_id = getLinkID(link_name);
+
+    int rbdl_id = link_[link_id].body_id_;
+
+    std::cout << "Changing link " << link_name << " id : " << link_id << "rbdl id :" << rbdl_id << model_.GetBodyName(rbdl_id) << std::endl;
+
+    link_[link_id].inertia = com_inertia;
+    link_[link_id].com_position_l_.setZero();
+    link_[link_id].mass = com_mass;
+
+    model_.mBodies[rbdl_id].mInertia = com_inertia;
+    model_.mBodies[rbdl_id].mCenterOfMass.setZero();
+    model_.mBodies[rbdl_id].mMass = com_mass;
+
+    model_.I[rbdl_id] =
+        RigidBodyDynamics::Math::SpatialRigidBodyInertia::createFromMassComInertiaC(
+            model_.mBodies[rbdl_id].mMass,
+            model_.mBodies[rbdl_id].mCenterOfMass,
+            model_.mBodies[rbdl_id].mInertia);
+
+    model_.Ic[rbdl_id] = model_.I[rbdl_id];
+
+    // int link_idx = getLinkID(link_name);
+
+    // // save link and delete link
+    // Link link = link_[link_idx];
+    // if (verbose)
+    // {
+    //     std::cout << "Delete link id : " << link_idx << std::endl;
+    //     link.Print();
+    // }
+
+    // Joint joint = joint_[link_idx];
+    // // joint.joint_type_ = JOINT_FIXED;
+
+
+    // DeleteLink(link_name, verbose);
+
+    // // Add link
+    // AddLink(joint, link);
 }

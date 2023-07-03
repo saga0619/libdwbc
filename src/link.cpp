@@ -2,9 +2,40 @@
 
 namespace DWBC
 {
+    Joint::Joint()
+    {
+        joint_type_ = -1;
+    }
+
+    Joint::Joint(int joint_type)
+    {
+        joint_type_ = joint_type;
+    }
+
+    Joint::Joint(int joint_type, const Vector3d &joint_axis)
+    {
+        joint_type_ = joint_type;
+        joint_axis_ = joint_axis;
+    }
+
+    RigidBodyDynamics::Joint Joint::ToRBDLJoint()
+    {
+        if (joint_type_ == JOINT_REVOLUTE)
+        {
+            return RigidBodyDynamics::Joint(RigidBodyDynamics::JointTypeRevolute, joint_axis_);
+        }
+        else
+        {
+            // cout undefined joint type
+            std::cout << "joint type not defined" << std::endl;
+
+            return RigidBodyDynamics::Joint();
+        }
+    }
 
     Link::Link(/* args */)
     {
+        mass = -1;
         body_id_ = -1;
     }
 
@@ -16,7 +47,7 @@ namespace DWBC
         com_position_l_ = model_.mBodies[body_id_].mCenterOfMass;
         name_ = model_.GetBodyName(body_id_);
 
-        joint_rotm = model_.X_T[body_id_].E;
+        joint_rotm = model_.X_T[body_id_].E.transpose();
         joint_trans = model_.X_T[body_id_].r;
     }
 
@@ -39,8 +70,6 @@ namespace DWBC
 
         v = vw.segment(3, 3);
         w = vw.segment(0, 3);
-        parent_rotm = model_.X_lambda[body_id_].E;
-        parent_trans = model_.X_lambda[body_id_].r;
 
         // std::cout << name_ << std::endl;
         // std::cout << parent_rotm << std::endl;
@@ -176,6 +205,37 @@ namespace DWBC
 
         cout << "parent trans : " << parent_trans.transpose() << endl;
         cout << "parent torm : " << parent_rotm << endl;
+    }
+
+    RigidBodyDynamics::Body Link::ToRBDLBody()
+    {
+        if (mass < 0)
+        {
+            std::cout << "error : mass not defined" << std::endl;
+        }
+        return RigidBodyDynamics::Body(mass, com_position_l_, (RigidBodyDynamics::Math::Matrix3d)inertia);
+    }
+
+    void Link::AddLink(Link &link, Matrix3d &rotm, Vector3d &xpos)
+    {
+        double new_mass = mass + link.mass;
+
+        Vector3d link_com = rotm * link.com_position_l_ + xpos;
+        Vector3d new_com = (mass * com_position_l_ + link.mass * link_com) / new_mass;
+
+        Matrix3d com_skm = skew(link.com_position_l_);
+        Matrix3d inertia_other = link.inertia + link.mass * com_skm * com_skm.transpose(); 
+
+        Matrix3d com_skm_this = skew(com_position_l_);
+        Matrix3d inertia_this = inertia + mass * com_skm_this * com_skm_this.transpose(); 
+
+        Matrix3d inertia_other_com_rotated_this_origin = rotm * link.inertia * rotm.transpose() + link.mass * com_skm * com_skm.transpose();
+        Matrix3d inertia_summed = inertia_this + inertia_other_com_rotated_this_origin;
+        Matrix3d new_inertia = inertia_summed - new_mass * skew(new_com) * skew(new_com).transpose();
+        
+        mass = new_mass;
+        com_position_l_ = new_com;
+        inertia = new_inertia;
     }
 
 }
