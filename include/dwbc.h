@@ -90,6 +90,8 @@ namespace DWBC
 
         MatrixXd CMM_; /*Centroidal momentum matrix*/
 
+        Vector3d ang_momentum_;
+
         VectorXd q_system_;
         VectorXd q_dot_system_;
         VectorXd q_ddot_system_;
@@ -200,6 +202,8 @@ namespace DWBC
 
         /*
         Calculate Angular Momentum Matrix
+        Upper 3 row : Angular Momentum
+        Lower 3 row : Linear Momentum
         */
         MatrixXd CalcAngularMomentumMatrix();
 

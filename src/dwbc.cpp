@@ -133,16 +133,29 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     }
     J_com_.setZero(3, system_dof_);
     G_.setZero(system_dof_);
-    com_pos.setZero();
     for (int i = 0; i < (link_.size() - 1); i++)
     {
         link_[i].UpdateAll(model_, q_virtual, q_dot_virtual);
         J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
-        com_pos += link_[i].xipos * link_[i].mass / total_mass_;
+        // com_pos += link_[i].xipos * link_[i].mass / total_mass_;
 
         joint_[i].parent_rotation_ = model_.X_lambda[link_[i].body_id_].E.transpose();
         joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
     }
+
+    G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
+
+    CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
+
+    double mass_;
+    RigidBodyDynamics::Math::Vector3d com;
+    RigidBodyDynamics::Math::Vector3d com_acc;
+    RigidBodyDynamics::Math::Vector3d com_vel;
+    RigidBodyDynamics::Math::Vector3d ang_momentum;
+    RigidBodyDynamics::Utils::CalcCenterOfMass(model_, q_system_, q_dot_system_, &q_ddot_system_, mass_, com, &com_vel, &com_acc, &ang_momentum);
+
+    ang_momentum_ = ang_momentum;
+    com_pos = com;
 
     link_.back().xpos = com_pos;
     link_.back().xipos = com_pos;
@@ -155,11 +168,7 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
     link_.back().jac_com_ = J_com_;
 
-    link_.back().v = J_com_ * q_dot_system_;
-
-    G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
-
-    CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
+    link_.back().v = com_vel;
 
     B_.setZero(system_dof_);
     RigidBodyDynamics::NonlinearEffects(model_, q_virtual, q_dot_virtual, B_);
@@ -590,6 +599,13 @@ void RobotData::InitModelData(int verbose)
 
     if (verbose == 1)
     {
+        std::cout << "System DOF :" << system_dof_ << std::endl;
+        std::cout << "Model DOF :" << model_dof_ << std::endl;
+
+        std::cout << "Total Link : " << link_.size() << std::endl;
+        std::cout << "Total Mass : " << total_mass_ << std::endl;
+        std::cout << "Link Information" << std::endl;
+
         int vlink = 0;
         for (int i = 0; i < link_.size() - 1; i++)
         {
@@ -1053,9 +1069,7 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
 {
     Eigen::MatrixXd H_C = MatrixXd::Zero(6, system_dof_);
 
-    Eigen::MatrixXd H_I = MatrixXd::Zero(6, 6);
-
-    for (int i = 0; model_dof_; i++)
+    for (int i = 0; i < model_dof_; i++)
     {
         Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
         rotm.block(0, 0, 3, 3) = link_[i].rotm;
@@ -1063,7 +1077,7 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
 
         // link_[i].GetSpatialInertiaMatrix(); >> Spatial inertia matrix : Inertia tensor from the origin of the link.
 
-        Eigen::MatrixXd j_temp = MatrixXd::Zero(6, model_dof_);
+        Eigen::MatrixXd j_temp = MatrixXd::Zero(6, system_dof_);
         j_temp.topRows(3) = link_[i].jac_.bottomRows(3);
         j_temp.bottomRows(3) = link_[i].jac_.topRows(3);
 
@@ -1074,9 +1088,7 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
     com_.rotm = Eigen::MatrixXd::Identity(3, 3);
     com_.xpos = link_[model_dof_].xpos;
 
-    //
-
-    return com_.GetAdjointMatrix().transpose() * H_C;
+    return com_.GetAdjointMatrix().transpose().topRows(3) * H_C;
 }
 
 void RobotData::CopyKinematicsData(RobotData &target_rd)

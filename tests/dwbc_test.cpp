@@ -539,7 +539,69 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
         rd_.CalcContactRedistribute(false);
     };
 }
+TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
+{
+    RobotData rd_;
+    std::string resource_path = URDF_DIR;
+    std::string urdf_name = "/dyros_tocabi.urdf";
+    std::string urdf_path = resource_path + urdf_name;
+    rd_.LoadModelData(urdf_path, true, false);
+    VectorXd q;
+    VectorXd qdot;
+    VectorXd qddot;
+    q.setZero(rd_.model_.q_size);
+    qdot.setZero(rd_.model_.qdot_size);
+    qddot.setZero(rd_.model_.qdot_size);
 
+    q << 0, 0, 0.92983, 0, 0, 0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0, 0, 0,
+        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+
+    rd_.UpdateKinematics(q, qdot, qddot);
+
+    BENCHMARK("angular momentum matrix calculation")
+    {
+        rd_.CalcAngularMomentumMatrix() * qdot;
+    };
+
+    REQUIRE(rd_.ang_momentum_.isApprox((rd_.CalcAngularMomentumMatrix() * qdot), 1e-5) == true);
+
+    Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
+
+    int i = 0;
+    Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
+    Eigen::MatrixXd j_temp = MatrixXd::Zero(6, rd_.system_dof_);
+
+    BENCHMARK("angular momentum matrix calculation")
+    {
+        rotm.block(0, 0, 3, 3) = rd_.link_[i].rotm;
+        rotm.block(3, 3, 3, 3) = rd_.link_[i].rotm;
+    };
+    BENCHMARK("angular momentum matrix calculation2")
+    {
+        rd_.link_[i].GetSpatialInertiaMatrix();
+    };
+
+    BENCHMARK("angular momentum matrix calculation3")
+    {
+        j_temp.topRows(3) = rd_.link_[i].jac_.bottomRows(3);
+        j_temp.bottomRows(3) = rd_.link_[i].jac_.topRows(3);
+    };
+    MatrixXd H_TEMP1, H_temp2;
+
+    BENCHMARK("angular momentum matrix calculation4")
+    {
+        H_TEMP1 = ((rd_.link_[i].GetSpatialTranform() * rd_.link_[i].GetSpatialInertiaMatrix()) * rotm.transpose());
+    };
+    BENCHMARK("angular momentum matrix calculation5")
+    {
+        H_temp2 = H_TEMP1 * j_temp;
+    };
+}
 TEST_CASE("MODEL MODIFICATION BENCHMARK")
 {
     bool verbose = false;
