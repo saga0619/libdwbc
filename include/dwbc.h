@@ -1,6 +1,8 @@
 #ifndef WBHQP_ROBOTDATA_HPP
 #define WBHQP_ROBOTDATA_HPP
 
+// #define EIGEN_DONT_VECTORIZE
+
 #include <rbdl/addons/urdfreader/urdfreader.h>
 #include <cstdarg>
 
@@ -44,6 +46,15 @@ public:
 namespace DWBC
 {
 
+    enum
+    {
+        ADD_LINK,
+        ADD_LINK_WITH_FIXED_JOINT,
+        ADD_LINK_WITH_REVOLUTE_JOINT,
+        ADD_LINK_WITH_6DOF_JOINT,
+        DELETE_LINK,
+    };
+
     class RobotData
     {
     private:
@@ -54,7 +65,7 @@ namespace DWBC
 
         // degree of freedom including floating base
         unsigned int system_dof_;
-        
+
         // degree of freedom of robot model
         unsigned int model_dof_;
 
@@ -111,6 +122,7 @@ namespace DWBC
         VectorXd torque_limit_;
 
         std::vector<Link> link_;
+        std::vector<Joint> joint_;
         std::vector<ContactConstraint> cc_;
         std::vector<TaskSpace> ts_;
 #ifdef COMPILE_QPSWIFT
@@ -127,7 +139,10 @@ namespace DWBC
         verbose 1 : Show link id information
         verbose 0 : disable verbose
         */
-        void InitModelData(std::string urdf_path, bool floating, int verbose);
+
+        void LoadModelData(std::string urdf_path, bool floating, int verbose = 0);
+
+        void InitModelData(int verbose = 0);
 
         /*
         Calculate Gravity Compensation
@@ -147,6 +162,12 @@ namespace DWBC
         void AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x = 0, double contact_y = 0, bool verbose = false);
 
         /*
+        Add Contact constraint
+        find contact link with link name. ignore the case of string
+        */
+        void AddContactConstraint(const char *link_name, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x = 0, double contact_y = 0, bool verbose = false);
+
+        /*
         Clear all stored ContactConstraint
         */
         void ClearContactConstraint();
@@ -160,7 +181,7 @@ namespace DWBC
         Calculate Contact Constraint Dynamics
         bool update : Call UpdateContactConstraint()
         */
-        void CalcContactConstraint(bool update = true);
+        int CalcContactConstraint(bool update = true);
 
         /*
         Set Contact status, true or false
@@ -179,7 +200,6 @@ namespace DWBC
         */
         VectorXd getContactForce(const VectorXd &command_torque);
 
-
         /*
         Calculate Angular Momentum Matrix
         Upper 3 row : Angular Momentum
@@ -192,6 +212,7 @@ namespace DWBC
         */
         void AddTaskSpace(int task_mode, int task_dof, bool verbose = false);
         void AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose = false);
+        void AddTaskSpace(int task_mode, const char *link_name, Vector3d task_point, bool verbose = false); // find link with link name, ignore the case of string
         void ClearQP();
         void AddQP();
         /*
@@ -230,10 +251,43 @@ namespace DWBC
         void CopyKinematicsData(RobotData &target_rd);
 
         /*
-
+        model modification
         */
+        void DeleteLink(std::string link_name, bool verbose = false);
+        void DeleteLink(int link_number, bool verbose = false);
+
+        void AddLink(int parent_id, const char *link_name, int joint_type, const Vector3d &joint_axis, const Matrix3d &joint_rotm, const Vector3d &joint_trans, double body_mass, const Vector3d &com_position, const Matrix3d &inertia, bool verbose = false);
+
+        /*
+        joint_type :
+            JOINT_FLOATING,
+            JOINT_REVOLUTE,
+            JOINT_PRISMATIC,
+            JOINT_FIXED
+        */
+        void AddLink(const Joint &joint, const Link &link, bool verbose = false);
+        // void AddLink(Link &link, int joint_type, const Vector3d &joint_axis, bool verbose = false);
+
+        /*
+        MODE :
+            ADD_LINK,
+            ADD_LINK_WITH_FIXED_JOINT,
+            ADD_LINK_WITH_REVOLUTE_JOINT,
+            ADD_LINK_WITH_FLOATING_JOINT,
+            DELETE_LINK,
+        */
+        void InitAfterModelMod(int mode, int link_id, bool verbose = false);
+
+        void ChangeLinkToFixedJoint(std::string link_name, bool verbose = false);
+
+        void printLinkInfo();
+        int getLinkID(std::string link_name);
 
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
+        void CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints);
+        void UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints);
+        void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
+        void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, double com_mass, bool verbose = false);
     };
 
     template <typename... Types>

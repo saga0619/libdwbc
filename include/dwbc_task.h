@@ -29,12 +29,9 @@ namespace DWBC
     public:
         unsigned int task_dof_;
         unsigned int heirarchy_;
-        unsigned int link_number_;
-        unsigned int body_id_;
+        unsigned int link_id_;
 
         unsigned int task_mode_;
-
-        unsigned int model_size_;
 
         Vector3d task_point_;
 
@@ -86,9 +83,9 @@ namespace DWBC
 
         TaskSpace();
 
-        TaskSpace(int task_mode, int heirarchy, int task_dof, int model_dof);
+        TaskSpace(int task_mode, int heirarchy, int task_dof);
 
-        TaskSpace(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point, int model_dof);
+        TaskSpace(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point);
         ~TaskSpace();
 
         void Update(const VectorXd &f_star);

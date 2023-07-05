@@ -35,7 +35,7 @@ int main()
 
     std::string urdf_path = resource_path + urdf_name;
 
-    rd_.InitModelData(urdf_path, true, false);
+    rd_.LoadModelData(urdf_path, true, false);
 
     VectorXd q;
     VectorXd qdot;
