@@ -48,8 +48,30 @@ int main(void)
     rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero(), verbose);
     rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
 
-    rd_.UpdateKinematics(q, qdot, qddot);
+    VectorXd q_dot_test = VectorXd::Random(rd_.model_.qdot_size);
+    q_dot_test.segment(0,6).setZero();
+
+    rd_.UpdateKinematics(q, q_dot_test, qddot);
     rd_.SetContact(true, true);
+
+    double mass;
+    RigidBodyDynamics::Math::Vector3d ang_m_;
+    RigidBodyDynamics::Math::Vector3d com_p;
+    RigidBodyDynamics::Math::Vector3d com_v;
+    // RigidBodyDynamics::
+    RigidBodyDynamics::Utils::CalcCenterOfMass(rd_.model_, q, q_dot_test, &qddot, mass, com_p, &com_v, nullptr, &ang_m_, nullptr, false);
+
+    std::cout << ang_m_ << std::endl
+              << std::endl;
+
+    std::cout << mass * com_v.transpose() << std::endl;
+    std::cout << std::endl;
+
+    std::cout << rd_.CalcAngularMomentumMatrix() * q_dot_test << std::endl;
+    std::cout << std::endl;
+    std::cout << rd_.CMM_ * q_dot_test << std::endl;
+
+    // RigidBodyDynamics::
 
     rd_.SetTaskSpace(0, fstar_1);
     rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
@@ -58,6 +80,8 @@ int main(void)
     rd_.CalcTaskControlTorque(true);
     rd_.CalcContactRedistribute(true);
     std::cout << rd_.torque_grav_.transpose() << std::endl;
+    std::cout << rd_.torque_task_.transpose() << std::endl;
+    std::cout << rd_.torque_contact_.transpose() << std::endl;
 
     // repeat test and measure time
     auto start = std::chrono::high_resolution_clock::now();
@@ -113,7 +137,6 @@ int main(void)
     }
 
     RigidBodyDynamics::Model v_model;
-    v_model.gravity = Vector3d(0, 0, -9.81);
 
     int parent_id = -1;
     int added_id = 0;
