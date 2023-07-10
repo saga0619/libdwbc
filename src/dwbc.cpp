@@ -87,8 +87,6 @@ void RobotData::AddQP()
 RobotData::RobotData(/* args */)
 {
     torque_limit_set_ = false;
-    save_mat_file_ = false;
-    check_mat_file_ = false;
 }
 
 RobotData::~RobotData()
@@ -1069,26 +1067,72 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
 {
     Eigen::MatrixXd H_C = MatrixXd::Zero(6, system_dof_);
 
-    for (int i = 0; i < model_dof_; i++)
+    for (int i = 0; i < link_.size() - 1; i++)
     {
-        Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
-        rotm.block(0, 0, 3, 3) = link_[i].rotm;
-        rotm.block(3, 3, 3, 3) = link_[i].rotm;
 
-        // link_[i].GetSpatialInertiaMatrix(); >> Spatial inertia matrix : Inertia tensor from the origin of the link.
+        // Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
+        // rotm.block(0, 0, 3, 3) = link_[i].rotm;
+        // rotm.block(3, 3, 3, 3) = link_[i].rotm;
+        // Eigen::MatrixXd j_temp = MatrixXd::Zero(6, system_dof_);
+        // j_temp.topRows(3) = link_[i].jac_.bottomRows(3);
+        // j_temp.bottomRows(3) = link_[i].jac_.topRows(3);
+        // H_C += (link_[i].GetSpatialTranform() * link_[i].GetSpatialInertiaMatrix() * rotm.transpose() * j_temp).topRows(3);
 
-        Eigen::MatrixXd j_temp = MatrixXd::Zero(6, system_dof_);
-        j_temp.topRows(3) = link_[i].jac_.bottomRows(3);
-        j_temp.bottomRows(3) = link_[i].jac_.topRows(3);
+        Eigen::Matrix3d r_ = link_[i].rotm;
+        Eigen::Matrix3d i_ = link_[i].inertia;
+        Eigen::Vector3d c_ = link_[i].com_position_l_;
+        Eigen::Vector3d x_ = link_[i].xpos;
+        double m_ = link_[i].mass;
 
-        H_C += link_[i].GetSpatialTranform() * link_[i].GetSpatialInertiaMatrix() * rotm.transpose() * j_temp;
+        H_C.topRows(3) += (r_ * (i_ + skew(c_) * skew(c_).transpose() * m_) * r_.transpose() + skew(x_) * r_ * skew(c_).transpose() * m_ * r_.transpose()) * link_[i].jac_.bottomRows(3) + (r_ * skew(c_) * m_ * r_.transpose() + m_ * skew(x_)) * link_[i].jac_.topRows(3);
+
+        H_C.bottomRows(3) += m_ * r_ * skew(c_).transpose() * r_.transpose() * link_[i].jac_.bottomRows(3) + m_ * link_[i].jac_.topRows(3);
     }
 
-    DWBC::Link com_;
-    com_.rotm = Eigen::MatrixXd::Identity(3, 3);
-    com_.xpos = link_[model_dof_].xpos;
+    return H_C.topRows(3) - skew(link_.back().xpos) * H_C.bottomRows(3);
+}
 
-    return com_.GetAdjointMatrix().transpose().topRows(3) * H_C;
+void RobotData::CalcAngularMomentumMatrix(MatrixXd &cmm)
+{
+    Eigen::MatrixXd H_C = MatrixXd::Zero(6, system_dof_);
+
+    for (int i = 0; i < link_.size() - 1; i++)
+    {
+        Eigen::Matrix3d r_ = link_[i].rotm;
+        Eigen::Matrix3d i_ = link_[i].inertia;
+        Eigen::Vector3d c_ = link_[i].com_position_l_;
+        Eigen::Vector3d x_ = link_[i].xpos;
+        double m_ = link_[i].mass;
+
+        H_C.topRows(3) += (r_ * (i_ + skew(c_) * skew(c_).transpose() * m_) * r_.transpose() + skew(x_) * r_ * skew(c_).transpose() * m_ * r_.transpose()) * link_[i].jac_.bottomRows(3) + (r_ * skew(c_) * m_ * r_.transpose() + m_ * skew(x_)) * link_[i].jac_.topRows(3);
+
+        H_C.bottomRows(3) += m_ * r_ * skew(c_).transpose() * r_.transpose() * link_[i].jac_.bottomRows(3) + m_ * link_[i].jac_.topRows(3);
+    }
+    cmm = H_C.topRows(3) - skew(link_.back().xpos) * H_C.bottomRows(3);
+}
+
+void RobotData::CalcVirtualCMM(RigidBodyDynamics::Model _v_model, std::vector<Link> &_link, Vector3d &_com_pos, MatrixXd &_cmm)
+{
+    Eigen::MatrixXd H_C = MatrixXd::Zero(6, _v_model.qdot_size);
+    int link_size = _link.size();
+    if (_link.back().name_ == "COM")
+    {
+        link_size -= 1;
+    }
+
+    for (int i = 0; i < link_size; i++)
+    {
+        Eigen::Matrix3d r_ = _link[i].rotm;
+        Eigen::Matrix3d i_ = _link[i].inertia;
+        Eigen::Vector3d c_ = _link[i].com_position_l_;
+        Eigen::Vector3d x_ = _link[i].xpos;
+        double m_ = _link[i].mass;
+
+        H_C.topRows(3) += (r_ * (i_ + skew(c_) * skew(c_).transpose() * m_) * r_.transpose() + skew(x_) * r_ * skew(c_).transpose() * m_ * r_.transpose()) * _link[i].jac_.bottomRows(3) + (r_ * skew(c_) * m_ * r_.transpose() + m_ * skew(x_)) * _link[i].jac_.topRows(3);
+
+        H_C.bottomRows(3) += m_ * r_ * skew(c_).transpose() * r_.transpose() * _link[i].jac_.bottomRows(3) + m_ * _link[i].jac_.topRows(3);
+    }
+    _cmm = H_C.topRows(3) - skew(_com_pos) * H_C.bottomRows(3);
 }
 
 void RobotData::CopyKinematicsData(RobotData &target_rd)

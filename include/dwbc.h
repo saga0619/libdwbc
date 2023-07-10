@@ -63,10 +63,10 @@ namespace DWBC
         RobotData(/* args */);
         ~RobotData();
 
-        // degree of freedom including floating base
+        // degree of freedom including floating base (robot dof + 6)
         unsigned int system_dof_;
 
-        // degree of freedom of robot model
+        // degree of freedom of robot model (system dof - 6)
         unsigned int model_dof_;
 
         // degree of freedom of contact
@@ -74,57 +74,62 @@ namespace DWBC
 
         double total_mass_;
 
-        double control_time_;
+        double control_time_; 
 
-        RigidBodyDynamics::Model model_;
+        RigidBodyDynamics::Model model_; // rbdl model of original model.
+        
+        RigidBodyDynamics::Model model_contact_; // rbdl model of contact model.
+        RigidBodyDynamics::Model model_virtual_; // rbdl model of virtual model.
 
-        Vector3d com_pos; // COM pos
-        Vector3d com_vel; // COM vel
+        Vector3d com_pos;   // COM pos
+        Vector3d com_vel;   // COM vel
 
-        MatrixXd J_com_; // COM jacobian
+        MatrixXd J_com_;    // COM jacobian ( also can be accesed from link.back().jac)
 
+
+        // Mass matrix of Robot system_dof_ * system_dof_ 
         MatrixXd A_;
         MatrixXd A_inv_;
 
+        // Non linear effect of Robot system_dof_ * 1
         VectorXd B_;
+        
+        /* Centroidal momentum matrix 3 * model_dof */
+        MatrixXd CMM_; 
 
-        MatrixXd CMM_; /*Centroidal momentum matrix*/
+        Vector3d ang_momentum_;     // angular momentum
 
-        Vector3d ang_momentum_;
 
-        VectorXd q_system_;
-        VectorXd q_dot_system_;
-        VectorXd q_ddot_system_;
+        VectorXd q_system_;         // q size           : (system_dof +1)
+        VectorXd q_dot_system_;     // qdot size        : (system_dof)
+        VectorXd q_ddot_system_;    // qddot size       : (system_dof)
 
-        VectorXd G_;
-        VectorXd torque_grav_;
-        VectorXd torque_task_;
-        VectorXd torque_contact_;
+        VectorXd G_;                // gravity vector   : (system_dof)
+        VectorXd torque_grav_;      // gravity torque   : (system_dof)
+        VectorXd torque_task_;      // task torque      : (system_dof)
+        VectorXd torque_contact_;   // contact torque   : (system_dof)
 
-        MatrixXd Lambda_contact;
-        MatrixXd J_C;
-        MatrixXd J_C_INV_T;
-        MatrixXd N_C;
+        MatrixXd Lambda_contact;    // contact space inertia matrix         : (contact_dof * contact_dof)
+        MatrixXd J_C;               // contact jacobian                     : (contact_dof * system_dof)
+        MatrixXd J_C_INV_T;         // contact jacobian inverse transpose   : (system_dof * contact_dof)
+        MatrixXd N_C;               // null space of contact jacobian       : (system_dof * system_dof)
 
-        MatrixXd P_C;
+        MatrixXd P_C;               // contact projection matrix
 
-        MatrixXd W;
-        MatrixXd W_inv;
-        MatrixXd V2;
+        MatrixXd W;                 // W matrix
+        MatrixXd W_inv;             // W inverse matrix
+        MatrixXd V2;                // V2 matrix
 
-        MatrixXd NwJw;
+        MatrixXd NwJw;              // NwJw matrix
 
-        bool torque_limit_set_;
+        bool torque_limit_set_;     // torque limit set flag    
 
-        bool save_mat_file_;
-        bool check_mat_file_;
+        VectorXd torque_limit_;             // joint actuation limit information : (system_dof)
 
-        VectorXd torque_limit_;
-
-        std::vector<Link> link_;
-        std::vector<Joint> joint_;
-        std::vector<ContactConstraint> cc_;
-        std::vector<TaskSpace> ts_;
+        std::vector<Link> link_;            // link information : contain all link data and the last link is center of mass information.
+        std::vector<Joint> joint_;          // joint information : contain all joint data
+        std::vector<ContactConstraint> cc_; // contact constraint information 
+        std::vector<TaskSpace> ts_;         // task space information 
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
         QP *qp_contact_;
@@ -206,7 +211,7 @@ namespace DWBC
         Lower 3 row : Linear Momentum
         */
         MatrixXd CalcAngularMomentumMatrix();
-
+        void CalcAngularMomentumMatrix(MatrixXd &cmm);
         /*
         Add Task Space
         */
@@ -288,6 +293,7 @@ namespace DWBC
         void UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints);
         void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
         void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, double com_mass, bool verbose = false);
+        void CalcVirtualCMM(RigidBodyDynamics::Model v_model, std::vector<Link> &_link, Vector3d &com_pos, MatrixXd &cmm);
     };
 
     template <typename... Types>
