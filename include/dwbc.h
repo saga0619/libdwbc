@@ -74,62 +74,60 @@ namespace DWBC
 
         double total_mass_;
 
-        double control_time_; 
+        double control_time_;
 
         RigidBodyDynamics::Model model_; // rbdl model of original model.
-        
+
         RigidBodyDynamics::Model model_contact_; // rbdl model of contact model.
         RigidBodyDynamics::Model model_virtual_; // rbdl model of virtual model.
 
-        Vector3d com_pos;   // COM pos
-        Vector3d com_vel;   // COM vel
+        Vector3d com_pos; // COM pos
+        Vector3d com_vel; // COM vel
 
-        MatrixXd J_com_;    // COM jacobian ( also can be accesed from link.back().jac)
+        MatrixXd J_com_; // COM jacobian ( also can be accesed from link.back().jac)
 
-
-        // Mass matrix of Robot system_dof_ * system_dof_ 
+        // Mass matrix of Robot system_dof_ * system_dof_
         MatrixXd A_;
         MatrixXd A_inv_;
 
         // Non linear effect of Robot system_dof_ * 1
         VectorXd B_;
-        
+
         /* Centroidal momentum matrix 3 * model_dof */
-        MatrixXd CMM_; 
+        MatrixXd CMM_;
 
-        Vector3d ang_momentum_;     // angular momentum
+        Vector3d ang_momentum_; // angular momentum
 
+        VectorXd q_system_;      // q size           : (system_dof +1)
+        VectorXd q_dot_system_;  // qdot size        : (system_dof)
+        VectorXd q_ddot_system_; // qddot size       : (system_dof)
 
-        VectorXd q_system_;         // q size           : (system_dof +1)
-        VectorXd q_dot_system_;     // qdot size        : (system_dof)
-        VectorXd q_ddot_system_;    // qddot size       : (system_dof)
+        VectorXd G_;              // gravity vector   : (system_dof)
+        VectorXd torque_grav_;    // gravity torque   : (system_dof)
+        VectorXd torque_task_;    // task torque      : (system_dof)
+        VectorXd torque_contact_; // contact torque   : (system_dof)
 
-        VectorXd G_;                // gravity vector   : (system_dof)
-        VectorXd torque_grav_;      // gravity torque   : (system_dof)
-        VectorXd torque_task_;      // task torque      : (system_dof)
-        VectorXd torque_contact_;   // contact torque   : (system_dof)
+        MatrixXd Lambda_contact; // contact space inertia matrix         : (contact_dof * contact_dof)
+        MatrixXd J_C;            // contact jacobian                     : (contact_dof * system_dof)
+        MatrixXd J_C_INV_T;      // contact jacobian inverse transpose   : (system_dof * contact_dof)
+        MatrixXd N_C;            // null space of contact jacobian       : (system_dof * system_dof)
 
-        MatrixXd Lambda_contact;    // contact space inertia matrix         : (contact_dof * contact_dof)
-        MatrixXd J_C;               // contact jacobian                     : (contact_dof * system_dof)
-        MatrixXd J_C_INV_T;         // contact jacobian inverse transpose   : (system_dof * contact_dof)
-        MatrixXd N_C;               // null space of contact jacobian       : (system_dof * system_dof)
+        MatrixXd P_C; // contact projection matrix
 
-        MatrixXd P_C;               // contact projection matrix
+        MatrixXd W;     // W matrix
+        MatrixXd W_inv; // W inverse matrix
+        MatrixXd V2;    // V2 matrix
 
-        MatrixXd W;                 // W matrix
-        MatrixXd W_inv;             // W inverse matrix
-        MatrixXd V2;                // V2 matrix
+        MatrixXd NwJw; // NwJw matrix
 
-        MatrixXd NwJw;              // NwJw matrix
+        bool torque_limit_set_; // torque limit set flag
 
-        bool torque_limit_set_;     // torque limit set flag    
-
-        VectorXd torque_limit_;             // joint actuation limit information : (system_dof)
+        VectorXd torque_limit_; // joint actuation limit information : (system_dof)
 
         std::vector<Link> link_;            // link information : contain all link data and the last link is center of mass information.
         std::vector<Joint> joint_;          // joint information : contain all joint data
-        std::vector<ContactConstraint> cc_; // contact constraint information 
-        std::vector<TaskSpace> ts_;         // task space information 
+        std::vector<ContactConstraint> cc_; // contact constraint information
+        std::vector<TaskSpace> ts_;         // task space information
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
         QP *qp_contact_;
@@ -206,9 +204,7 @@ namespace DWBC
         VectorXd getContactForce(const VectorXd &command_torque);
 
         /*
-        Calculate Angular Momentum Matrix
-        Upper 3 row : Angular Momentum
-        Lower 3 row : Linear Momentum
+        Calculate Angular Momentum Matrix : (3 * system_dof)
         */
         MatrixXd CalcAngularMomentumMatrix();
         void CalcAngularMomentumMatrix(MatrixXd &cmm);
