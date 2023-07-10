@@ -12,6 +12,28 @@ Lee, Yisoo, et al. "Computationally Efficient HQP-based Whole-body Control Explo
  * [RBDL](https://github.com/saga0619/rbdl-orb)
  * [qpOASES](https://github.com/saga0619/qpOASES)
  
+### install RBDL
+```sh
+git clone --recursive https://github.com/saga0619/rbdl-orb
+cd rbdl-orb
+mkdir build
+cd build
+cmake ..
+make all
+sudo make install
+```
+
+### install qpOASES
+```sh
+git clone https://github.com/saga0619/qpoases
+cd qpoases
+mkdir build
+cd build
+cmake ..
+make all
+sudo make install
+```
+
 ### How to install
 ```sh
 mkdir build
