@@ -216,20 +216,24 @@ namespace DWBC
         return RigidBodyDynamics::Body(mass, com_position_l_, (RigidBodyDynamics::Math::Matrix3d)inertia);
     }
 
-    void Link::AddLink(Link &link, Matrix3d &rotm, Vector3d &xpos)
+    void Link::AddLink(Link &other_link, Matrix3d &rotm, Vector3d &xpos)
     {
-        double new_mass = mass + link.mass;
+        double new_mass = mass + other_link.mass;
 
-        Vector3d link_com = rotm * link.com_position_l_ + xpos;
-        Vector3d new_com = (mass * com_position_l_ + link.mass * link_com) / new_mass;
 
-        Matrix3d com_skm = skew(link.com_position_l_);
-        Matrix3d inertia_other = link.inertia + link.mass * com_skm * com_skm.transpose(); 
+
+        Vector3d other_com = rotm * other_link.com_position_l_ + xpos;
+        Vector3d new_com = (mass * com_position_l_ + other_link.mass * other_com) / new_mass;
+
+        Matrix3d com_skm = skew(other_link.com_position_l_);
+        Matrix3d inertia_other = other_link.inertia + other_link.mass * com_skm * com_skm.transpose(); 
 
         Matrix3d com_skm_this = skew(com_position_l_);
         Matrix3d inertia_this = inertia + mass * com_skm_this * com_skm_this.transpose(); 
 
-        Matrix3d inertia_other_com_rotated_this_origin = rotm * link.inertia * rotm.transpose() + link.mass * com_skm * com_skm.transpose();
+        Matrix3d com_skm_other = skew(other_com);
+
+        Matrix3d inertia_other_com_rotated_this_origin = rotm * other_link.inertia * rotm.transpose() + other_link.mass * com_skm_other * com_skm_other.transpose();
         Matrix3d inertia_summed = inertia_this + inertia_other_com_rotated_this_origin;
         Matrix3d new_inertia = inertia_summed - new_mass * skew(new_com) * skew(new_com).transpose();
         
