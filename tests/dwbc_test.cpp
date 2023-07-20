@@ -561,14 +561,32 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
         0, 0,
         -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
 
+    qdot.setRandom(rd_.model_.qdot_size);
+    qdot.segment(0, 6).setZero();
+
+    // std::cout << qdot.transpose() << std::endl;
+
     rd_.UpdateKinematics(q, qdot, qddot);
+    Eigen::VectorXd ans1, ans2;
 
     BENCHMARK("angular momentum matrix calculation")
     {
-        rd_.CalcAngularMomentumMatrix() * qdot;
+        ans1 = rd_.CalcAngularMomentumMatrix() * qdot;
     };
 
-    REQUIRE(rd_.ang_momentum_.isApprox((rd_.CalcAngularMomentumMatrix() * qdot), 1e-5) == true);
+    Eigen::MatrixXd cmm = Eigen::MatrixXd::Zero(3, rd_.model_.qdot_size);
+    BENCHMARK("angular momentum matrix calculation2")
+    {
+        rd_.CalcAngularMomentumMatrix(cmm);
+
+        ans2 = cmm * qdot;
+    };
+    // std::cout << std::endl;
+    // std::cout << rd_.ang_momentum_.transpose() << std::endl;
+    // std::cout << (rd_.CalcAngularMomentumMatrix() * qdot).transpose() << std::endl;
+    // std::cout << (rd_.CMM_ * qdot).transpose() << std::endl;
+
+    REQUIRE(ans1.isApprox((ans2), 1e-5) == true);
 
     Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
 
@@ -576,31 +594,31 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
     Eigen::MatrixXd j_temp = MatrixXd::Zero(6, rd_.system_dof_);
 
-    BENCHMARK("angular momentum matrix calculation")
-    {
-        rotm.block(0, 0, 3, 3) = rd_.link_[i].rotm;
-        rotm.block(3, 3, 3, 3) = rd_.link_[i].rotm;
-    };
-    BENCHMARK("angular momentum matrix calculation2")
-    {
-        rd_.link_[i].GetSpatialInertiaMatrix();
-    };
+    // BENCHMARK("angular momentum matrix calculation")
+    // {
+    //     rotm.block(0, 0, 3, 3) = rd_.link_[i].rotm;
+    //     rotm.block(3, 3, 3, 3) = rd_.link_[i].rotm;
+    // };
+    // BENCHMARK("angular momentum matrix calculation2")
+    // {
+    //     rd_.link_[i].GetSpatialInertiaMatrix();
+    // };
 
-    BENCHMARK("angular momentum matrix calculation3")
-    {
-        j_temp.topRows(3) = rd_.link_[i].jac_.bottomRows(3);
-        j_temp.bottomRows(3) = rd_.link_[i].jac_.topRows(3);
-    };
-    MatrixXd H_TEMP1, H_temp2;
+    // BENCHMARK("angular momentum matrix calculation3")
+    // {
+    //     j_temp.topRows(3) = rd_.link_[i].jac_.bottomRows(3);
+    //     j_temp.bottomRows(3) = rd_.link_[i].jac_.topRows(3);
+    // };
+    // MatrixXd H_TEMP1, H_temp2;
 
-    BENCHMARK("angular momentum matrix calculation4")
-    {
-        H_TEMP1 = ((rd_.link_[i].GetSpatialTranform() * rd_.link_[i].GetSpatialInertiaMatrix()) * rotm.transpose());
-    };
-    BENCHMARK("angular momentum matrix calculation5")
-    {
-        H_temp2 = H_TEMP1 * j_temp;
-    };
+    // BENCHMARK("angular momentum matrix calculation4")
+    // {
+    //     H_TEMP1 = ((rd_.link_[i].GetSpatialTranform() * rd_.link_[i].GetSpatialInertiaMatrix()) * rotm.transpose());
+    // };
+    // BENCHMARK("angular momentum matrix calculation5")
+    // {
+    //     H_temp2 = H_TEMP1 * j_temp;
+    // };
 }
 TEST_CASE("MODEL MODIFICATION BENCHMARK")
 {
@@ -785,7 +803,7 @@ TEST_CASE("COPY AND CALCULATION TEST")
     rd2_.LoadModelData(urdf_path, true, false);
 
     // Gen Matrix File
-    rd2_.check_mat_file_ = true;
+    // rd2_.check_mat_file_ = true;
     rd_.UpdateKinematics(q, qdot, qddot);
 
     rd_.CopyKinematicsData(rd2_);
