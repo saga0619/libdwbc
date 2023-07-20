@@ -780,6 +780,7 @@ VectorXd RobotData::getContactForce(const VectorXd &command_torque)
 
 int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
 {
+
     // return fstar & contact force;
     int task_dof = ts_.f_star_.size(); // size of task
     int contact_index = cc_.size();    // size of contact link
@@ -789,6 +790,19 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     int model_size = model_dof_;       // size of joint
 
     int torque_limit_constraint_size = 2 * model_size;
+
+    if (init_trigger)
+    {
+        if (torque_limit_set_)
+        {
+            if (model_size != torque_limit_.size())
+            {
+                cout << "Error : task qp torque limit size is not matched with model size! model dof :" << model_dof_ << "torque limit size : " << torque_limit_.size() << endl;
+            }
+        }
+
+        // if(task_null_matrix_.)
+    }
 
     for (int i = 0; i < contact_index; i++)
     {
@@ -1026,6 +1040,15 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool init)
     int contact_constraint_size = 0; // size of constraint by contact
     int model_size = model_dof_;     // size of joints
     int torque_limit_constraint_size = 2 * model_size;
+
+    if (init)
+    {
+        // Matrix validation
+        if (torque_input.size() != model_size)
+        {
+            cout << "Contact Redistribution : torque input size is not matched with model size" << endl;
+        }
+    }
 
     for (int i = 0; i < contact_index; i++)
     {
