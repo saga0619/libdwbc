@@ -1240,7 +1240,7 @@ void RobotData::CalcAngularMomentumMatrix(MatrixXd &cmm)
     cmm = H_C.topRows(3) - skew(link_.back().xpos) * H_C.bottomRows(3);
 }
 
-void RobotData::CalcVirtualCMM(RigidBodyDynamics::Model _v_model, std::vector<Link> &_link, Vector3d &_com_pos, MatrixXd &_cmm)
+void RobotData::CalcVirtualCMM(RigidBodyDynamics::Model _v_model, std::vector<Link> &_link, Vector3d &_com_pos, MatrixXd &_cmm, bool verbose)
 {
     Eigen::MatrixXd H_C = MatrixXd::Zero(6, _v_model.qdot_size);
     int link_size = _link.size();
@@ -1255,6 +1255,11 @@ void RobotData::CalcVirtualCMM(RigidBodyDynamics::Model _v_model, std::vector<Li
         Eigen::Matrix3d i_ = _link[i].inertia;
         Eigen::Vector3d c_ = _link[i].com_position_l_;
         Eigen::Vector3d x_ = _link[i].xpos;
+
+        if (verbose)
+        {
+            std::cout << "link name : " << _link[i].name_ << " pos : " << x_.transpose() << std::endl;
+        }
         double m_ = _link[i].mass;
 
         H_C.topRows(3) += (r_ * (i_ + skew(c_) * skew(c_).transpose() * m_) * r_.transpose() + skew(x_) * r_ * skew(c_).transpose() * m_ * r_.transpose()) * _link[i].jac_.bottomRows(3) + (r_ * skew(c_) * m_ * r_.transpose() + m_ * skew(x_)) * _link[i].jac_.topRows(3);
@@ -1583,7 +1588,7 @@ void RobotData::DeleteLink(int link_idx, bool verbose)
     // }
 
     // Re update model data
-    InitAfterModelMod(DELETE_LINK, link_idx);
+    InitAfterModelMod(DELETE_LINK, link_idx, verbose);
 
     if (verbose)
     {
@@ -1709,7 +1714,7 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
 {
     if (verbose)
     {
-        std::cout << "re-initialize model" << std::endl;
+        std::cout << "Re initializing RobotData :: input link : " << link_[link_id].name_ << std::endl;
     }
     int change_link_id = link_id;
     int corresponding_body_id = link_[change_link_id].body_id_;
@@ -1917,8 +1922,8 @@ void RobotData::ChangeLinkToFixedJoint(std::string link_name, bool verbose)
     Link link = link_[link_idx];
     if (verbose)
     {
-        std::cout << "Delete link id : " << link_idx << std::endl;
-        link.Print();
+        std::cout << "Changing link to fixed joint link! id : " << link_idx << std::endl;
+        // link.Print();
     }
 
     Joint joint = joint_[link_idx];
@@ -1927,7 +1932,7 @@ void RobotData::ChangeLinkToFixedJoint(std::string link_name, bool verbose)
     DeleteLink(link_name, verbose);
 
     // Add link
-    AddLink(joint, link);
+    AddLink(joint, link, verbose);
     if (verbose)
         std::cout << "Deleted Link : " << link_name << " and Added Link : " << link_name << " as fixed joint." << std::endl;
 }
@@ -1998,12 +2003,54 @@ void RobotData::UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtu
     RigidBodyDynamics::UpdateKinematicsCustom(vmodel, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
     RigidBodyDynamics::CompositeRigidBodyAlgorithm(vmodel, q_virtual, A_v_, false);
 
-    for (int i = 0; i < links.size(); i++)
+    double total_mass = 0;
+
+    // vmodel.mas
+
+    if (links.back().name_ != "COM")
     {
+        std::cout << "Last link name is not COM" << std::endl;
+        links.push_back(Link());
+        links.back().name_ = "COM";
+    }
+
+    std::vector<std::future<void>> async;
+
+    for (int i = 0; i < links.size() - 1; i++)
+    {
+        // calculate upateAll with multithread
+
+        // async.emplace_back(std::async(std::launch::async, &Link::UpdateAll, &links[i], std::ref(vmodel), std::ref(q_virtual), std::ref(q_dot_virtual)));
         links[i].UpdateAll(vmodel, q_virtual, q_dot_virtual);
+
         joints[i].parent_rotation_ = vmodel.X_lambda[links[i].body_id_].E.transpose();
         joints[i].parent_translation_ = vmodel.X_lambda[links[i].body_id_].r;
+
+        total_mass += links[i].mass;
     }
+
+    // for (auto &th : async)
+    // {
+    //     th.wait();
+    // }
+
+    MatrixXd jac_com_;
+
+    jac_com_.setZero(3, vmodel.qdot_size);
+
+    Vector3d com_pos = Vector3d::Zero();
+
+    for (int i = 0; i < links.size() - 1; i++)
+    {
+        jac_com_ += links[i].mass * links[i].jac_com_.topRows(3) / total_mass;
+        com_pos += links[i].mass * links[i].xpos / total_mass;
+    }
+
+    links.back().jac_com_.setZero(6, vmodel.qdot_size);
+    links.back().jac_com_.topRows(3) = jac_com_;
+    links.back().mass = total_mass;
+    links.back().xpos = com_pos;
+    links.back().xipos = com_pos;
 }
 
 void RobotData::CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass)
@@ -2014,14 +2061,14 @@ void RobotData::CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector
     // make copy of links
 
     std::vector<Link> links_copy = links;
-
+    if (links_copy.back().name_ == "COM")
+    {
+        links_copy.pop_back();
+    }
     // find end effector
-
     int child_number = -1;
     int link_num = 0;
-
     std::vector<int> end_effector_link_id;
-
     // print all links name, parent id, child id, mass, xpos, mass, inertia
     // std::cout << "All links info" << std::endl;
     // for (int i = 0; i < links_copy.size(); i++)
@@ -2038,6 +2085,15 @@ void RobotData::CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector
     //     std::cout << " link inertia : " << links_copy[i].inertia << std::endl;
     //     std::cout << std::endl;
     // }
+
+    Link base_link;
+    base_link.name_ = "base_link";
+
+    base_link.mass = 0;
+    base_link.com_position_l_.setZero();
+    base_link.inertia.setZero();
+    base_link.rotm.setIdentity();
+    base_link.xpos.setZero();
 
     while (true) // repeat until the links_copy has only one link, which is the base link
     {
@@ -2087,27 +2143,30 @@ void RobotData::CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector
     // std::cout << "" << links_copy[0].name_ << " mass : " << links_copy[0].mass << std::endl;
     // std::cout << "base pos : " << links_copy[0].xpos.transpose() << std::endl;
     // std::cout << "com pos : " << links_copy[0].com_position_l_.transpose() << std::endl;
-    // std::cout << links_copy[0].inertia << std::endl;
+    // std::cout << "rotm : " << std::endl
+    //           << links_copy[0].rotm << std::endl;
+    // std::cout << "inertia : " << std::endl
+    //           << links_copy[0].inertia << std::endl;
 
     new_inertia = links_copy[0].inertia;
     new_com = links_copy[0].xpos + links_copy[0].rotm * links_copy[0].com_position_l_;
     new_mass = links_copy[0].mass;
 }
 
-void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, double com_mass, bool verbose)
+void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, Vector3d &com_position, double com_mass, bool verbose)
 {
     int link_id = getLinkID(link_name);
 
     int rbdl_id = link_[link_id].body_id_;
-
-    std::cout << "Changing link " << link_name << " id : " << link_id << "rbdl id :" << rbdl_id << model_.GetBodyName(rbdl_id) << std::endl;
+    if (verbose)
+        std::cout << "Changing link " << link_name << " id : " << link_id << "rbdl id :" << rbdl_id << model_.GetBodyName(rbdl_id) << std::endl;
 
     link_[link_id].inertia = com_inertia;
-    link_[link_id].com_position_l_.setZero();
+    link_[link_id].com_position_l_ = com_position;
     link_[link_id].mass = com_mass;
 
     model_.mBodies[rbdl_id].mInertia = com_inertia;
-    model_.mBodies[rbdl_id].mCenterOfMass.setZero();
+    model_.mBodies[rbdl_id].mCenterOfMass = com_position;
     model_.mBodies[rbdl_id].mMass = com_mass;
 
     model_.I[rbdl_id] =
