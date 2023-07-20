@@ -146,7 +146,8 @@ namespace DWBC
         void LoadModelData(std::string urdf_path, bool floating, int verbose = 0);
 
         void InitModelData(int verbose = 0);
-
+        
+        void InitializeMatrix();
         /*
         Calculate Gravity Compensation
         */
@@ -156,6 +157,7 @@ namespace DWBC
         void SetTorqueLimit(const VectorXd &torque_limit); /* Set torque limit */
 
         void UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual, bool update_kinematics = true);
+        void UpdateKinematics(bool update_kinematics = true);
 
         /*
         Add Contact constraint

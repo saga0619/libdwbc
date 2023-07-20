@@ -99,6 +99,25 @@ void RobotData::SetTorqueLimit(const VectorXd &torque_limit)
     torque_limit_ = torque_limit;
 }
 
+void RobotData::InitializeMatrix()
+{
+    q_system_.setZero(model_.q_size);
+    q_dot_system_.setZero(model_.qdot_size);
+    q_ddot_system_.setZero(model_.qdot_size);
+
+    J_com_.setZero(6, system_dof_);
+
+    A_.setZero(system_dof_, system_dof_);
+    A_inv_.setZero(system_dof_, system_dof_);
+
+    G_.setZero(system_dof_);
+    torque_grav_.setZero(model_dof_);
+    torque_task_.setZero(model_dof_);
+    torque_contact_.setZero(model_dof_);
+
+    torque_limit_.setZero(model_dof_);
+}
+
 void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_virtual, const VectorXd q_ddot_virtual, bool update_kinematics)
 {
     // check q size and q_dot size
@@ -121,7 +140,7 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     q_dot_system_ = q_dot_virtual;
     q_ddot_system_ = q_ddot_virtual;
 
-    A_.setZero();
+    A_.setZero(system_dof_, system_dof_);
     if (update_kinematics)
     {
         RigidBodyDynamics::UpdateKinematicsCustom(model_, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
@@ -150,7 +169,7 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     RigidBodyDynamics::Math::Vector3d com_acc;
     RigidBodyDynamics::Math::Vector3d com_vel;
     RigidBodyDynamics::Math::Vector3d ang_momentum;
-    RigidBodyDynamics::Utils::CalcCenterOfMass(model_, q_system_, q_dot_system_, &q_ddot_system_, mass_, com, &com_vel, &com_acc, &ang_momentum);
+    RigidBodyDynamics::Utils::CalcCenterOfMass(model_, q_system_, q_dot_virtual, &q_ddot_system_, mass_, com, &com_vel, &com_acc, &ang_momentum);
 
     ang_momentum_ = ang_momentum;
     com_pos = com;
@@ -160,6 +179,9 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
 
     link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
     link_.back().w = link_[0].w;
+    link_.back().mass = mass_;
+
+    total_mass_ = mass_;
 
     link_.back().jac_.setZero(6, system_dof_);
     link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
@@ -171,7 +193,81 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     B_.setZero(system_dof_);
     RigidBodyDynamics::NonlinearEffects(model_, q_virtual, q_dot_virtual, B_);
 
-    UpdateContactConstraint();
+    // UpdateContactConstraint();
+}
+void RobotData::UpdateKinematics(bool update_kinematics)
+{
+    // check q size and q_dot size
+    // if (model_.q_size != q_virtual.size())
+    // {
+    //     std::cout << "q size is not matched : qsize : " << model_.q_size << " input size : " << q_virtual.size() << std::endl;
+    //     return;
+    // }
+    // if (model_.qdot_size != q_dot_virtual.size())
+    // {
+    //     std::cout << "q_dot size is not matched" << std::endl;
+    //     return;
+    // }
+    // if (model_.qdot_size != q_ddot_virtual.size())
+    // {
+    //     std::cout << "q_ddot size is not matched" << std::endl;
+    //     return;
+    // }
+
+    A_.setZero(system_dof_, system_dof_);
+    if (update_kinematics)
+    {
+        RigidBodyDynamics::UpdateKinematicsCustom(model_, &q_system_, &q_dot_system_, &q_ddot_system_);
+        RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, q_system_, A_, false);
+        // A_inv_ = A_.inverse();
+        A_inv_ = A_.llt().solve(Eigen::MatrixXd::Identity(system_dof_, system_dof_)); // Faster than inverse()
+    }
+    J_com_.setZero(3, system_dof_);
+    G_.setZero(system_dof_);
+    for (int i = 0; i < (link_.size() - 1); i++)
+    {
+        link_[i].UpdateAll(model_, q_system_, q_dot_system_);
+        J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
+        // com_pos += link_[i].xipos * link_[i].mass / total_mass_;
+
+        joint_[i].parent_rotation_ = model_.X_lambda[link_[i].body_id_].E.transpose();
+        joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
+    }
+
+    G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
+
+    CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
+
+    double mass_;
+    RigidBodyDynamics::Math::Vector3d com;
+    RigidBodyDynamics::Math::Vector3d com_acc;
+    RigidBodyDynamics::Math::Vector3d com_vel;
+    RigidBodyDynamics::Math::Vector3d ang_momentum;
+    RigidBodyDynamics::Utils::CalcCenterOfMass(model_, q_system_, q_dot_system_, &q_ddot_system_, mass_, com, &com_vel, &com_acc, &ang_momentum);
+
+    ang_momentum_ = ang_momentum;
+    com_pos = com;
+
+    link_.back().xpos = com_pos;
+    link_.back().xipos = com_pos;
+
+    link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
+    link_.back().w = link_[0].w;
+    link_.back().mass = mass_;
+
+    total_mass_ = mass_;
+
+    link_.back().jac_.setZero(6, system_dof_);
+    link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
+    link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
+    link_.back().jac_com_ = J_com_;
+
+    link_.back().v = com_vel;
+
+    B_.setZero(system_dof_);
+    RigidBodyDynamics::NonlinearEffects(model_, q_system_, q_dot_system_, B_);
+
+    // UpdateContactConstraint();
 }
 
 void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
@@ -269,6 +365,8 @@ int RobotData::CalcContactConstraint(bool update)
 
     V2.setZero(contact_null_dof, model_dof_);
     NwJw.setZero(model_dof_, model_dof_);
+
+    P_C.setZero(contact_dof_, system_dof_);
 
     return CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, W, NwJw, W_inv, V2);
 }
@@ -549,6 +647,11 @@ void RobotData::LoadModelData(std::string urdf_path, bool floating, int verbose)
     }
     RigidBodyDynamics::Addons::URDFReadFromFile(urdf_path.c_str(), &model_, floating, rbdl_v);
 
+    if (verbose)
+    {
+        std::cout << "rbdl urdf load success " << std::endl;
+    }
+
     InitModelData(verbose);
 }
 
@@ -653,21 +756,7 @@ void RobotData::InitModelData(int verbose)
 
         std::cout << vlink << " : " << link_.back().name_ << std::endl;
     }
-    q_system_.setZero(model_.q_size);
-    q_dot_system_.setZero(model_.qdot_size);
-    q_ddot_system_.setZero(model_.qdot_size);
-
-    J_com_.setZero(6, system_dof_);
-
-    A_.setZero(system_dof_, system_dof_);
-    A_inv_.setZero(system_dof_, system_dof_);
-
-    G_.setZero(system_dof_);
-    torque_grav_.setZero(model_dof_);
-    torque_task_.setZero(model_dof_);
-    torque_contact_.setZero(model_dof_);
-
-    torque_limit_.setZero(model_dof_);
+    InitializeMatrix();
 }
 
 VectorXd RobotData::CalcGravCompensation()
