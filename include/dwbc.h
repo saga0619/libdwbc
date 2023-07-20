@@ -224,7 +224,7 @@ namespace DWBC
         /*
         Set fstar or jtask or specific task heirarchy
         */
-        void SetTaskSpace(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task = MatrixXd::Zero(1, 1));
+        void SetTaskSpace(int heirarchy, const VectorXd &f_star, const MatrixXd &J_task = MatrixXd::Zero(1, 1));
 
         /*
         Update Task Space information

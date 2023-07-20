@@ -303,7 +303,7 @@ void RobotData::AddTaskSpace(int task_mode, int link_number, Vector3d task_point
         }
     }
 
-    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].body_id_, task_point));
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, task_point));
 
     AddQP();
 }
@@ -341,12 +341,16 @@ void RobotData::AddTaskSpace(int task_mode, const char *link_name, Vector3d task
         }
     }
 
-    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, link_[link_number].body_id_, task_point));
+    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, task_point));
 
     AddQP();
 }
-void RobotData::SetTaskSpace(int heirarchy, const MatrixXd &f_star, const MatrixXd &J_task)
+void RobotData::SetTaskSpace(int heirarchy, const VectorXd &f_star, const MatrixXd &J_task)
 {
+    if (ts_[heirarchy].task_dof_ != f_star.size())
+    {
+        std::cout << "ERROR : task dof not matching " << std::endl;
+    }
     if (heirarchy >= ts_.size())
     {
         std::cout << "ERROR : task space size overflow" << std::endl;
@@ -367,24 +371,61 @@ void RobotData::UpdateTaskSpace()
 {
     for (int i = 0; i < ts_.size(); i++)
     {
-        if (ts_[i].task_mode_ == TASK_LINK_6D)
+        switch (ts_[i].task_mode_)
         {
-            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
+        case TASK_LINK_6D:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_;
 
             if (ts_[i].traj_pos_set)
             {
-                ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
-                                     link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
+                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xpos, link_[ts_[i].link_id_].v);
+            }
+            if (ts_[i].traj_rot_set)
+            {
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
+            }
+            break;
+        case TASK_LINK_6D_COM_FRAME:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_com_;
+
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xipos, link_[ts_[i].link_id_].vi);
             }
 
             if (ts_[i].traj_rot_set)
             {
                 ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
             }
-        }
-        else if (ts_[i].task_mode_ == TASK_LINK_POSITION)
-        {
+            break;
+        case TASK_LINK_6D_CUSTOM_FRAME:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_,
+                                     link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
+                                     link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
+            }
+            if (ts_[i].traj_rot_set)
+            {
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
+            }
+            break;
+        case TASK_LINK_POSITION:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_.topRows(3);
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xpos, link_[ts_[i].link_id_].v);
+            }
+            break;
+        case TASK_LINK_POSITION_COM_FRAME:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_com_.topRows(3);
+            if (ts_[i].traj_pos_set)
+            {
+                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xipos, link_[ts_[i].link_id_].vi);
+            }
+            break;
+        case TASK_LINK_POSITION_CUSTOM_FRAME:
             ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).topRows(3);
             if (ts_[i].traj_pos_set)
             {
@@ -392,24 +433,23 @@ void RobotData::UpdateTaskSpace()
                                      link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
                                      link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
             }
-        }
-        else if (ts_[i].task_mode_ == TASK_LINK_ROTATION)
-        {
-            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).bottomRows(3);
+            break;
+        case TASK_LINK_ROTATION:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_.bottomRows(3);
             if (ts_[i].traj_rot_set)
             {
                 ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
             }
-        }
-        else if (ts_[i].task_mode_ == TASK_COM_POSITION)
-        {
-            ts_[i].J_task_ = link_.back().jac_.topRows(3);
-            if (ts_[i].traj_pos_set)
+            break;
+        case TASK_LINK_ROTATION_CUSTOM_FRAME:
+            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_.bottomRows(3);
+            if (ts_[i].traj_rot_set)
             {
-                ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_id_].xpos,
-                                     link_[ts_[i].link_id_].v);
+                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
             }
+            break;
+        default:
+            break;
         }
     }
 }

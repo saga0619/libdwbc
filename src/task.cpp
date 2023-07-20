@@ -9,41 +9,38 @@ namespace DWBC
     TaskSpace::TaskSpace(int task_mode, int heirarchy, int task_dof)
     {
         task_dof_ = task_dof;
-
         task_mode_ = task_mode;
-
         heirarchy_ = heirarchy;
     }
 
     // Typical pos/rot task initialzer
-    TaskSpace::TaskSpace(int task_mode, int heirarchy, int link_number, int body_id, const Vector3d &task_point)
+    TaskSpace::TaskSpace(int task_mode, int heirarchy, int link_number, const Vector3d &task_point)
     {
         task_mode_ = task_mode;
-
         heirarchy_ = heirarchy;
-
         link_id_ = link_number; // vector number
 
-        // body_id_ = body_id; // rbdl body id
+        // if task_mode is 1 or 2 or 3 print error
+        task_point_ = task_point;
 
-        if (task_mode == TASK_LINK_6D)
+        switch (task_mode_)
         {
+        case TASK_LINK_6D:
+        case TASK_LINK_6D_COM_FRAME:
+        case TASK_LINK_6D_CUSTOM_FRAME:
             task_dof_ = 6;
-
-            task_point_ = task_point;
-        }
-        else if (task_mode == TASK_LINK_POSITION || task_mode == TASK_LINK_ROTATION)
-        {
+            break;
+        case TASK_LINK_POSITION:
+        case TASK_LINK_POSITION_COM_FRAME:
+        case TASK_LINK_POSITION_CUSTOM_FRAME:
+        case TASK_LINK_ROTATION:
+        case TASK_LINK_ROTATION_CUSTOM_FRAME:
             task_dof_ = 3;
+            break;
+        default:
+            break;
+        }
 
-            task_point_ = task_point;
-        }
-        else if (task_mode == TASK_COM_POSITION)
-        {
-            task_dof_ = 3;
-            
-            task_point_ = task_point;
-        }
         f_star_.setZero(task_dof_);
     }
     TaskSpace::~TaskSpace() {}
@@ -122,8 +119,14 @@ namespace DWBC
 
     void TaskSpace::GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel)
     {
-        if (task_mode_ == TASK_LINK_6D || task_mode_ == TASK_LINK_POSITION || task_mode_ == TASK_COM_POSITION)
+        switch (task_mode_)
         {
+        case TASK_LINK_6D:
+        case TASK_LINK_6D_COM_FRAME:
+        case TASK_LINK_6D_CUSTOM_FRAME:
+        case TASK_LINK_POSITION:
+        case TASK_LINK_POSITION_COM_FRAME:
+        case TASK_LINK_POSITION_CUSTOM_FRAME:
             for (int j = 0; j < 3; j++)
             {
                 Eigen::Vector3d quintic = QuinticSpline(current_time, traj_start_time_, traj_end_time_, pos_init_(j), vel_init_(j), 0, pos_desired_(j), vel_deisred_(j), 0);
@@ -133,19 +136,30 @@ namespace DWBC
                 acc_traj_(j) = quintic(2);
             }
             f_star_ = pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(pos_traj_ - current_pos) + pos_d_gain_.cwiseProduct(vel_traj_ - current_vel);
+            break;
+        default:
+            break;
         }
     }
 
     void TaskSpace::GetFstarRotPD(double current_time, Matrix3d current_rot, Vector3d current_w)
     {
         int fstar_start_idx;
-        if (task_mode_ == TASK_LINK_6D)
+
+        switch (task_mode_)
         {
+        case TASK_LINK_6D:
+        case TASK_LINK_6D_COM_FRAME:
+        case TASK_LINK_6D_CUSTOM_FRAME:
             fstar_start_idx = 3;
-        }
-        else if (task_mode_ == TASK_LINK_ROTATION)
-        {
+            break;
+
+        case TASK_LINK_ROTATION:
+        case TASK_LINK_ROTATION_CUSTOM_FRAME:
             fstar_start_idx = 0;
+            break;
+        default:
+            break;
         }
 
         MatrixXd rot_traj;

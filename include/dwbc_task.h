@@ -13,14 +13,27 @@ namespace DWBC
     enum TASK_MODE
     {
         TASK_LINK_6D,
+        TASK_LINK_6D_COM_FRAME,
+        TASK_LINK_6D_CUSTOM_FRAME,
         TASK_LINK_POSITION,
+        TASK_LINK_POSITION_COM_FRAME,
+        TASK_LINK_POSITION_CUSTOM_FRAME,
         TASK_LINK_ROTATION,
+        TASK_LINK_ROTATION_CUSTOM_FRAME,
         TASK_CUSTOM,
-        TASK_COM_POSITION,
         TASK_NULL,
     };
 
-    static const char *taskmode_str[] = {"TASK_LINK_6D", "TASK_LINK_POSITION", "TASK_LINK_ROTATION", "TASK_CUSTOM", "TASK_COM_POSITION"};
+    static const char *taskmode_str[] = {"TASK_LINK_6D",
+                                         "TASK_LINK_6D_COM_FRAME",
+                                         "TASK_LINK_6D_CUSTOM_FRAME",
+                                         "TASK_LINK_POSITION",
+                                         "TASK_LINK_ROTATION",
+                                         "TASK_LINK_POSITION_COM_FRAME",
+                                         "TASK_LINK_POSITION_CUSTOM_FRAME",
+                                         "TASK_LINK_ROTATION_CUSTOM_FRAME",
+                                         "TASK_CUSTOM",
+                                         "TASK_NULL"};
 
     class TaskSpace
     {
@@ -85,7 +98,7 @@ namespace DWBC
 
         TaskSpace(int task_mode, int heirarchy, int task_dof);
 
-        TaskSpace(int task_mode, int heirarchy, int link_number, int link_id, const Vector3d &task_point);
+        TaskSpace(int task_mode, int heirarchy, int link_number, const Vector3d &task_point);
         ~TaskSpace();
 
         void Update(const VectorXd &f_star);
