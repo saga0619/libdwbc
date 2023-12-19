@@ -1293,17 +1293,17 @@
     name="Neck_Link">
     <inertial>
       <origin
-        xyz="0.044499479224888 0.0 0.138941347059794"
+        xyz="0.0 0 -0.0023"
         rpy="0 0 0" />
       <mass
-        value="2.254332" />
+        value="0.248" />
       <inertia
-        ixx="0.025663108441041"
-        ixy="-0.000020644"
-        ixz="0.003089662703541"
-        iyy="0.027741081983429"
-        iyz="0.000155358"
-        izz="0.015464168542389" />
+        ixx="0.000058259"
+        ixy="-0.000000076"
+        ixz="0.000000268"
+        iyy="0.000036489"
+        iyz="-0.000001002"
+        izz="0.000058237" />
     </inertial>
     <visual>
       <origin
@@ -1330,7 +1330,7 @@
   </link>
   <joint
     name="Neck_Joint"
-    type="revolute">
+    type="fixed">
     <origin
       xyz="-0.036 0.0 0.3795"
       rpy="0 0 0" />
@@ -1338,15 +1338,62 @@
       link="Upperbody_Link" />
     <child
       link="Neck_Link" />
-    <axis
-      xyz="0 0 1" />
+  </joint>
+
+  <link
+    name="Head_Link">
+    <inertial>
+      <origin
+        xyz="0.05 0 0.1289"
+        rpy="0 0 0" />
+      <mass
+        value="2.006332" />
+      <inertia
+        ixx="0.020045929"
+        ixy="-0.000020568"
+        ixz="-0.001338538"
+        iyy="0.021593879"
+        iyz="0.000156360"
+        izz="0.014854138" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://tocabi_description/meshes/head.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.792156862745098 0.819607843137255 0.933333333333333 1" />
+      </material>
+    </visual>
+	<collision>
+      <origin
+        xyz="0 0 0.05"
+        rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.043" radius="0.07"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="Head_Joint"
+    type="fixed">
+    <origin
+      xyz="0.0 0.0 0.0275"
+      rpy="0 0 0" />
+    <parent
+      link="Neck_Link" />
+    <child
+      link="Head_Link" />
     <limit
       lower="-1.54"
       upper="1.54"
       effort="500"
       velocity="100" />
-	<dynamics
-      damping="5" />
   </joint>
   
     <link

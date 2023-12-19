@@ -1984,6 +1984,192 @@ void RobotData::printLinkInfo()
     }
 }
 
+void RobotData::CreateVModel()
+{
+    // Check Contact Status
+    // Store VModel contact info
+    // create vmodel with contact info
+
+    link_v_ = link_;
+    // vlink_idx_.resize(link_v_.size());
+
+    link_v_.erase(link_v_.begin()); // del pelvis link
+    // vlink_idx_[0] = 1;
+
+    joint_v_ = joint_;
+    joint_v_.erase(joint_v_.begin()); // del pelvis joint
+
+    int total_contact_depend_link_num = 1;
+
+    for (int i = 0; i < link_v_.size(); i++)
+    {
+        link_v_[i].link_id_--;
+        link_v_[i].parent_id_--;
+        for (int j = 0; j < link_v_[i].child_id_.size(); j++)
+        {
+            link_v_[i].child_id_[j]--;
+        }
+    }
+
+    // std::vector<int> cd_link_id_;
+
+    for (int i = 0; i < cc_.size(); i++)
+    {
+
+        if (cc_[i].contact)
+        {
+            // std::cout << "cc link number : " << cc_[i].link_number_ << " cc contact : " << cc_[i].contact << std::endl;
+            int contact_link = cc_[i].link_number_ - total_contact_depend_link_num;
+
+            int link_num_to_base = 0;
+            int link_num = contact_link;
+            int start_link_id = 0;
+
+            auto end = link_v_.begin() + contact_link;
+            auto start = link_v_.begin();
+            // std::cout << link_v_[contact_link].name_ << " ";
+
+            while (true)
+            {
+                if (link_num < 0)
+                    break;
+
+                int parent_id = link_v_[link_num].parent_id_;
+
+                start = link_v_.begin() + link_num;
+                start_link_id = link_num;
+
+                std::cout << link_v_[link_num].name_ << " ";
+
+                link_num = parent_id;
+                link_num_to_base++;
+
+                if (link_v_[parent_id].child_id_.size() > 1)
+                    break;
+            }
+
+            // std::cout << "link num to base = " << link_num_to_base << std::endl;
+
+            // If parent id of start link is not -1, then erase the corresponding child_id of parent link.
+
+            link_v_.erase(link_v_.begin() + start_link_id, link_v_.begin() + contact_link + 1);
+            joint_v_.erase(joint_v_.begin() + start_link_id, joint_v_.begin() + contact_link + 1);
+
+            if ((*start).parent_id_ != -1) // if parent is not pelvis,
+            {
+                for (int cid = 0; cid < link_v_[(*start).parent_id_].child_id_.size(); cid++)
+                {
+                    if (link_v_[(*start).parent_id_].child_id_[cid] == start_link_id)
+                    {
+                        link_v_[(*start).parent_id_].child_id_.erase(link_v_[(*start).parent_id_].child_id_.begin() + cid);
+                        break;
+                    }
+                }
+            }
+
+            for (int j = 0; j < link_v_.size(); j++)
+            {
+                if (link_v_[j].link_id_ > contact_link)
+                    link_v_[j].link_id_ -= link_num_to_base;
+                if (link_v_[j].parent_id_ > contact_link)
+                    link_v_[j].parent_id_ -= link_num_to_base;
+                for (int k = 0; k < link_v_[j].child_id_.size(); k++)
+                {
+                    if (link_v_[j].child_id_[k] > contact_link)
+                        link_v_[j].child_id_[k] -= link_num_to_base;
+                }
+            }
+
+            std::cout << " start : " << start_link_id + total_contact_depend_link_num << " end : " << contact_link + total_contact_depend_link_num << std::endl;
+            total_contact_depend_link_num += link_num_to_base;
+        }
+    }
+
+    link_v_.erase(link_v_.end() - 1); // del COM link
+    // std::cout << "total removed link : " << total_contact_depend_link_num << std::endl;
+
+    // for (int i = 0; i < link_v_.size(); i++)
+    // {
+    //     std::cout << "vlink id : " << link_v_[i].link_id_ << " link name : " << link_v_[i].name_ << " parent id : " << link_v_[i].parent_id_ << " child id : ";
+    //     for (int j = 0; j < link_v_[i].child_id_.size(); j++)
+    //     {
+    //         std::cout << link_v_[i].child_id_[j] << " ";
+    //     }
+    //     std::cout << " joint idx : " << joint_v_[i].joint_id_ << std::endl;
+    // }
+
+    InitModelWithLinkJoint(model_v_, link_v_, joint_v_);
+
+    std::cout << "V MOdel construct complete" << std::endl;
+
+    vlink_idx_.resize(link_.size() - 1);
+
+    for (int i = 0; i < link_v_.size(); i++)
+    {
+        vlink_idx_[link_v_[i].link_id_original_] = 1;
+    }
+
+    // print vlink idx
+    // for (int i = 0; i < vlink_idx_.size(); i++)
+    // {
+    //     std::cout << "vlink idx : " << i << " : " << vlink_idx_[i] << std::endl;
+    // }
+
+    link_v_.push_back(Link());
+    link_v_.back().name_ = "COM"; // Creating COM link again
+
+    // link_cs_ = link_;
+    for (int i = 0; i < vlink_idx_.size(); i++)
+    {
+        if (vlink_idx_[i] == 0)
+        {
+            link_cs_.push_back(link_[i]);
+            joint_cs_.push_back(joint_[i]);
+        }
+    }
+
+    // for (int i = 0; i < link_cs_.size(); i++)
+    // {
+    //     std::cout << "link_cs_[" << i << "].link_id_ : " << link_cs_[i].link_id_ << " link name : " << link_cs_[i].name_;
+    //     std::cout << "joint_cs_[" << i << "].joint_id_ : " << joint_cs_[i].joint_id_ << std::endl;
+
+    // }
+
+    InitModelWithLinkJoint(model_cs_, link_cs_, joint_cs_);
+
+    // RigidBodyDynamics::
+
+    link_cs_.push_back(Link());
+    link_cs_.back().name_ = "COM"; // Creating COM link again
+    // for (int i = 0; i < link_cs_.size(); i++)
+    // {
+    //     link_cs_[i].parent_id_ = 0;
+    //     link_cs_[i].child_id_.clear();
+    //     link_cs_[i].link_id_ = i;
+    //     link_cs_[i].link_id_original_ = i;
+    // }
+
+    // for (int i = 0; i < link_cs_.size(); i++)
+    // {
+    //     int temp_parent_body_id = model_cs_.lambda[link_cs_[i].body_id_];
+
+    //     for (int j = 0; j < link_cs_.size(); j++)
+    //     {
+    //         if (temp_parent_body_id == link_cs_[j].body_id_)
+    //         {
+
+    //             link_cs_[i].parent_id_ = j;
+    //             link_cs_[j].child_id_.push_back(i);
+    //         }
+    //     }
+    // }
+
+    // link_cs_.push_back(Link()); // Add link for COM
+    // link_cs_.back().name_ = "COM";
+
+    std::cout << "C-dependant model construct complete" << std::endl;
+}
+
 void RobotData::InitModelWithLinkJoint(RigidBodyDynamics::Model &lmodel, std::vector<Link> &links, std::vector<Joint> &joints)
 {
     lmodel = RigidBodyDynamics::Model();
@@ -2031,39 +2217,251 @@ void RobotData::InitModelWithLinkJoint(RigidBodyDynamics::Model &lmodel, std::ve
         links[i].body_id_ = added_id;
     }
 }
+
+void RobotData::UpdateVModel()
+{
+    Eigen::VectorXd q_v_, q_dot_v_, q_ddot_v_;
+    q_v_.setZero(model_v_.q_size);
+    q_dot_v_.setZero(model_v_.qdot_size);
+    q_ddot_v_.setZero(model_v_.qdot_size);
+
+    if (model_v_.q_size != model_v_.qdot_size)
+    {
+        std::cout << "model_v_.q_size != model_v_.qdot_size" << std::endl;
+        return;
+    }
+
+    if (model_v_.q_size != joint_v_.size())
+    {
+        std::cout << "model_v_.q_size != joint_v_.size()" << std::endl;
+        return;
+    }
+
+    for (int i = 0; i < model_v_.q_size; i++)
+    {
+        q_v_[i] = q_system_[joint_v_[i].joint_id_];
+        q_dot_v_[i] = q_dot_system_[joint_v_[i].joint_id_];
+        q_ddot_v_[i] = q_ddot_system_[joint_v_[i].joint_id_];
+    }
+
+    Eigen::VectorXd q_cs_, q_dot_cs_, q_ddot_cs_;
+    q_cs_.setZero(model_cs_.q_size);
+    q_dot_cs_.setZero(model_cs_.qdot_size);
+    q_ddot_cs_.setZero(model_cs_.qdot_size);
+
+    if (model_cs_.q_size - 1 != model_cs_.qdot_size)
+    {
+        std::cout << "model_v_.q_size != model_v_.qdot_size" << std::endl;
+        return;
+    }
+
+    if (model_cs_.q_size != joint_cs_.size() + 6)
+    {
+        std::cout << "model_v_.q_size != joint_v_.size()" << model_cs_.q_size << " != " << joint_cs_.size() + 6 << std::endl;
+        return;
+    }
+
+    q_cs_.segment(0, 6) = q_system_.segment(0, 6);
+    q_dot_cs_.segment(0, 6) = q_dot_system_.segment(0, 6);
+    q_ddot_cs_.segment(0, 6) = q_ddot_system_.segment(0, 6);
+
+    for (int i = 1; i < joint_cs_.size(); i++)
+    {
+        q_cs_[i + 5] = q_system_[joint_cs_[i].joint_id_];
+        q_dot_cs_[i + 5] = q_dot_system_[joint_cs_[i].joint_id_];
+        q_ddot_cs_[i + 5] = q_ddot_system_[joint_cs_[i].joint_id_];
+    }
+
+    q_cs_[q_cs_.size() - 1] = q_system_[q_system_.size() - 1];
+
+    UpdateVModel(q_v_, q_dot_v_, q_ddot_v_);
+
+    UpdateCSModel(q_cs_, q_dot_cs_, q_ddot_cs_);
+}
+
+void RobotData::UpdateCSModel(const VectorXd &q_virtual, const VectorXd &q_dot_virtual, const VectorXd &q_ddot_virtual)
+{
+    q_cs_system_ = q_virtual;
+    q_dot_cs_system_ = q_dot_virtual;
+    q_ddot_cs_system_ = q_ddot_virtual;
+
+    std::cout << "q in csup: " << q_virtual.transpose() << std::endl;
+
+    if (model_cs_.q_size != q_virtual.size())
     {
         std::cout << "vmodel.q_size != q_virtual.size()" << std::endl;
         return;
     }
 
-    if (vmodel.qdot_size != q_dot_virtual.size())
+    if (model_cs_.qdot_size != q_dot_virtual.size())
     {
         std::cout << "vmodel.qdot_size != q_dot_virtual.size()" << std::endl;
         return;
     }
 
-    Eigen::MatrixXd A_v_;
+    A_cs_.setZero(model_cs_.qdot_size, model_cs_.qdot_size);
 
-    A_v_.setZero(vmodel.qdot_size, vmodel.qdot_size);
+    RigidBodyDynamics::UpdateKinematicsCustom(model_cs_, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_cs_, q_virtual, A_cs_, false);
+    double total_mass = 0;
 
-    RigidBodyDynamics::UpdateKinematicsCustom(vmodel, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(vmodel, q_virtual, A_v_, false);
+    if (link_cs_.back().name_ != "COM")
+    {
+        std::cout << "Last link name is not COM" << std::endl;
+        link_cs_.push_back(Link());
+        link_cs_.back().name_ = "COM";
+    }
+
+    // std::vector<std::future<void>> async;
+
+    for (int i = 0; i < link_cs_.size() - 1; i++)
+    {
+        link_cs_[i].UpdateAll(model_cs_, q_virtual, q_dot_virtual);
+
+        // print jac of link_cs
+        // std::cout << "link_cs_[" << i << "].xpos : " << std::endl
+        //           << link_cs_[i].xpos.transpose() << " with : " << link_[i].xpos.transpose() << std::endl;
+
+        joint_cs_[i].parent_rotation_ = model_cs_.X_lambda[link_cs_[i].body_id_].E.transpose();
+        joint_cs_[i].parent_translation_ = model_cs_.X_lambda[link_cs_[i].body_id_].r;
+
+        total_mass += link_cs_[i].mass;
+    }
+
+    MatrixXd jac_com_;
+
+    jac_com_.setZero(3, model_cs_.qdot_size);
+
+    Vector3d com_pos = Vector3d::Zero();
+
+    for (int i = 0; i < link_cs_.size() - 1; i++)
+    {
+        jac_com_ += link_cs_[i].mass * link_cs_[i].jac_com_.topRows(3) / total_mass;
+        com_pos += link_cs_[i].mass * link_cs_[i].xipos / total_mass;
+    }
+
+    link_cs_.back().jac_com_.setZero(6, model_cs_.qdot_size);
+    link_cs_.back().jac_com_.topRows(3) = jac_com_;
+    link_cs_.back().mass = total_mass;
+    link_cs_.back().xpos = com_pos;
+    link_cs_.back().xipos = com_pos;
+
+    // std::cout << "link cs : " << std::endl
+    //           << link_cs_.back().jac_com_ << std::endl;
+    // std::cout << "link_cs mass : " << total_mass << std::endl;
+}
+
+void RobotData::UpdateVModel(const VectorXd &q_virtual, const VectorXd &q_dot_virtual, const VectorXd &q_ddot_virtual)
+{
+    q_v_system_ = q_virtual;
+    q_dot_v_system_ = q_dot_virtual;
+    q_ddot_v_system_ = q_ddot_virtual;
+
+    if (model_v_.q_size != q_virtual.size())
+    {
+        std::cout << "vmodel.q_size != q_virtual.size()" << std::endl;
+        return;
+    }
+
+    if (model_v_.qdot_size != q_dot_virtual.size())
+    {
+        std::cout << "vmodel.qdot_size != q_dot_virtual.size()" << std::endl;
+        return;
+    }
+
+    A_v_.setZero(model_v_.qdot_size, model_v_.qdot_size);
+
+    RigidBodyDynamics::UpdateKinematicsCustom(model_v_, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
+    RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_v_, q_virtual, A_v_, false);
 
     double total_mass = 0;
 
-    // vmodel.mas
-
-    if (links.back().name_ != "COM")
+    if (link_v_.back().name_ != "COM")
     {
         std::cout << "Last link name is not COM" << std::endl;
-        links.push_back(Link());
-        links.back().name_ = "COM";
+        link_v_.push_back(Link());
+        link_v_.back().name_ = "COM";
     }
 
-    std::vector<std::future<void>> async;
+    // std::vector<std::future<void>> async;
 
-    for (int i = 0; i < links.size() - 1; i++)
+    for (int i = 0; i < link_v_.size() - 1; i++)
     {
+        link_v_[i].UpdateAll(model_v_, q_virtual, q_dot_virtual);
+
+        // std::cout << "link_v_[" << i << "].xpos : " << std::endl
+        //           << link_v_[i].xpos.transpose() << std::endl;
+
+        joint_v_[i].parent_rotation_ = model_v_.X_lambda[link_v_[i].body_id_].E.transpose();
+        joint_v_[i].parent_translation_ = model_v_.X_lambda[link_v_[i].body_id_].r;
+
+        total_mass += link_v_[i].mass;
+    }
+
+    MatrixXd jac_com_;
+
+    // jac_com_.setZero(3, model_v_.qdot_size);
+
+    Vector3d com_pos = Vector3d::Zero();
+
+    for (int i = 0; i < link_v_.size() - 1; i++)
+    {
+        // jac_com_ += link_v_[i].mass * link_v_[i].jac_com_.topRows(3) / total_mass;
+        com_pos += link_v_[i].mass * link_v_[i].xipos / total_mass;
+    }
+
+    // link_v_.back().jac_com_.setZero(6, model_v_.qdot_size);
+    // link_v_.back().jac_com_.topRows(3) = jac_com_;
+    link_v_.back().mass = total_mass;
+    link_v_.back().xpos = com_pos;
+    link_v_.back().xipos = com_pos;
+
+    Eigen::MatrixXd inertia_matrix;
+    Eigen::VectorXd Ang_momentum;
+    CalcCOMInertia(link_v_, inertia_matrix, Ang_momentum);
+
+    Eigen::MatrixXd H_C = MatrixXd::Zero(6, model_v_.qdot_size);
+
+    for (int i = 0; i < link_v_.size() - 1; i++)
+    {
+        Eigen::Matrix3d r_ = link_v_[i].rotm;
+        Eigen::Matrix3d i_ = link_v_[i].inertia;
+        Eigen::Vector3d c_ = link_v_[i].com_position_l_;
+        Eigen::Vector3d x_ = link_v_[i].xpos;
+        double m_ = link_v_[i].mass;
+
+        H_C.topRows(3) += (r_ * (i_ + skew(c_) * skew(c_).transpose() * m_) * r_.transpose() + skew(x_) * r_ * skew(c_).transpose() * m_ * r_.transpose()) * link_v_[i].jac_.bottomRows(3) + (r_ * skew(c_) * m_ * r_.transpose() + m_ * skew(x_)) * link_v_[i].jac_.topRows(3);
+        H_C.bottomRows(3) += m_ * r_ * skew(c_).transpose() * r_.transpose() * link_v_[i].jac_.bottomRows(3) + m_ * link_v_[i].jac_.topRows(3);
+    }
+
+    MatrixXd cmm; // Centroidal Momentum Matrix
+    cmm = H_C;
+    cmm.block(0, 0, 3, model_v_.qdot_size) = H_C.topRows(3) - skew(link_v_.back().xpos) * H_C.bottomRows(3);
+
+    link_v_.back().inertia = inertia_matrix.block(0, 0, 3, 3);
+
+    // inertial_matrix
+    // std::cout << "Qvirtual : " << q_v_system_.transpose() << std::endl;
+    // std::cout << "com mass : " << total_mass << std::endl;
+    // std::cout << "link_v_.size() - 1 : " << link_v_.size() - 1 << " link 0 pose : " << link_v_[0].xpos.transpose() << std::endl;
+    // std::cout << "UB com pose : " << link_v_.back().xpos.transpose() << std::endl;
+
+    // for (int i = 0; i < link_v_.size(); i++)
+    // {
+    //     std::cout << "link " << i << " pose : " << link_v_[i].xpos.transpose() << " mass : " << link_v_[i].mass << std::endl;
+    // }
+
+    link_v_.back().jac_com_ = inertia_matrix.inverse() * cmm;
+
+    link_v_.back().jac_com_.topRows(3).swap(link_v_.back().jac_com_.bottomRows(3)); // Make inertial jacobian matrix to be translational first, rotational last.
+
+    // std::cout << " inertial mat link_v_.back() : " << std::endl
+    //           << inertia_matrix << std::endl;
+
+    // std::cout << " link_v_.back().jac_com_ : " << std::endl
+    //           << link_v_.back().jac_com_ << std::endl;
+}
+
 void RobotData::CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum) // return inertia matrix, rotational first, translational last.
 {
 

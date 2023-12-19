@@ -80,8 +80,9 @@ namespace DWBC
 
         RigidBodyDynamics::Model model_; // rbdl model of original model.
 
-        RigidBodyDynamics::Model model_contact_; // rbdl model of contact model.
-        RigidBodyDynamics::Model model_virtual_; // rbdl model of virtual model.
+        RigidBodyDynamics::Model model_cs_; // rbdl model of contact model.
+
+        RigidBodyDynamics::Model model_v_; // rbdl model of virtual model.
 
         Vector3d com_pos; // COM pos
         Vector3d com_vel; // COM vel
@@ -127,9 +128,33 @@ namespace DWBC
         VectorXd torque_limit_; // joint actuation limit information : (system_dof)
 
         std::vector<Link> link_;            // link information : contain all link data and the last link is center of mass information.
+        // std::vector<int> link_idx_original_;
         std::vector<Joint> joint_;          // joint information : contain all joint data
         std::vector<ContactConstraint> cc_; // contact constraint information
         std::vector<TaskSpace> ts_;         // task space information
+
+        std::vector<Link> link_cs_;         // link 
+        std::vector<Joint> joint_cs_;
+
+        // Virtual Model Part
+
+        std::vector<Link> link_v_;          // link virtualized
+        std::vector<Joint> joint_v_;        // joint virtualized
+        std::vector<int> vlink_idx_;        // virtualized link index
+
+        VectorXd q_v_system_;
+        VectorXd q_dot_v_system_;
+        VectorXd q_ddot_v_system_;
+
+        VectorXd q_cs_system_;
+        VectorXd q_dot_cs_system_;
+        VectorXd q_ddot_cs_system_;
+
+        MatrixXd A_v_;
+
+        MatrixXd A_cs_;
+
+
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
         QP *qp_contact_;
@@ -292,8 +317,13 @@ namespace DWBC
         void CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum);
 
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
-        void CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints);
-        void UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints);
+        void CreateVModel();
+        
+        void UpdateVModel();
+        void UpdateCSModel(const VectorXd &q_virtual, const VectorXd &q_dot_virtual, const VectorXd &q_ddot_virtual);
+
+        void UpdateVModel(const VectorXd &q_virtual, const VectorXd &q_dot_virtual, const VectorXd &q_ddot_virtual);
+        
         void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
         void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, Vector3d &com_position, double com_mass, bool verbose = false);
         void CalcVirtualCMM(RigidBodyDynamics::Model v_model, std::vector<Link> &_link, Vector3d &com_pos, MatrixXd &cmm, bool verbose = false);
