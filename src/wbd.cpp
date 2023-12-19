@@ -110,7 +110,7 @@ namespace DWBC
         MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2)
     {
         int rows = J_contact.rows(); // rows == contact_dof
-        int cols = J_contact.cols();
+        int cols = J_contact.cols(); // cols == system_dof
 
         lambda_contact = (J_contact * A_inv * J_contact.transpose()).inverse();
         J_C_INV_T = lambda_contact * J_contact * A_inv;

@@ -72,6 +72,8 @@ namespace DWBC
         // degree of freedom of contact
         unsigned int contact_dof_;
 
+        bool is_floating_;
+
         double total_mass_;
 
         double control_time_;
@@ -146,7 +148,8 @@ namespace DWBC
         void LoadModelData(std::string urdf_path, bool floating, int verbose = 0);
 
         void InitModelData(int verbose = 0);
-        
+        void InitModelWithLinkJoint(RigidBodyDynamics::Model& lmodel, std::vector<Link>& links, std::vector<Joint>& joints);
+
         void InitializeMatrix();
         /*
         Calculate Gravity Compensation
@@ -285,6 +288,8 @@ namespace DWBC
 
         void printLinkInfo();
         int getLinkID(std::string link_name);
+
+        void CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum);
 
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
         void CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints);

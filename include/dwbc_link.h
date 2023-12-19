@@ -34,6 +34,8 @@ namespace DWBC
         Vector3d parent_translation_;
         Matrix3d parent_rotation_;
 
+        int joint_id_;
+
         RigidBodyDynamics::Joint ToRBDLJoint();
     };
 
@@ -78,6 +80,7 @@ namespace DWBC
 
         // id of current link
         int link_id_;
+        int link_id_original_;
 
         double mass;
 
@@ -115,7 +118,7 @@ namespace DWBC
         // Get adjoint matrix 6x6 from link to base, Matrix * local_spacial_vector = global_spatial_vector
         MatrixXd GetAdjointMatrix();
 
-        MatrixXd GetSpatialInertiaMatrix();
+        MatrixXd GetSpatialInertiaMatrix(bool rotation_first = true);
 
         RigidBodyDynamics::Body ToRBDLBody();
 

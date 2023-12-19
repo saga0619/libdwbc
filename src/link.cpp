@@ -24,10 +24,22 @@ namespace DWBC
         {
             return RigidBodyDynamics::Joint(RigidBodyDynamics::JointTypeRevolute, joint_axis_);
         }
+        else if (joint_type_ == JOINT_FLOATING_BASE)
+        {
+            std::cout << "JOint floating" << std::endl;
+            return RigidBodyDynamics::Joint(RigidBodyDynamics::JointTypeFloatingBase);
+
+            // RigidBodyDynamics::JointTypeFloatingBase, joint_axis_);
+        }
+        else if (joint_type_ == JOINT_6DOF)
+        {
+            std::cout << "JOint 6 dof" << std::endl;
+            return RigidBodyDynamics::Joint(RigidBodyDynamics::JointType6DoF);
+        }
         else
         {
             // cout undefined joint type
-            std::cout << "joint type not defined" << std::endl;
+            std::cout << "joint type not defined :" << joint_type_ << std::endl;
 
             return RigidBodyDynamics::Joint();
         }
@@ -58,22 +70,26 @@ namespace DWBC
     void Link::UpdateAll(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_)
     {
         UpdatePos(model_, q_virtual_, q_dot_virtual_);
-        UpdateJac(model_, q_virtual_);
+        // UpdateJac(model_, q_virtual_);
     }
 
     void Link::UpdatePos(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_, const Eigen::VectorXd &q_dot_virtual_)
     {
         xpos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, body_id_, Eigen::Vector3d::Zero(), false);
-        xipos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, body_id_, model_.mBodies[body_id_].mCenterOfMass, false);
         rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, body_id_, false)).transpose();
+        // xipos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, body_id_, model_.mBodies[body_id_].mCenterOfMass, false);
+        xipos = xpos + rotm * com_position_l_;
         vw = RigidBodyDynamics::CalcPointVelocity6D(model_, q_virtual_, q_dot_virtual_, body_id_, Eigen::Vector3d::Zero(), false);
 
         v = vw.segment(3, 3);
         w = vw.segment(0, 3);
 
-        // std::cout << name_ << std::endl;
-        // std::cout << parent_rotm << std::endl;
-        // std::cout << parent_trans << std::endl;
+        // VectorXd viwi = RigidBodyDynamics::CalcPointVelocity6D(model_, q_virtual_, q_dot_virtual_, body_id_, model_.mBodies[body_id_].mCenterOfMass, false);
+
+        // vi = viwi.segment(3, 3);
+
+        vi = v + w.cross(rotm * com_position_l_);
+        // w = viwi.segment(0, 3);
     }
 
     void Link::UpdateJac(RigidBodyDynamics::Model &model_, const Eigen::VectorXd &q_virtual_)
@@ -178,14 +194,23 @@ namespace DWBC
         return adjoint;
     }
 
-    MatrixXd Link::GetSpatialInertiaMatrix()
+    MatrixXd Link::GetSpatialInertiaMatrix(bool rotation_first)
     {
         MatrixXd i_temp = MatrixXd::Zero(6, 6);
-
-        i_temp.block(0, 0, 3, 3) = inertia + mass * skew(com_position_l_) * skew(com_position_l_).transpose();
-        i_temp.block(0, 3, 3, 3) = mass * skew(com_position_l_);
-        i_temp.block(3, 0, 3, 3) = mass * skew(com_position_l_).transpose();
-        i_temp.block(3, 3, 3, 3) = mass * Matrix3d::Identity();
+        if (rotation_first)
+        {
+            i_temp.block(0, 0, 3, 3) = inertia + mass * skew(com_position_l_) * skew(com_position_l_).transpose();
+            i_temp.block(0, 3, 3, 3) = mass * skew(com_position_l_);
+            i_temp.block(3, 0, 3, 3) = mass * skew(com_position_l_).transpose();
+            i_temp.block(3, 3, 3, 3) = mass * Matrix3d::Identity();
+        }
+        else
+        {
+            i_temp.block(0, 0, 3, 3) = mass * Matrix3d::Identity();
+            i_temp.block(0, 3, 3, 3) = mass * skew(com_position_l_).transpose();
+            i_temp.block(3, 0, 3, 3) = mass * skew(com_position_l_);
+            i_temp.block(3, 3, 3, 3) = inertia + mass * skew(com_position_l_) * skew(com_position_l_).transpose();
+        }
 
         return i_temp;
     }
@@ -220,23 +245,21 @@ namespace DWBC
     {
         double new_mass = mass + other_link.mass;
 
-
-
         Vector3d other_com = rotm * other_link.com_position_l_ + xpos;
         Vector3d new_com = (mass * com_position_l_ + other_link.mass * other_com) / new_mass;
 
         Matrix3d com_skm = skew(other_link.com_position_l_);
-        Matrix3d inertia_other = other_link.inertia + other_link.mass * com_skm * com_skm.transpose(); 
+        Matrix3d inertia_other = other_link.inertia + other_link.mass * com_skm * com_skm.transpose();
 
         Matrix3d com_skm_this = skew(com_position_l_);
-        Matrix3d inertia_this = inertia + mass * com_skm_this * com_skm_this.transpose(); 
+        Matrix3d inertia_this = inertia + mass * com_skm_this * com_skm_this.transpose();
 
         Matrix3d com_skm_other = skew(other_com);
 
         Matrix3d inertia_other_com_rotated_this_origin = rotm * other_link.inertia * rotm.transpose() + other_link.mass * com_skm_other * com_skm_other.transpose();
         Matrix3d inertia_summed = inertia_this + inertia_other_com_rotated_this_origin;
         Matrix3d new_inertia = inertia_summed - new_mass * skew(new_com) * skew(new_com).transpose();
-        
+
         mass = new_mass;
         com_position_l_ = new_com;
         inertia = new_inertia;

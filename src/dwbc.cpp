@@ -148,126 +148,81 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
         // A_inv_ = A_.inverse();
         A_inv_ = A_.llt().solve(Eigen::MatrixXd::Identity(system_dof_, system_dof_)); // Faster than inverse()
     }
-    J_com_.setZero(3, system_dof_);
+    // J_com_.setZero(3, system_dof_);
     G_.setZero(system_dof_);
+    com_pos.setZero();
+    com_vel.setZero();
     for (int i = 0; i < (link_.size() - 1); i++)
     {
         link_[i].UpdateAll(model_, q_virtual, q_dot_virtual);
-        J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
+        // J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
         // com_pos += link_[i].xipos * link_[i].mass / total_mass_;
-
+        // com_vel += link_[i].vi * link_[i].mass / total_mass_;
         joint_[i].parent_rotation_ = model_.X_lambda[link_[i].body_id_].E.transpose();
         joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
     }
 
-    G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
+    Matrix3d skm_temp = link_[0].rotm * A_.block(3, 0, 3, 3) / total_mass_; 
 
-    CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
+    Vector3d com_from_pelv(skm_temp(2, 1), skm_temp(0, 2), skm_temp(1, 0));
 
-    double mass_;
-    RigidBodyDynamics::Math::Vector3d com;
-    RigidBodyDynamics::Math::Vector3d com_acc;
-    RigidBodyDynamics::Math::Vector3d com_vel;
-    RigidBodyDynamics::Math::Vector3d ang_momentum;
-    RigidBodyDynamics::Utils::CalcCenterOfMass(model_, q_system_, q_dot_virtual, &q_ddot_system_, mass_, com, &com_vel, &com_acc, &ang_momentum);
-
-    ang_momentum_ = ang_momentum;
-    com_pos = com;
+    com_pos = com_from_pelv + q_system_.segment(0, 3);
 
     link_.back().xpos = com_pos;
     link_.back().xipos = com_pos;
 
-    link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
-    link_.back().w = link_[0].w;
-    link_.back().mass = mass_;
+    // Centroidal momentum calculation !
+    // inertial frame ::: position of com, rotation frame from global.
+    Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
+    cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
+    Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_from_pelv);
+    cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
 
-    total_mass_ = mass_;
-
-    link_.back().jac_.setZero(6, system_dof_);
-    link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
-    link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
-    link_.back().jac_com_ = J_com_;
-
-    link_.back().v = com_vel;
+    CMM_ = cm_rot6 * A_.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
+    // CMM matrix is from global frame
 
     B_.setZero(system_dof_);
     RigidBodyDynamics::NonlinearEffects(model_, q_virtual, q_dot_virtual, B_);
+
+    // Matrix6d rotpel = Matrix6d::Zero(6, 6);
+    // rotpel.block(0, 0, 3, 3) = link_[0].rotm;
+    // rotpel.block(3, 3, 3, 3) = link_[0].rotm;
+    // Matrix6d IG = Matrix6d::Zero(6, 6);
+
+    link_.back().inertia = link_[0].rotm * A_.block(3, 3, 3, 3) * link_[0].rotm.transpose() - total_mass_ * skew(com_from_pelv) * skew(com_from_pelv).transpose(); // inertia matrix of com at global frame.
+
+    Matrix6d inertial_matrix = Matrix6d::Zero(6, 6);
+    inertial_matrix.block(0, 0, 3, 3) = Eigen::Matrix3d::Identity() * total_mass_;
+    inertial_matrix.block(3, 3, 3, 3) = link_[0].rotm * link_.back().inertia * link_[0].rotm.transpose();
+
+    link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
+    link_.back().mass = total_mass_;
+
+    // total_mass_ = mass_;
+    // link_.back().jac_.setZero(6, system_dof_);
+    // link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
+    // link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
+
+    link_.back().jac_com_ = inertial_matrix.inverse() * CMM_;
+    link_.back().jac_ = link_.back().jac_com_;
+
+    G_ = -link_.back().jac_.topRows(3).transpose() * total_mass_ * Vector3d(0, 0, -9.81);
+
+    Vector6d com_vel_temp = link_.back().jac_ * q_dot_system_;
+
+    link_.back().v = com_vel_temp.segment(0, 3);
+    // link_.back().w = link_[0].w;
+
+    link_.back().vi = com_vel_temp.segment(0, 3);
+    link_.back().w = com_vel_temp.segment(3, 3);
+
+    // link_.back().vi = jac_com_
 
     // UpdateContactConstraint();
 }
 void RobotData::UpdateKinematics(bool update_kinematics)
 {
-    // check q size and q_dot size
-    // if (model_.q_size != q_virtual.size())
-    // {
-    //     std::cout << "q size is not matched : qsize : " << model_.q_size << " input size : " << q_virtual.size() << std::endl;
-    //     return;
-    // }
-    // if (model_.qdot_size != q_dot_virtual.size())
-    // {
-    //     std::cout << "q_dot size is not matched" << std::endl;
-    //     return;
-    // }
-    // if (model_.qdot_size != q_ddot_virtual.size())
-    // {
-    //     std::cout << "q_ddot size is not matched" << std::endl;
-    //     return;
-    // }
-
-    A_.setZero(system_dof_, system_dof_);
-    if (update_kinematics)
-    {
-        RigidBodyDynamics::UpdateKinematicsCustom(model_, &q_system_, &q_dot_system_, &q_ddot_system_);
-        RigidBodyDynamics::CompositeRigidBodyAlgorithm(model_, q_system_, A_, false);
-        // A_inv_ = A_.inverse();
-        A_inv_ = A_.llt().solve(Eigen::MatrixXd::Identity(system_dof_, system_dof_)); // Faster than inverse()
-    }
-    J_com_.setZero(3, system_dof_);
-    G_.setZero(system_dof_);
-    for (int i = 0; i < (link_.size() - 1); i++)
-    {
-        link_[i].UpdateAll(model_, q_system_, q_dot_system_);
-        J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
-        // com_pos += link_[i].xipos * link_[i].mass / total_mass_;
-
-        joint_[i].parent_rotation_ = model_.X_lambda[link_[i].body_id_].E.transpose();
-        joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
-    }
-
-    G_ = -J_com_.transpose() * total_mass_ * Vector3d(0, 0, -9.81);
-
-    CMM_ = A_.block(3, 3, 3, 3) * (A_.block(3, 3, 3, 3) - (A_.block(3, 0, 3, 3) * A_.block(0, 3, 3, 3)) / total_mass_).inverse() * (A_.block(3, 6, 3, model_dof_) - (A_.block(3, 0, 3, 3) * A_.block(0, 6, 3, model_dof_) / total_mass_));
-
-    double mass_;
-    RigidBodyDynamics::Math::Vector3d com;
-    RigidBodyDynamics::Math::Vector3d com_acc;
-    RigidBodyDynamics::Math::Vector3d com_vel;
-    RigidBodyDynamics::Math::Vector3d ang_momentum;
-    RigidBodyDynamics::Utils::CalcCenterOfMass(model_, q_system_, q_dot_system_, &q_ddot_system_, mass_, com, &com_vel, &com_acc, &ang_momentum);
-
-    ang_momentum_ = ang_momentum;
-    com_pos = com;
-
-    link_.back().xpos = com_pos;
-    link_.back().xipos = com_pos;
-
-    link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
-    link_.back().w = link_[0].w;
-    link_.back().mass = mass_;
-
-    total_mass_ = mass_;
-
-    link_.back().jac_.setZero(6, system_dof_);
-    link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
-    link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
-    link_.back().jac_com_ = J_com_;
-
-    link_.back().v = com_vel;
-
-    B_.setZero(system_dof_);
-    RigidBodyDynamics::NonlinearEffects(model_, q_system_, q_dot_system_, B_);
-
-    // UpdateContactConstraint();
+    UpdateKinematics(q_system_, q_dot_system_, q_ddot_system_, update_kinematics);
 }
 
 void RobotData::AddContactConstraint(int link_number, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_x, double contact_y, bool verbose)
@@ -467,8 +422,10 @@ void RobotData::SetTaskSpace(int heirarchy, const VectorXd &f_star, const Matrix
 
 void RobotData::UpdateTaskSpace()
 {
+
     for (int i = 0; i < ts_.size(); i++)
     {
+        link_[ts_[i].link_id_].UpdateJac(model_, q_system_);
         switch (ts_[i].task_mode_)
         {
         case TASK_LINK_6D:
@@ -640,6 +597,8 @@ void RobotData::LoadModelData(std::string urdf_path, bool floating, int verbose)
     {
         std::cout << "WARNING, VECTOR LINK IS NOT ZERO" << std::endl;
     }
+    is_floating_ = floating;
+
     bool rbdl_v = false;
     if (verbose == 2)
     {
@@ -665,10 +624,18 @@ void RobotData::InitModelData(int verbose)
     qp_contact_ = CQuadraticProgram();
 
     system_dof_ = model_.dof_count;
-    model_dof_ = system_dof_ - 6;
+    if (is_floating_)
+    {
+        model_dof_ = system_dof_ - 6;
+    }
+    else
+    {
+        model_dof_ = system_dof_;
+    }
 
     if (verbose)
     {
+
         std::cout << "System DOF : " << system_dof_ << std::endl;
         std::cout << "Model DOF : " << model_dof_ << std::endl;
         std::cout << "Model.dof : " << model_.dof_count << std::endl;
@@ -678,6 +645,8 @@ void RobotData::InitModelData(int verbose)
     }
 
     total_mass_ = 0;
+
+    int added_joint_dof = 0;
     for (int i = 0; i < model_.mBodies.size(); i++)
     {
         if (model_.mBodies[i].mMass != 0) // if body has mass,
@@ -702,11 +671,23 @@ void RobotData::InitModelData(int verbose)
             }
             else
             {
-
-                std::cout << "JOINT TYPE at initializing Link & Joint vector : " << model_.mJoints[i].mJointType << " with dof : " << model_.mJoints[i].mDoFCount << " at link : " << link_.back().name_ << std::endl;
-                std::cout << model_.mJoints[i].mJointAxes[0] << std::endl;
+                if (verbose)
+                {
+                    std::cout << "JOINT TYPE at initializing Link & Joint vector : " << model_.mJoints[i].mJointType << " with dof : " << model_.mJoints[i].mDoFCount << " at link : " << link_.back().name_ << std::endl;
+                    std::cout << model_.mJoints[i].mJointAxes[0] << std::endl;
+                }
                 joint_.push_back(Joint());
             }
+
+            if (model_.mJoints[i].mDoFCount == 0)
+            {
+                joint_.back().joint_id_ = model_.mJoints[i].q_index;
+            }
+            else
+            {
+                joint_.back().joint_id_ = model_.mJoints[i].q_index;
+            }
+
             // joint_.push_back(Joint())
 
             total_mass_ += model_.mBodies[i].mMass;
@@ -718,6 +699,7 @@ void RobotData::InitModelData(int verbose)
         link_[i].parent_id_ = 0;
         link_[i].child_id_.clear();
         link_[i].link_id_ = i;
+        link_[i].link_id_original_ = i;
     }
 
     for (int i = 0; i < link_.size(); i++)
@@ -1221,6 +1203,7 @@ MatrixXd RobotData::CalcAngularMomentumMatrix()
 
     for (int i = 0; i < link_.size() - 1; i++)
     {
+        link_[i].UpdateJac(model_, q_system_);
 
         // Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
         // rotm.block(0, 0, 3, 3) = link_[i].rotm;
@@ -1257,10 +1240,10 @@ void RobotData::CalcAngularMomentumMatrix(MatrixXd &cmm)
         double m_ = link_[i].mass;
 
         H_C.topRows(3) += (r_ * (i_ + skew(c_) * skew(c_).transpose() * m_) * r_.transpose() + skew(x_) * r_ * skew(c_).transpose() * m_ * r_.transpose()) * link_[i].jac_.bottomRows(3) + (r_ * skew(c_) * m_ * r_.transpose() + m_ * skew(x_)) * link_[i].jac_.topRows(3);
-
         H_C.bottomRows(3) += m_ * r_ * skew(c_).transpose() * r_.transpose() * link_[i].jac_.bottomRows(3) + m_ * link_[i].jac_.topRows(3);
     }
-    cmm = H_C.topRows(3) - skew(link_.back().xpos) * H_C.bottomRows(3);
+    cmm = H_C;
+    cmm.block(0, 0, 3, system_dof_) = H_C.topRows(3) - skew(link_.back().xpos) * H_C.bottomRows(3);
 }
 
 void RobotData::CalcVirtualCMM(RigidBodyDynamics::Model _v_model, std::vector<Link> &_link, Vector3d &_com_pos, MatrixXd &_cmm, bool verbose)
@@ -1725,7 +1708,7 @@ void RobotData::AddLink(int parent_link_id, const char *link_name, int joint_typ
         RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform(joint_rotm_rbdl, joint_trans);
 
         model_.AddBody(parent_body_id, rbdl_joint_frame, joint, Body, link_name);
-        InitAfterModelMod(ADD_LINK_WITH_REVOLUTE_JOINT, parent_link_id, verbose);
+        InitAfterModelMod(ADD_LINK_WITH_6DOF_JOINT, parent_link_id, verbose);
     }
     else
     {
@@ -2001,13 +1984,53 @@ void RobotData::printLinkInfo()
     }
 }
 
-void RobotData::CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints)
+void RobotData::InitModelWithLinkJoint(RigidBodyDynamics::Model &lmodel, std::vector<Link> &links, std::vector<Joint> &joints)
 {
-}
+    lmodel = RigidBodyDynamics::Model();
 
-void RobotData::UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints)
-{
-    if (vmodel.q_size != q_virtual.size())
+    int parent_id = -1;
+    int added_id = 0;
+    RigidBodyDynamics::Math::SpatialTransform rbdl_joint_frame;
+
+    int vlink_size = links.size();
+
+    // create rbdl model with vlink and vjoint
+    for (int i = 0; i < vlink_size; i++)
+    {
+        rbdl_joint_frame = RigidBodyDynamics::Math::SpatialTransform((RigidBodyDynamics::Math::Matrix3d)joints[i].joint_rotation_, joints[i].joint_translation_);
+
+        // std::cout << i << " : rbdl joint frame : " << rbdl_joint_frame << std::endl;
+        // std::cout << "lambda t : " << vlink[i].parent_rotm << std::endl;
+        // std::cout << "lambda r : " << vlink[i].parent_trans.transpose() << std::endl;
+        // std::cout << "rotm : " << vlink[i].rotm << std::endl;
+        // std::cout << std::endl;
+
+        if (links[i].parent_id_ < 0)
+        {
+            parent_id = 0;
+        }
+        else
+        {
+            parent_id = links[links[i].parent_id_].body_id_;
+        }
+        unsigned int null_parent = parent_id;
+
+        if (joints[i].joint_type_ == JOINT_FLOATING_BASE)
+        {
+            // std::cout << "floating add " << std::endl;
+            parent_id = 0;
+            // std::cout << "parent id : " << parent_id << "links name : " << links[i].name_ << std::endl;
+            added_id = lmodel.AddBody(parent_id, rbdl_joint_frame, joints[i].ToRBDLJoint(), links[i].ToRBDLBody(), links[i].name_);
+            // std::cout << "floating add comp " << std::endl;
+        }
+        else
+        {
+            added_id = lmodel.AddBody(parent_id, rbdl_joint_frame, joints[i].ToRBDLJoint(), links[i].ToRBDLBody(), links[i].name_);
+        }
+
+        links[i].body_id_ = added_id;
+    }
+}
     {
         std::cout << "vmodel.q_size != q_virtual.size()" << std::endl;
         return;
@@ -2041,39 +2064,106 @@ void RobotData::UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtu
 
     for (int i = 0; i < links.size() - 1; i++)
     {
-        // calculate upateAll with multithread
+void RobotData::CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum) // return inertia matrix, rotational first, translational last.
+{
 
-        // async.emplace_back(std::async(std::launch::async, &Link::UpdateAll, &links[i], std::ref(vmodel), std::ref(q_virtual), std::ref(q_dot_virtual)));
-        links[i].UpdateAll(vmodel, q_virtual, q_dot_virtual);
+    // calculate total mass with link vector
+    double total_mass = 0;
 
-        joints[i].parent_rotation_ = vmodel.X_lambda[links[i].body_id_].E.transpose();
-        joints[i].parent_translation_ = vmodel.X_lambda[links[i].body_id_].r;
+    int link_size = links.size();
 
+    if (links.back().name_ == "COM")
+    {
+        link_size = links.size() - 1;
+    }
+
+    for (int i = 0; i < link_size; i++)
+    {
+        // std::cout << i << " : " << links[i].name_ << std::endl;
         total_mass += links[i].mass;
     }
 
-    // for (auto &th : async)
-    // {
-    //     th.wait();
-    // }
-
-    MatrixXd jac_com_;
-
-    jac_com_.setZero(3, vmodel.qdot_size);
-
-    Vector3d com_pos = Vector3d::Zero();
-
-    for (int i = 0; i < links.size() - 1; i++)
+    // calculate com position
+    Vector3d com_pos__ = Vector3d::Zero();
+    Vector3d com_vel__ = Vector3d::Zero();
+    for (int i = 0; i < link_size; i++)
     {
-        jac_com_ += links[i].mass * links[i].jac_com_.topRows(3) / total_mass;
-        com_pos += links[i].mass * links[i].xpos / total_mass;
+        com_pos__ += links[i].mass * links[i].xipos / total_mass;
+        com_vel__ += links[i].mass * links[i].vi / total_mass;
     }
 
-    links.back().jac_com_.setZero(6, vmodel.qdot_size);
-    links.back().jac_com_.topRows(3) = jac_com_;
-    links.back().mass = total_mass;
-    links.back().xpos = com_pos;
-    links.back().xipos = com_pos;
+    std::vector<MatrixXd> AdT(link_size);
+
+    for (int i = 0; i < link_size; i++)
+    {
+        AdT[i].setZero(6, 6);
+        AdT[i].block(0, 0, 3, 3) = links[i].rotm;
+        AdT[i].block(3, 3, 3, 3) = links[i].rotm;
+        AdT[i].block(3, 0, 3, 3) = skew(links[i].xpos - com_pos__) * links[i].rotm;
+    }
+
+    std::vector<MatrixXd> AdTinv(link_size);
+
+    for (int i = 0; i < link_size; i++)
+    {
+        AdTinv[i].setZero(6, 6);
+        AdTinv[i].block(0, 0, 3, 3) = links[i].rotm.transpose();
+        AdTinv[i].block(3, 3, 3, 3) = links[i].rotm.transpose();
+
+        AdTinv[i].block(3, 0, 3, 3) = skew(-links[i].rotm.transpose() * (links[i].xpos - com_pos__)) * links[i].rotm.transpose();
+
+        // AdTinv[i].block(3, 0, 3, 3) = links[i].rotm.transpose() * skew(links[i].xpos - com_pos__).transpose();
+    }
+
+    // MatrixXd AdG2C;
+
+    // AdG2C.setZero(6, 6);
+    // AdG2C.setIdentity();
+    // AdG2C.block(3, 0, 3, 3) = skew(-com_pos__);
+
+    MatrixXd rotm_temp;
+    rotm_temp.setZero(6, 6);
+
+    // std::cout << AdG2C << std::endl;
+
+    // std::vector<MatrixXd> link_inertia_matrix(link_size);
+    std::vector<MatrixXd> baseframe_inertia_matrix(link_size);
+
+    // calculate com inertia
+    MatrixXd com_inertia_matrix;
+    com_inertia_matrix.setZero(6, 6);
+
+    VectorXd com_momentum_vector;
+    com_momentum_vector.setZero(6);
+
+    VectorXd link_vel_temp;
+    link_vel_temp.setZero(6);
+    for (int i = 0; i < link_size; i++)
+    {
+        // link_inertia_matrix[i].setZero(6, 6); // link inertia matrix from link base frame.
+        // link_inertia_matrix[i].block(0, 0, 3, 3) = links[i].inertia + links[i].mass * skew(links[i].com_position_l_) * skew(links[i].com_position_l_).transpose();
+        // link_inertia_matrix[i].block(0, 3, 3, 3) = links[i].mass * skew(links[i].com_position_l_);
+        // link_inertia_matrix[i].block(3, 0, 3, 3) = links[i].mass * skew(links[i].com_position_l_).transpose();
+        // link_inertia_matrix[i].block(3, 3, 3, 3) = links[i].mass * Matrix3d::Identity();
+
+        baseframe_inertia_matrix[i] = AdTinv[i].transpose() * links[i].GetSpatialInertiaMatrix() * AdTinv[i];
+
+        rotm_temp.block(0, 0, 3, 3) = links[i].rotm.transpose();
+        rotm_temp.block(3, 3, 3, 3) = links[i].rotm.transpose();
+
+        link_vel_temp.segment(0, 3) = links[i].w;
+        link_vel_temp.segment(3, 3) = links[i].v;
+
+        com_momentum_vector += baseframe_inertia_matrix[i] * AdT[i] * rotm_temp * link_vel_temp;
+
+        com_inertia_matrix += baseframe_inertia_matrix[i];
+    }
+
+    // com_pos = com_pos__;
+    // com_vel = com_vel__;
+    // mass = total_mass;
+    com_inertia = com_inertia_matrix; // Inertia matrix ->
+    com_momentum = com_momentum_vector;
 }
 
 void RobotData::CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass)
@@ -2212,7 +2302,6 @@ void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, 
 
     // Joint joint = joint_[link_idx];
     // // joint.joint_type_ = JOINT_FIXED;
-
 
     // DeleteLink(link_name, verbose);
 

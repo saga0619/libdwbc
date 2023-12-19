@@ -516,6 +516,11 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
         rd_.CalcTaskSpace();
     };
 
+    BENCHMARK("Matrix decomposition")
+    {
+        PinvCODWB(rd_.W, rd_.W_inv);
+    };
+
     rd_.CalcTaskControlTorque(true);
 
     BENCHMARK("task control calculation (Update task + QP calculation + matrix preperation)")
@@ -539,6 +544,7 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
         rd_.CalcContactRedistribute(false);
     };
 }
+
 TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
 {
     RobotData rd_;
@@ -552,14 +558,22 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     q.setZero(rd_.model_.q_size);
     qdot.setZero(rd_.model_.qdot_size);
     qddot.setZero(rd_.model_.qdot_size);
-
-    q << 0, 0, 0.92983, 0, 0, 0,
+    // /0.1820621, -0.007949, 0.042889, 0.9823191
+    q << 0, 0, 0.92983, 0, 0, 0.7071068,
         0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
         0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
         0, 0, 0,
         0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
         0, 0,
-        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 0.7071068;
+
+    // q << 0, 0, 0.92983, 0, 0, 0,
+    //     0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+    //     0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+    //     0, 0, 0,
+    //     0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+    //     0, 0,
+    //     -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
 
     qdot.setRandom(rd_.model_.qdot_size);
     qdot.segment(0, 6).setZero();
@@ -569,30 +583,158 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     rd_.UpdateKinematics(q, qdot, qddot);
     Eigen::VectorXd ans1, ans2;
 
+    Eigen::MatrixXd com_inertia;
+    Eigen::VectorXd com_mom;
+
+    double mass_;
+    RigidBodyDynamics::Math::Vector3d com;
+    RigidBodyDynamics::Math::Vector3d _com_acc;
+    RigidBodyDynamics::Math::Vector3d _com_vel;
+    RigidBodyDynamics::Math::Vector3d _ang_momentum;
+    RigidBodyDynamics::Utils::CalcCenterOfMass(rd_.model_, q, qdot, &qddot, mass_, com, &_com_vel, &_com_acc, &_ang_momentum);
+
+    BENCHMARK("calc com information")
+    {
+        rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
+    };
+
+    ans1 = _ang_momentum;
+    // std::cout << "ang momentum from rbdl : " << _ang_momentum.transpose() << std::endl;
+
+    // std::cout << " com inertia : " << std::endl;
+    // std::cout << com_inertia << std::endl;
+
+    // std::cout << rd_.link_.back().inertia << std::endl;
+
+    // std::cout << " off diagonal " << std::endl;
+    // std::cout << rd_.total_mass_ * skew(rd_.com_pos - rd_.link_[0].xpos) << std::endl;
+
+    Eigen::VectorXd ans3 = Eigen::VectorXd::Zero(6);
     BENCHMARK("angular momentum matrix calculation")
     {
-        ans1 = rd_.CalcAngularMomentumMatrix() * qdot;
+        ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
+    };
+
+    // std::cout << "CMM from rd_ : " << std::endl
+    //           << rd_.CalcAngularMomentumMatrix() - rd_.CMM_.bottomRows(3) << std::endl;
+
+    // BENCHMARK("angular momentum matrix calculation2")
+    // {
+    //     MatrixXd H_temp = MatrixXd::Zero(6, rd_.system_dof_);
+
+    // std::cout << "vi of link 15 : " << rd_.link_[27].vi.transpose() << std::endl;
+    // std::cout << "vi custom of link 15 : " << rd_.link_[27].v + rd_.link_[27].w.cross(rd_.link_[27].rotm * rd_.link_[27].com_position_l_) << std::endl;
+
+    //     MatrixXd rot_temp = MatrixXd::Identity(6, 6);
+    //     for (int i = 0; i < rd_.link_.size(); i++)
+    //     {
+    //         H_temp += rot_temp * rd_.link_[i].GetSpatialInertiaMatrix(false) * rd_.link_[i].jac_;
+    //     }
+    // };
+
+    // std::cout << std::endl
+    //           << "answer comparison : " << std::endl;
+    // std::cout << (rd_.com_vel * rd_.total_mass_).transpose() << " " << ans1.transpose() << std::endl;
+
+    // std::cout << rd_.link_[0].rotm << std::endl;
+
+    // std::cout << "pelvis mass : " << rd_.link_[0].mass << " l com pos : " << rd_.link_[0].com_position_l_ << std::endl;
+    // std::cout << "pelvis inertia : " << std::endl;
+    // std::cout << rd_.link_[0].inertia << std::endl;
+
+    // std::cout << "IC rbdl " << std::endl;
+    // std::cout << rd_.model_.I[rd_.link_[0].body_id_] << std::endl;
+
+    // std::cout << "qdot : " << qdot.transpose() << std::endl;
+    // std::cout << cm_rot6 << std::endl;
+    // std::cout << (cm_rot6 * rd_.A_.topRows(6) * qdot).transpose() << std::endl; // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
+
+    // std::cout << "ang affect : " << A12.transpose() << std::endl;
+
+    // std::cout << "Amatrix : " << std::endl;
+
+    // std::cout << rd_.A_ << std::endl;
+
+    // std::cout << "pelvis : " << rd_.link_[0].xpos.transpose() << std::endl;
+
+    // std::cout << rd_.link_[0].jac_ << std::endl;
+
+    // std::cout << "upperbody : " << rd_.link_[15].xpos.transpose() << std::endl;
+    // std::cout << rd_.link_[15].jac_ << std::endl;
+
+    // std::cout << "Right Hand : " << rd_.link_[31].xpos.transpose() << std::endl;
+    // std::cout << rd_.link_[31].jac_ << std::endl;
+
+    BENCHMARK("RBDL : UPDATEKINEMATICS ")
+    {
+        RigidBodyDynamics::UpdateKinematicsCustom(rd_.model_, &rd_.q_system_, &rd_.q_dot_system_, &rd_.q_ddot_system_);
+    };
+
+    BENCHMARK("RBDL : COMPOSITE ")
+    {
+        RigidBodyDynamics::CompositeRigidBodyAlgorithm(rd_.model_, rd_.q_system_, rd_.A_, false);
     };
 
     Eigen::MatrixXd cmm = Eigen::MatrixXd::Zero(3, rd_.model_.qdot_size);
     BENCHMARK("angular momentum matrix calculation2")
     {
-        rd_.CalcAngularMomentumMatrix(cmm);
+        // rd_.CalcAngularMomentumMatrix(cmm);
 
-        ans2 = cmm * qdot;
+        ans3 = rd_.CMM_ * qdot;
     };
-    // std::cout << std::endl;
-    // std::cout << rd_.ang_momentum_.transpose() << std::endl;
-    // std::cout << (rd_.CalcAngularMomentumMatrix() * qdot).transpose() << std::endl;
-    // std::cout << (rd_.CMM_ * qdot).transpose() << std::endl;
+
+    //
+    //
+    // Eigen::MatrixXd A_rot_ = Eigen::MatrixXd::Identity(39, 39);
+    // A_rot_.block(3, 3, 3, 3) = rd_.link_[0].rotm;
+    // Eigen::MatrixXd A_global = A_rot_ * rd_.A_ * A_rot_.transpose();
+    Eigen::Matrix3d upper_ic;
+    Matrix6d i_temp_6 = Eigen::MatrixXd::Zero(6, 6);
+
+    BENCHMARK("UPPERBODY MASS MATRIX CALCULATION")
+    {
+        i_temp_6.setZero();
+        for (int i = 0; i < 21; i++)
+        {
+
+            // std::cout << "link " << i + 13 << " : " << rd_.link_[i + 13].name_ << std::endl;
+            Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+            Matrix6d temp1 = Matrix6d::Identity(6, 6);
+            temp1.block(0, 0, 3, 3) = rd_.link_[i + 13].rotm.transpose();
+            temp1.block(3, 3, 3, 3) = rd_.link_[i + 13].rotm.transpose();
+
+            temp1.block(0, 3, 3, 3) = -rd_.link_[i + 13].rotm.transpose() * skew(rd_.link_[i + 13].xpos - rd_.link_[0].xpos);
+            i_temp_6 += temp1.transpose() * rd_.link_[i + 13].GetSpatialInertiaMatrix(false) * temp1;
+        }
+        double upper_mass = 42.6195;
+        Matrix6d skm_temp = i_temp_6.block(3, 0, 3, 3) / upper_mass;
+        Eigen::Vector3d com_upper(skm_temp(2, 1), skm_temp(0, 2), skm_temp(1, 0));
+        upper_ic = i_temp_6.block(3, 3, 3, 3) - upper_mass * skew(com_upper) * skew(com_upper).transpose();
+    };
+
+    // std::cout << " calculated upperbody mass mat : " << std::endl;
+    // std::cout << i_temp_6 << std::endl;
+    // std::cout << "upper IC : " << std::endl;
+    // std::cout << rd_.link_[0].rotm.transpose() * upper_ic * rd_.link_[0].rotm << std::endl;
+    // std::cout << " calcul
+    // std::cout << " com x : " << rd_.link_.back().v.transpose() << std::endl;
+    // std::cout << " com xi : " << rd_.link_.back().vi.transpose() << std::endl;
+    // std::cout << " com jac : " << std::endl
+    //           << rd_.link_.back().jac_ << std::endl;
+    // std::cout << " com jac 2 : " << std::endl
+    //           << rd_.link_.back().jac_com_ << std::endl;
+    // Eigen::MatrixXd H_C = Eigen::MatrixXd::Zero(6, rd_.model_.qdot_size);
 
     REQUIRE(ans1.isApprox((ans2), 1e-5) == true);
 
-    Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
+    // Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
 
-    int i = 0;
-    Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
-    Eigen::MatrixXd j_temp = MatrixXd::Zero(6, rd_.system_dof_);
+    // int i = 0;
+    // Eigen::MatrixXd rotm = MatrixXd::Identity(6, 6);
+    // Eigen::MatrixXd j_temp = MatrixXd::Zero(6, rd_.system_dof_);
+    // Eigen::MatrixXd j_temp2 = rd_.link_[6].jac_;
+
+    // Eigen::MatrixXd ans;
 
     // BENCHMARK("angular momentum matrix calculation")
     // {
