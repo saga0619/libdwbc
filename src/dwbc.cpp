@@ -93,6 +93,162 @@ RobotData::~RobotData()
 {
 }
 
+/*
+Init model data with rbdl
+verbose 2 : Show all link Information
+verbose 1 : Show link id information
+verbose 0 : disable verbose
+*/
+void RobotData::LoadModelData(std::string urdf_path, bool floating, int verbose)
+{
+    if (link_.size() > 0)
+    {
+        std::cout << "WARNING, VECTOR LINK IS NOT ZERO" << std::endl;
+    }
+    is_floating_ = floating;
+
+    bool rbdl_v = false;
+    if (verbose == 2)
+    {
+        rbdl_v = true;
+    }
+    RigidBodyDynamics::Addons::URDFReadFromFile(urdf_path.c_str(), &model_, floating, rbdl_v);
+
+    if (verbose)
+    {
+        std::cout << "rbdl urdf load success " << std::endl;
+    }
+
+    InitModelData(verbose);
+}
+
+void RobotData::InitModelData(int verbose)
+{
+    ts_.clear();
+    cc_.clear();
+    link_.clear();
+    qp_task_.clear();
+
+    qp_contact_ = CQuadraticProgram();
+
+    system_dof_ = model_.dof_count;
+    if (is_floating_)
+    {
+        model_dof_ = system_dof_ - 6;
+    }
+    else
+    {
+        model_dof_ = system_dof_;
+    }
+
+    if (verbose)
+    {
+
+        std::cout << "System DOF : " << system_dof_ << std::endl;
+        std::cout << "Model DOF : " << model_dof_ << std::endl;
+        std::cout << "Model.dof : " << model_.dof_count << std::endl;
+
+        std::cout << "Model.mBodies.size() : " << model_.mBodies.size() << std::endl;
+        std::cout << "Model.mJoints.size() : " << model_.mJoints.size() << std::endl;
+    }
+
+    total_mass_ = 0;
+
+    int added_joint_dof = 0;
+    for (int i = 0; i < model_.mBodies.size(); i++)
+    {
+        if (model_.mBodies[i].mMass != 0) // if body has mass,
+        {
+            link_.push_back(Link(model_, i));
+            if (model_.mJoints[i].mJointType >= RigidBodyDynamics::JointTypeRevoluteX && model_.mJoints[i].mJointType <= RigidBodyDynamics::JointTypeRevoluteZ)
+            {
+                joint_.push_back(Joint(JOINT_REVOLUTE, model_.mJoints[i].mJointAxes[0].segment(0, 3)));
+                joint_.back().joint_rotation_ = link_.back().joint_rotm;
+                joint_.back().joint_translation_ = link_.back().joint_trans;
+            }
+            else if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeRevolute || model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeHelical)
+            {
+
+                joint_.push_back(Joint(JOINT_REVOLUTE, model_.mJoints[i].mJointAxes[0].segment(0, 3)));
+                joint_.back().joint_rotation_ = link_.back().joint_rotm;
+                joint_.back().joint_translation_ = link_.back().joint_trans;
+            }
+            else if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeFloatingBase || model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeSpherical)
+            {
+                joint_.push_back(Joint(JOINT_FLOATING_BASE));
+            }
+            else
+            {
+                if (verbose)
+                {
+                    std::cout << "JOINT TYPE at initializing Link & Joint vector : " << model_.mJoints[i].mJointType << " with dof : " << model_.mJoints[i].mDoFCount << " at link : " << link_.back().name_ << std::endl;
+                    std::cout << model_.mJoints[i].mJointAxes[0] << std::endl;
+                }
+                joint_.push_back(Joint());
+            }
+
+            if (model_.mJoints[i].mDoFCount == 0)
+            {
+                joint_.back().joint_id_ = model_.mJoints[i].q_index;
+            }
+            else
+            {
+                joint_.back().joint_id_ = model_.mJoints[i].q_index;
+            }
+
+            // joint_.push_back(Joint())
+
+            total_mass_ += model_.mBodies[i].mMass;
+        }
+    }
+
+    for (int i = 0; i < link_.size(); i++)
+    {
+        link_[i].parent_id_ = 0;
+        link_[i].child_id_.clear();
+        link_[i].link_id_ = i;
+        link_[i].link_id_original_ = i;
+    }
+
+    for (int i = 0; i < link_.size(); i++)
+    {
+        int temp_parent_body_id = model_.lambda[link_[i].body_id_];
+
+        for (int j = 0; j < link_.size(); j++)
+        {
+            if (temp_parent_body_id == link_[j].body_id_)
+            {
+
+                link_[i].parent_id_ = j;
+                link_[j].child_id_.push_back(i);
+            }
+        }
+    }
+
+    link_.push_back(Link()); // Add link for COM
+    link_.back().name_ = "COM";
+
+    if (verbose == 1)
+    {
+        std::cout << "System DOF :" << system_dof_ << std::endl;
+        std::cout << "Model DOF :" << model_dof_ << std::endl;
+
+        std::cout << "Total Link : " << link_.size() << std::endl;
+        std::cout << "Total Mass : " << total_mass_ << std::endl;
+        std::cout << "Link Information" << std::endl;
+
+        int vlink = 0;
+        for (int i = 0; i < link_.size() - 1; i++)
+        {
+            std::cout << vlink << " : " << link_[vlink].name_ << std::endl;
+            std::cout << "mass : " << link_[vlink].mass << " body id : " << link_[vlink].body_id_ << " parent id : " << link_[vlink++].parent_id_ << std::endl;
+        }
+
+        std::cout << vlink << " : " << link_.back().name_ << std::endl;
+    }
+    InitializeMatrix();
+}
+
 void RobotData::SetTorqueLimit(const VectorXd &torque_limit)
 {
     torque_limit_set_ = true;
@@ -162,7 +318,7 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
         joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
     }
 
-    Matrix3d skm_temp = link_[0].rotm * A_.block(3, 0, 3, 3) / total_mass_; 
+    Matrix3d skm_temp = link_[0].rotm * A_.block(3, 0, 3, 3) / total_mass_;
 
     Vector3d com_from_pelv(skm_temp(2, 1), skm_temp(0, 2), skm_temp(1, 0));
 
@@ -425,7 +581,11 @@ void RobotData::UpdateTaskSpace()
 
     for (int i = 0; i < ts_.size(); i++)
     {
-        link_[ts_[i].link_id_].UpdateJac(model_, q_system_);
+        if (link_[ts_[i].link_id_].name_ != "COM")
+        {
+            link_[ts_[i].link_id_].UpdateJac(model_, q_system_);
+        }
+
         switch (ts_[i].task_mode_)
         {
         case TASK_LINK_6D:
@@ -583,162 +743,6 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
 
         return 1;
     }
-}
-
-/*
-Init model data with rbdl
-verbose 2 : Show all link Information
-verbose 1 : Show link id information
-verbose 0 : disable verbose
-*/
-void RobotData::LoadModelData(std::string urdf_path, bool floating, int verbose)
-{
-    if (link_.size() > 0)
-    {
-        std::cout << "WARNING, VECTOR LINK IS NOT ZERO" << std::endl;
-    }
-    is_floating_ = floating;
-
-    bool rbdl_v = false;
-    if (verbose == 2)
-    {
-        rbdl_v = true;
-    }
-    RigidBodyDynamics::Addons::URDFReadFromFile(urdf_path.c_str(), &model_, floating, rbdl_v);
-
-    if (verbose)
-    {
-        std::cout << "rbdl urdf load success " << std::endl;
-    }
-
-    InitModelData(verbose);
-}
-
-void RobotData::InitModelData(int verbose)
-{
-    ts_.clear();
-    cc_.clear();
-    link_.clear();
-    qp_task_.clear();
-
-    qp_contact_ = CQuadraticProgram();
-
-    system_dof_ = model_.dof_count;
-    if (is_floating_)
-    {
-        model_dof_ = system_dof_ - 6;
-    }
-    else
-    {
-        model_dof_ = system_dof_;
-    }
-
-    if (verbose)
-    {
-
-        std::cout << "System DOF : " << system_dof_ << std::endl;
-        std::cout << "Model DOF : " << model_dof_ << std::endl;
-        std::cout << "Model.dof : " << model_.dof_count << std::endl;
-
-        std::cout << "Model.mBodies.size() : " << model_.mBodies.size() << std::endl;
-        std::cout << "Model.mJoints.size() : " << model_.mJoints.size() << std::endl;
-    }
-
-    total_mass_ = 0;
-
-    int added_joint_dof = 0;
-    for (int i = 0; i < model_.mBodies.size(); i++)
-    {
-        if (model_.mBodies[i].mMass != 0) // if body has mass,
-        {
-            link_.push_back(Link(model_, i));
-            if (model_.mJoints[i].mJointType >= RigidBodyDynamics::JointTypeRevoluteX && model_.mJoints[i].mJointType <= RigidBodyDynamics::JointTypeRevoluteZ)
-            {
-                joint_.push_back(Joint(JOINT_REVOLUTE, model_.mJoints[i].mJointAxes[0].segment(0, 3)));
-                joint_.back().joint_rotation_ = link_.back().joint_rotm;
-                joint_.back().joint_translation_ = link_.back().joint_trans;
-            }
-            else if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeRevolute || model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeHelical)
-            {
-
-                joint_.push_back(Joint(JOINT_REVOLUTE, model_.mJoints[i].mJointAxes[0].segment(0, 3)));
-                joint_.back().joint_rotation_ = link_.back().joint_rotm;
-                joint_.back().joint_translation_ = link_.back().joint_trans;
-            }
-            else if (model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeFloatingBase || model_.mJoints[i].mJointType == RigidBodyDynamics::JointTypeSpherical)
-            {
-                joint_.push_back(Joint(JOINT_FLOATING_BASE));
-            }
-            else
-            {
-                if (verbose)
-                {
-                    std::cout << "JOINT TYPE at initializing Link & Joint vector : " << model_.mJoints[i].mJointType << " with dof : " << model_.mJoints[i].mDoFCount << " at link : " << link_.back().name_ << std::endl;
-                    std::cout << model_.mJoints[i].mJointAxes[0] << std::endl;
-                }
-                joint_.push_back(Joint());
-            }
-
-            if (model_.mJoints[i].mDoFCount == 0)
-            {
-                joint_.back().joint_id_ = model_.mJoints[i].q_index;
-            }
-            else
-            {
-                joint_.back().joint_id_ = model_.mJoints[i].q_index;
-            }
-
-            // joint_.push_back(Joint())
-
-            total_mass_ += model_.mBodies[i].mMass;
-        }
-    }
-
-    for (int i = 0; i < link_.size(); i++)
-    {
-        link_[i].parent_id_ = 0;
-        link_[i].child_id_.clear();
-        link_[i].link_id_ = i;
-        link_[i].link_id_original_ = i;
-    }
-
-    for (int i = 0; i < link_.size(); i++)
-    {
-        int temp_parent_body_id = model_.lambda[link_[i].body_id_];
-
-        for (int j = 0; j < link_.size(); j++)
-        {
-            if (temp_parent_body_id == link_[j].body_id_)
-            {
-
-                link_[i].parent_id_ = j;
-                link_[j].child_id_.push_back(i);
-            }
-        }
-    }
-
-    link_.push_back(Link()); // Add link for COM
-    link_.back().name_ = "COM";
-
-    if (verbose == 1)
-    {
-        std::cout << "System DOF :" << system_dof_ << std::endl;
-        std::cout << "Model DOF :" << model_dof_ << std::endl;
-
-        std::cout << "Total Link : " << link_.size() << std::endl;
-        std::cout << "Total Mass : " << total_mass_ << std::endl;
-        std::cout << "Link Information" << std::endl;
-
-        int vlink = 0;
-        for (int i = 0; i < link_.size() - 1; i++)
-        {
-            std::cout << vlink << " : " << link_[vlink].name_ << std::endl;
-            std::cout << "mass : " << link_[vlink].mass << " body id : " << link_[vlink].body_id_ << " parent id : " << link_[vlink++].parent_id_ << std::endl;
-        }
-
-        std::cout << vlink << " : " << link_.back().name_ << std::endl;
-    }
-    InitializeMatrix();
 }
 
 VectorXd RobotData::CalcGravCompensation()
@@ -2031,39 +2035,39 @@ void RobotData::InitModelWithLinkJoint(RigidBodyDynamics::Model &lmodel, std::ve
         links[i].body_id_ = added_id;
     }
 }
-    {
-        std::cout << "vmodel.q_size != q_virtual.size()" << std::endl;
-        return;
-    }
+// {
+//     std::cout << "vmodel.q_size != q_virtual.size()" << std::endl;
+//     return;
+// }
 
-    if (vmodel.qdot_size != q_dot_virtual.size())
-    {
-        std::cout << "vmodel.qdot_size != q_dot_virtual.size()" << std::endl;
-        return;
-    }
+// if (vmodel.qdot_size != q_dot_virtual.size())
+// {
+//     std::cout << "vmodel.qdot_size != q_dot_virtual.size()" << std::endl;
+//     return;
+// }
 
-    Eigen::MatrixXd A_v_;
+// Eigen::MatrixXd A_v_;
 
-    A_v_.setZero(vmodel.qdot_size, vmodel.qdot_size);
+// A_v_.setZero(vmodel.qdot_size, vmodel.qdot_size);
 
-    RigidBodyDynamics::UpdateKinematicsCustom(vmodel, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
-    RigidBodyDynamics::CompositeRigidBodyAlgorithm(vmodel, q_virtual, A_v_, false);
+// RigidBodyDynamics::UpdateKinematicsCustom(vmodel, &q_virtual, &q_dot_virtual, &q_ddot_virtual);
+// RigidBodyDynamics::CompositeRigidBodyAlgorithm(vmodel, q_virtual, A_v_, false);
 
-    double total_mass = 0;
+// double total_mass = 0;
 
-    // vmodel.mas
+// // vmodel.mas
 
-    if (links.back().name_ != "COM")
-    {
-        std::cout << "Last link name is not COM" << std::endl;
-        links.push_back(Link());
-        links.back().name_ = "COM";
-    }
+// if (links.back().name_ != "COM")
+// {
+//     std::cout << "Last link name is not COM" << std::endl;
+//     links.push_back(Link());
+//     links.back().name_ = "COM";
+// }
 
-    std::vector<std::future<void>> async;
+// std::vector<std::future<void>> async;
 
-    for (int i = 0; i < links.size() - 1; i++)
-    {
+// for (int i = 0; i < links.size() - 1; i++)
+// {
 void RobotData::CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum) // return inertia matrix, rotational first, translational last.
 {
 
