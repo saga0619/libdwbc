@@ -309,4 +309,14 @@ namespace DWBC
         inertia = inertia_matrix.block(3, 3, 3, 3) - mass * skew(mass_center) * skew(mass_center).transpose();
     }
 
+    Matrix6d InertiaMatrix(const Matrix3d &inertia, const double &mass)
+    {
+        Matrix6d inertia_matrix;
+        inertia_matrix.setZero();
+        inertia_matrix.block(0, 0, 3, 3) = mass * Matrix3d::Identity();
+        inertia_matrix.block(3, 3, 3, 3) = inertia;
+
+        return inertia_matrix;
+    }
+
 }

@@ -49,7 +49,7 @@ int main(void)
     rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
 
     VectorXd q_dot_test = VectorXd::Random(rd_.model_.qdot_size);
-    q_dot_test.segment(0,6).setZero();
+    q_dot_test.segment(0, 6).setZero();
 
     rd_.UpdateKinematics(q, q_dot_test, qddot);
     rd_.SetContact(true, true);
@@ -188,7 +188,7 @@ int main(void)
 
     //
 
-    rd_.UpdateVModel(v_model, qv, qdotv, qddotv, vlink, vjoint);
+    // rd_.UpdateVModel(v_model, qv, qdotv, qddotv, vlink, vjoint);
 
     Vector3d com_pos;
     Matrix3d com_inertia;
@@ -216,7 +216,7 @@ int main(void)
 
     rd_.AddLink(virtual_joint_, virtual_link_, verbose); // UpperBody
 
-    rd_.ChangeLinkInertia("upperbody_link", com_inertia, com_mass, verbose);
+    rd_.ChangeLinkInertia("upperbody_link", com_inertia, com_pos, com_mass, verbose);
 
     rd_.ClearContactConstraint();
     rd_.ClearTaskSpace();
@@ -278,7 +278,7 @@ int main(void)
 
     for (int i = 0; i < repeat_time; i++)
     {
-        rd_.UpdateVModel(v_model, qv, qdotv, qddotv, vlink, vjoint);
+        // rd_.UpdateVModel(v_model, qv, qdotv, qddotv, vlink, vjoint);
         rd_.CalcVirtualInertia(v_model, vlink, vjoint, com_inertia, com_pos, com_mass);
         // rd_.ChangeLinkInertia("upperbody_link", com_inertia, com_mass, true);
         // rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);

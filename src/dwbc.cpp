@@ -2367,6 +2367,7 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
     Arot_pelv.block(3, 3, 3, 3) = link_[0].rotm;
 
     IM_NC.setZero(6, 6);
+    IM_C.setZero(6, 6);
 
     for (int i = 0; i < link_num_; i++)
     {
@@ -2380,17 +2381,17 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
             temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
             IM_NC += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
         }
-        // else
-        // {
+        else
+        {
 
-        //     Matrix6d I_rotation = Matrix6d::Zero(6, 6);
-        //     Matrix6d temp1 = Matrix6d::Identity(6, 6);
-        //     temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
-        //     temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
+            Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+            Matrix6d temp1 = Matrix6d::Identity(6, 6);
+            temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
+            temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
 
-        //     temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
-        //     IM_C += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
-        // }
+            temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
+            IM_C += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+        }
     }
 
     InertiaMatrixSegment(IM_NC, inertia_nc_, com_pos_nc_, mass_nc_);
@@ -2420,14 +2421,12 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
     A_NC.block(3, 6, 3, nc_dof) = Arot_pelv.block(3, 3, 3, 3) * A_NC.block(3, 6, 3, nc_dof);
     A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
 
-    MatrixXd cmm_nc;
-
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
     // cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
     Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_pos_nc_);
     cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
 
-    cmm_nc = cm_rot6 * A_NC.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
+    cmm_nc_ = cm_rot6 * A_NC.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from global frame
 
 
@@ -2441,7 +2440,46 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
 
 
         std::cout << " cmm of nc : " << std::endl;
-        std::cout << cmm_nc << std::endl;
+        std::cout << cmm_nc_ << std::endl;
+
+        Matrix6d imo;
+        imo.setZero();
+        imo.block(0,0,3,3) = total_mass_ * Matrix3d::Identity();
+        imo.block(3,3,3,3) = link_.back().inertia;
+
+        Matrix6d im1, im2;
+
+        im1.setZero();
+        im2.setZero();
+
+        im1.block(0,0,3,3) = IM_C.block(0,0,3,3);
+        im1.block(3,3,3,3) = inertia_co_;
+
+        std::cout << im1 << std::endl;
+        
+
+        im2.block(0,0,3,3) = IM_NC.block(0,0,3,3);
+        im2.block(3,3,3,3) = inertia_nc_;
+
+        std::cout << im2 << std::endl;
+
+        Matrix6d tr1, tr2;
+
+        tr1.setIdentity();
+        tr2.setIdentity();
+
+
+
+
+        tr1.block(0,3,3,3) = -skew(com_pos_co_ - link_.back().xpos + link_[0].xpos);
+        tr2.block(0,3,3,3) = -skew(com_pos_nc_ - link_.back().xpos + link_[0].xpos);
+
+        std::cout << " AA recreate : " << std::endl;
+        std::cout << tr1.transpose() * im1 * tr1 + tr2.transpose() * im2 * tr2 << std::endl;
+
+        std::cout << "im original : " << std::endl;
+        std::cout << imo << std::endl;
+
 
     }
 }

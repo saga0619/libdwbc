@@ -160,6 +160,9 @@ namespace DWBC
         Matrix3d inertia_co_;
         Matrix3d inertia_nc_;
 
+        MatrixXd cmm_co_;
+        MatrixXd cmm_nc_;
+
 
 
 
