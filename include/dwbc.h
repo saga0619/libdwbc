@@ -72,6 +72,9 @@ namespace DWBC
         // degree of freedom of contact
         unsigned int contact_dof_;
 
+        // total number of link with mass
+        unsigned int link_num_;
+
         bool is_floating_;
 
         double total_mass_;
@@ -130,6 +133,36 @@ namespace DWBC
         std::vector<Joint> joint_;          // joint information : contain all joint data
         std::vector<ContactConstraint> cc_; // contact constraint information
         std::vector<TaskSpace> ts_;         // task space information
+
+        //2level dynamics computation
+
+        Eigen::VectorXi contact_dependency_joint_;  // 1 if the joint is contact dependant, 0 if not
+        Eigen::VectorXi contact_dependency_link_;   // 1 if the link is contact dependant, 0 if not
+
+        std::vector<int> l_joint_idx_conact_;
+        std::vector<int> l_joint_idx_non_contact_;
+
+        unsigned int nc_dof;
+        unsigned int co_dof;
+
+        Matrix6d IM_C;
+        Matrix6d IM_NC;
+
+        MatrixXd A_R;
+        MatrixXd A_NC;
+        
+        double mass_co_;
+        double mass_nc_;
+
+        Vector3d com_pos_co_;
+        Vector3d com_pos_nc_;
+
+        Matrix3d inertia_co_;
+        Matrix3d inertia_nc_;
+
+
+
+
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
         QP *qp_contact_;
@@ -297,6 +330,10 @@ namespace DWBC
         void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
         void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, Vector3d &com_position, double com_mass, bool verbose = false);
         void CalcVirtualCMM(RigidBodyDynamics::Model v_model, std::vector<Link> &_link, Vector3d &com_pos, MatrixXd &cmm, bool verbose = false);
+
+        void SequentialDynamicsCalculate(bool verbose = false);
+
+
     };
 
     template <typename... Types>

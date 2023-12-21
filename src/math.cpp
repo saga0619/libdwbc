@@ -298,8 +298,15 @@ namespace DWBC
         sp_mat.block<3, 3>(3, 3) = rot;
         sp_mat.block<3, 3>(0, 3) = skew(pos) * rot;
 
-
         return sp_mat;
+    }
+
+    void InertiaMatrixSegment(const Matrix6d &inertia_matrix, Matrix3d &inertia, Vector3d &mass_center, double &mass)
+    {
+        mass = inertia_matrix(0, 0);
+        Matrix3d skm_temp = inertia_matrix.block(3, 0, 3, 3) / mass;
+        mass_center << skm_temp(2, 1), skm_temp(0, 2), skm_temp(1, 0);
+        inertia = inertia_matrix.block(3, 3, 3, 3) - mass * skew(mass_center) * skew(mass_center).transpose();
     }
 
 }

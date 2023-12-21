@@ -58,6 +58,7 @@ namespace DWBC
 
     MatrixXd spatialTransformMatrix(const Vector3d &pos, const Matrix3d &rot);
     
+    void InertiaMatrixSegment(const Matrix6d &inertia_matrix, Matrix3d &inertia, Vector3d &mass_center, double &mass);
 }
 
 #endif

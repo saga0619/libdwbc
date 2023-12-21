@@ -202,6 +202,8 @@ void RobotData::InitModelData(int verbose)
         }
     }
 
+    link_num_ = link_.size();
+
     for (int i = 0; i < link_.size(); i++)
     {
         link_[i].parent_id_ = 0;
@@ -233,7 +235,7 @@ void RobotData::InitModelData(int verbose)
         std::cout << "System DOF :" << system_dof_ << std::endl;
         std::cout << "Model DOF :" << model_dof_ << std::endl;
 
-        std::cout << "Total Link : " << link_.size() << std::endl;
+        std::cout << "Total Link with mass : " << link_num_ << std::endl;
         std::cout << "Total Mass : " << total_mass_ << std::endl;
         std::cout << "Link Information" << std::endl;
 
@@ -2311,4 +2313,135 @@ void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, 
 
     // // Add link
     // AddLink(joint, link);
+}
+
+void RobotData::SequentialDynamicsCalculate(bool verbose)
+{
+    contact_dependency_joint_.setZero(system_dof_);
+    contact_dependency_link_.setZero(link_num_);
+
+    for (int j = 0; j < cc_.size(); j++)
+    {
+        if (cc_[j].contact)
+        {
+            int link_idx = cc_[j].link_number_;
+            int joint_idx = joint_[link_idx].joint_id_;
+
+            while (link_idx != 0)
+            {
+                contact_dependency_joint_[joint_idx] = 1;
+                contact_dependency_link_[link_idx] = 1;
+
+                link_idx = link_[link_idx].parent_id_;
+                joint_idx = joint_[link_idx].joint_id_;
+            }
+
+            contact_dependency_link_[0] = 1;
+        }
+    }
+
+    if (cc_.size() == 0)
+    {
+        std::cout << "WARN : no contact point list" << std::endl;
+    }
+
+    l_joint_idx_conact_.clear();
+    l_joint_idx_non_contact_.clear();
+
+    for (int i = 6; i < contact_dependency_joint_.size(); i++)
+    {
+        if (contact_dependency_joint_[i] == 1)
+        {
+            l_joint_idx_conact_.push_back(i);
+        }
+        else
+        {
+            l_joint_idx_non_contact_.push_back(i);
+        }
+    }
+
+    nc_dof = l_joint_idx_non_contact_.size();
+    co_dof = l_joint_idx_conact_.size();
+
+    Matrix6d Arot_pelv = Matrix6d::Identity(6, 6);
+    Arot_pelv.block(3, 3, 3, 3) = link_[0].rotm;
+
+    IM_NC.setZero(6, 6);
+
+    for (int i = 0; i < link_num_; i++)
+    {
+        if (contact_dependency_link_[i] == 0)
+        {
+            Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+            Matrix6d temp1 = Matrix6d::Identity(6, 6);
+            temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
+            temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
+
+            temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
+            IM_NC += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+        }
+        // else
+        // {
+
+        //     Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+        //     Matrix6d temp1 = Matrix6d::Identity(6, 6);
+        //     temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
+        //     temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
+
+        //     temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
+        //     IM_C += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+        // }
+    }
+
+    InertiaMatrixSegment(IM_NC, inertia_nc_, com_pos_nc_, mass_nc_);
+
+    InertiaMatrixSegment(IM_C, inertia_co_, com_pos_co_, mass_co_);
+
+    A_NC.setZero(6 + nc_dof, 6 + nc_dof);
+    A_NC.block(0, 0, 6, 6) = IM_NC;
+
+    for (int i = 0; i < nc_dof; i++)
+    {
+        for (int j = 0; j < nc_dof; j++)
+        {
+            A_NC(6 + i, 6 + j) = A_(l_joint_idx_non_contact_[i], l_joint_idx_non_contact_[j]);
+        }
+    }
+
+    for (int i = 0; i < 6; i++)
+    {
+        for (int j = 0; j < nc_dof; j++)
+        {
+            A_NC(i, 6 + j) = A_(i, l_joint_idx_non_contact_[j]);
+        }
+    }
+
+
+    A_NC.block(3, 6, 3, nc_dof) = Arot_pelv.block(3, 3, 3, 3) * A_NC.block(3, 6, 3, nc_dof);
+    A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
+
+    MatrixXd cmm_nc;
+
+    Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
+    // cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
+    Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_pos_nc_);
+    cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
+
+    cmm_nc = cm_rot6 * A_NC.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
+    // CMM matrix is from global frame
+
+
+    if (verbose)
+    {
+        std::cout << "original mass mat : " << std::endl;
+        std::cout << A_ << std::endl;
+
+        std::cout << "A_NC : " << std::endl;
+        std::cout << A_NC << std::endl;
+
+
+        std::cout << " cmm of nc : " << std::endl;
+        std::cout << cmm_nc << std::endl;
+
+    }
 }

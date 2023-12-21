@@ -578,9 +578,20 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     qdot.setRandom(rd_.model_.qdot_size);
     qdot.segment(0, 6).setZero();
 
+    int left_foot_id = 6;
+    int right_foot_id = 12;
+    
+    rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    
+
     // std::cout << qdot.transpose() << std::endl;
 
     rd_.UpdateKinematics(q, qdot, qddot);
+
+    rd_.SetContact(true, true);
+
+
     Eigen::VectorXd ans1, ans2;
 
     Eigen::MatrixXd com_inertia;
@@ -727,6 +738,13 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
 
     REQUIRE(ans1.isApprox((ans2), 1e-5) == true);
 
+    BENCHMARK("SEQDYN CALC")
+    {
+
+        rd_.SequentialDynamicsCalculate();
+    };
+
+    rd_.SequentialDynamicsCalculate(true);
     // Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
 
     // int i = 0;
