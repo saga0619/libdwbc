@@ -505,17 +505,17 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
 
     rd_.SetTaskSpace(0, fstar_1);
     rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
+    rd_.CalcGravCompensation();
     BENCHMARK("grav torque calculation")
     {
         rd_.CalcGravCompensation();
     };
-
+    rd_.CalcTaskSpace();
     BENCHMARK("Update task space")
     {
         rd_.CalcTaskSpace();
     };
-
+    PinvCODWB(rd_.W, rd_.W_inv);
     BENCHMARK("Matrix decomposition")
     {
         PinvCODWB(rd_.W, rd_.W_inv);
@@ -603,7 +603,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     RigidBodyDynamics::Math::Vector3d _com_vel;
     RigidBodyDynamics::Math::Vector3d _ang_momentum;
     RigidBodyDynamics::Utils::CalcCenterOfMass(rd_.model_, q, qdot, &qddot, mass_, com, &_com_vel, &_com_acc, &_ang_momentum);
-
+    rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
     BENCHMARK("calc com information")
     {
         rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
@@ -621,6 +621,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     // std::cout << rd_.total_mass_ * skew(rd_.com_pos - rd_.link_[0].xpos) << std::endl;
 
     Eigen::VectorXd ans3 = Eigen::VectorXd::Zero(6);
+    ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
     BENCHMARK("angular momentum matrix calculation")
     {
         ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
@@ -744,7 +745,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
         rd_.SequentialDynamicsCalculate();
     };
 
-    rd_.SequentialDynamicsCalculate(true);
+    // rd_.SequentialDynamicsCalculate(true);
     // Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
 
     // int i = 0;

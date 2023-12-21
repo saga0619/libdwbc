@@ -10,7 +10,10 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake)
 set(CMAKE_INTERFACE_CURRENT_DIR_IN_INTERFACE ON)
 
 OPTION (USE_QPSWIFT "Run with QPSWIFT" OFF)
+
 OPTION (RUN_TEST "Run calculation test of libdwbc" ON)
+
+OPTION (RUN_BENCHMARK "Run benchmark of libdwbc" OFF)
 
 include(GNUInstallDirs)
 

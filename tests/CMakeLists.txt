@@ -17,12 +17,17 @@ TARGET_LINK_LIBRARIES(dwbc_tests
     dwbc
 )
 
-OPTION (RUN_AUTOMATIC_TESTS "Run automatic tests" ON)
 
-IF(RUN_AUTOMATIC_TESTS)
+IF(RUN_BENCHMARK)
     ADD_CUSTOM_COMMAND(TARGET dwbc_tests POST_BUILD
         COMMAND ./tests/dwbc_tests -v high
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Running automatic tests"
     )
-ENDIF(RUN_AUTOMATIC_TESTS)
+ELSE()
+    ADD_CUSTOM_COMMAND(TARGET dwbc_tests POST_BUILD
+    COMMAND ./tests/dwbc_tests -v high --skip-benchmarks
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Running automatic tests"
+    )
+ENDIF(RUN_BENCHMARK)
