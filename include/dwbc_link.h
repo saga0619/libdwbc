@@ -118,6 +118,7 @@ namespace DWBC
         // Get adjoint matrix 6x6 from link to base, Matrix * local_spacial_vector = global_spatial_vector
         MatrixXd GetAdjointMatrix();
 
+        //Get Inertia Matrix of link from global frame
         MatrixXd GetSpatialInertiaMatrix(bool rotation_first = true);
 
         RigidBodyDynamics::Body ToRBDLBody();

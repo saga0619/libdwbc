@@ -332,9 +332,8 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     // Centroidal momentum calculation !
     // inertial frame ::: position of com, rotation frame from global.
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
-    cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
-    Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_from_pelv);
-    cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
+    cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;       // rotation matrix of com from global
+    cm_rot6.block(3, 0, 3, 3) = skew(com_from_pelv); // skew matrix of com position from global
 
     CMM_ = cm_rot6 * A_.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from global frame
@@ -342,26 +341,16 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     B_.setZero(system_dof_);
     RigidBodyDynamics::NonlinearEffects(model_, q_virtual, q_dot_virtual, B_);
 
-    // Matrix6d rotpel = Matrix6d::Zero(6, 6);
-    // rotpel.block(0, 0, 3, 3) = link_[0].rotm;
-    // rotpel.block(3, 3, 3, 3) = link_[0].rotm;
-    // Matrix6d IG = Matrix6d::Zero(6, 6);
-
     link_.back().inertia = link_[0].rotm * A_.block(3, 3, 3, 3) * link_[0].rotm.transpose() - total_mass_ * skew(com_from_pelv) * skew(com_from_pelv).transpose(); // inertia matrix of com at global frame.
 
-    Matrix6d inertial_matrix = Matrix6d::Zero(6, 6);
-    inertial_matrix.block(0, 0, 3, 3) = Eigen::Matrix3d::Identity() * total_mass_;
-    inertial_matrix.block(3, 3, 3, 3) = link_[0].rotm * link_.back().inertia * link_[0].rotm.transpose();
+    Matrix6d inertial_matrix_global = Matrix6d::Zero(6, 6);
+    inertial_matrix_global.block(0, 0, 3, 3) = Eigen::Matrix3d::Identity() * total_mass_;
+    inertial_matrix_global.block(3, 3, 3, 3) = link_.back().inertia;
 
     link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
     link_.back().mass = total_mass_;
 
-    // total_mass_ = mass_;
-    // link_.back().jac_.setZero(6, system_dof_);
-    // link_.back().jac_.block(0, 0, 3, system_dof_) = J_com_;
-    // link_.back().jac_.block(3, 0, 3, system_dof_) = link_[0].jac_.block(3, 0, 3, system_dof_);
-
-    link_.back().jac_com_ = inertial_matrix.inverse() * CMM_;
+    link_.back().jac_com_ = inertial_matrix_global.inverse() * CMM_;
     link_.back().jac_ = link_.back().jac_com_;
 
     G_ = -link_.back().jac_.topRows(3).transpose() * total_mass_ * Vector3d(0, 0, -9.81);
@@ -2364,22 +2353,23 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
     co_dof = l_joint_idx_conact_.size();
 
     Matrix6d Arot_pelv = Matrix6d::Identity(6, 6);
+    Arot_pelv.block(0, 0, 3, 3) = link_[0].rotm;
     Arot_pelv.block(3, 3, 3, 3) = link_[0].rotm;
 
-    IM_NC.setZero(6, 6);
-    IM_C.setZero(6, 6);
+    SI_co_b_.setZero(6, 6);
+    SI_nc_b_.setZero(6, 6);
 
     for (int i = 0; i < link_num_; i++)
     {
-        if (contact_dependency_link_[i] == 0)
+        if (contact_dependency_link_[i] == 0) // Calculate Inertia Matrix of Non Contact Link from global frame
         {
             Matrix6d I_rotation = Matrix6d::Zero(6, 6);
             Matrix6d temp1 = Matrix6d::Identity(6, 6);
             temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
             temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
 
-            temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
-            IM_NC += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+            temp1.block(0, 3, 3, 3) = link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos).transpose();
+            SI_nc_b_ += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
         }
         else
         {
@@ -2389,17 +2379,29 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
             temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
             temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
 
-            temp1.block(0, 3, 3, 3) = -link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos);
-            IM_C += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+            temp1.block(0, 3, 3, 3) = link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos).transpose();
+            SI_co_b_ += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
         }
     }
 
-    InertiaMatrixSegment(IM_NC, inertia_nc_, com_pos_nc_, mass_nc_);
+    InertiaMatrixSegment(SI_nc_b_, inertia_nc_, com_pos_nc_, mass_nc_);
 
-    InertiaMatrixSegment(IM_C, inertia_co_, com_pos_co_, mass_co_);
+    inertia_nc_ = link_[0].rotm.transpose() * inertia_nc_ * link_[0].rotm; // Make local inertia of non contact model
+    com_pos_nc_ = link_[0].rotm.transpose() * com_pos_nc_;
+
+    SI_nc_b_ = Arot_pelv.transpose() * SI_nc_b_ * Arot_pelv; // Change IMNC to local frame !
+    SI_nc_l_ = InertiaMatrix(inertia_nc_, mass_nc_);
+
+    InertiaMatrixSegment(SI_co_b_, inertia_co_, com_pos_co_, mass_co_);
+
+    SI_co_b_ = Arot_pelv.transpose() * SI_co_b_ * Arot_pelv;
+    SI_co_l_ = InertiaMatrix(inertia_co_, mass_co_);
+
+    inertia_co_ = link_[0].rotm.transpose() * inertia_co_ * link_[0].rotm; // Make local inertia of non contact model
+    com_pos_co_ = link_[0].rotm.transpose() * com_pos_co_;
 
     A_NC.setZero(6 + nc_dof, 6 + nc_dof);
-    A_NC.block(0, 0, 6, 6) = IM_NC;
+    A_NC.block(0, 0, 6, 6) = SI_nc_b_;
 
     for (int i = 0; i < nc_dof; i++)
     {
@@ -2417,69 +2419,100 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
         }
     }
 
-
-    A_NC.block(3, 6, 3, nc_dof) = Arot_pelv.block(3, 3, 3, 3) * A_NC.block(3, 6, 3, nc_dof);
+    A_NC.block(0, 6, 3, nc_dof) = link_[0].rotm.transpose() * A_NC.block(0, 6, 3, nc_dof); // A matrix of NC from local frame of pelvis!
     A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
 
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
-    // cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
-    Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_pos_nc_);
-    cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
+    cm_rot6.block(3, 0, 3, 3) = skew(com_pos_nc_);         // skew matrix of com position from pelvis
+    cmm_nc_ = cm_rot6 * A_NC.topRows(6).rightCols(nc_dof); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
+    // CMM matrix is from local frame (robot frame)
 
-    cmm_nc_ = cm_rot6 * A_NC.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
-    // CMM matrix is from global frame
-
+    jac_inertial_nc_.setZero(6, nc_dof);
+    jac_inertial_nc_ = SI_nc_l_.inverse() * cmm_nc_;
 
     if (verbose)
     {
-        std::cout << "original mass mat : " << std::endl;
-        std::cout << A_ << std::endl;
+        Matrix6d A_mat_rot = Matrix6d::Identity(6, 6);
+        A_mat_rot.block(0, 0, 3, 3) = link_[0].rotm.transpose();
 
-        std::cout << "A_NC : " << std::endl;
-        std::cout << A_NC << std::endl;
+        Matrix6d A_mat_rot2 = Matrix6d::Identity(6, 6);
+        A_mat_rot2.block(3, 3, 3, 3) = link_[0].rotm;
 
+        // std::cout << "I_NC from pelvis frame : " << std::endl;
+        // std::cout << IM_NC << std::endl;
 
-        std::cout << " cmm of nc : " << std::endl;
-        std::cout << cmm_nc_ << std::endl;
+        // std::cout << "IM_NC + IM_C from pelvis frame : " << std::endl;
+        // std::cout << IM_NC + IM_C << std::endl;
+
+        // std::cout << "Mass matrix of Non-contact model from pelvis frame : " << std::endl;
+        // std::cout << A_NC << std::endl;
+
+        // std::cout << "Centroidal Momentum matrix from pelvis frame : " << std::endl;
+        // std::cout << cmm_nc_ << std::endl;
 
         Matrix6d imo;
         imo.setZero();
-        imo.block(0,0,3,3) = total_mass_ * Matrix3d::Identity();
-        imo.block(3,3,3,3) = link_.back().inertia;
-
-        Matrix6d im1, im2;
-
-        im1.setZero();
-        im2.setZero();
-
-        im1.block(0,0,3,3) = IM_C.block(0,0,3,3);
-        im1.block(3,3,3,3) = inertia_co_;
-
-        std::cout << im1 << std::endl;
-        
-
-        im2.block(0,0,3,3) = IM_NC.block(0,0,3,3);
-        im2.block(3,3,3,3) = inertia_nc_;
-
-        std::cout << im2 << std::endl;
+        imo.block(0, 0, 3, 3) = total_mass_ * Matrix3d::Identity();
+        imo.block(3, 3, 3, 3) = link_.back().inertia;
 
         Matrix6d tr1, tr2;
 
         tr1.setIdentity();
         tr2.setIdentity();
 
+        Vector3d local_com = link_[0].rotm.transpose() * (link_.back().xpos - link_[0].xpos);
 
+        Matrix3d rt_p = link_[0].rotm.transpose();
+        // rt_p = Matrix3d::Identity();
 
+        tr1.block(0, 0, 3, 3) = rt_p;
+        tr1.block(3, 3, 3, 3) = rt_p;
 
-        tr1.block(0,3,3,3) = -skew(com_pos_co_ - link_.back().xpos + link_[0].xpos);
-        tr2.block(0,3,3,3) = -skew(com_pos_nc_ - link_.back().xpos + link_[0].xpos);
+        tr2.block(0, 0, 3, 3) = rt_p;
+        tr2.block(3, 3, 3, 3) = rt_p;
 
-        std::cout << " AA recreate : " << std::endl;
-        std::cout << tr1.transpose() * im1 * tr1 + tr2.transpose() * im2 * tr2 << std::endl;
+        tr1.block(0, 3, 3, 3) = skew(com_pos_co_ - local_com).transpose() * rt_p;
+        tr2.block(0, 3, 3, 3) = skew(com_pos_nc_ - local_com).transpose() * rt_p;
 
-        std::cout << "im original : " << std::endl;
+        Matrix6d IXGT = Matrix6d::Identity(6, 6);
+        IXGT.block(0, 0, 3, 3) = link_[0].rotm;
+        IXGT.block(3, 3, 3, 3) = link_[0].rotm;
+
+        IXGT.block(3, 0, 3, 3) = link_[0].rotm * skew(local_com).transpose();
+
+        // std::cout << "Original floating mass Matrix from pelvis frame.  : " << std::endl;
+        // std::cout << A_mat_rot * A_.block(0, 0, 6, 6) * A_mat_rot.transpose() << std::endl;
+
+        // std::cout << "transform mass mat from pelv frame to global frame  : " << std::endl;
+        // std::cout << IXGT * A_mat_rot * A_.block(0, 0, 6, 6) * A_mat_rot.transpose() * IXGT.transpose() << std::endl;
+
+        // std::cout << "original mass mat from global frame.  : " << std::endl;
+        // std::cout << A_mat_rot2 * A_.block(0, 0, 6, 6) * A_mat_rot2.transpose() << std::endl;
+
+        std::cout << "TR 1 : " << std::endl;
+        std::cout << tr1 << std::endl;
+
+        std::cout << "TR 2 : " << std::endl;
+        std::cout << tr2 << std::endl;
+
+        std::cout << "IM 1 : " << std::endl;
+        std::cout << tr1.transpose() * SI_co_l_ * tr1 << std::endl;
+
+        std::cout << "IM 2 : " << std::endl;
+        std::cout << tr2.transpose() * SI_nc_l_ * tr2 << std::endl;
+
+        std::cout << "IM 1 local : " << std::endl;
+        std::cout << SI_co_l_ << std::endl;
+
+        std::cout << "IM 2 local : " << std::endl;
+        std::cout << SI_nc_l_ << std::endl;
+
+        std::cout << " Reconstruct A matrix from Origin COM, global rotation" << std::endl;
+        std::cout << tr1.transpose() * SI_co_l_ * tr1 + tr2.transpose() * SI_nc_l_ * tr2 << std::endl;
+
+        std::cout << "Inertial matrix with origin info. /global rotation. : " << std::endl;
         std::cout << imo << std::endl;
 
-
+        std::cout << "Spatial Momentum : " << std::endl;
     }
 }

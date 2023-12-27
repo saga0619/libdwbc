@@ -145,8 +145,11 @@ namespace DWBC
         unsigned int nc_dof;
         unsigned int co_dof;
 
-        Matrix6d IM_C;
-        Matrix6d IM_NC;
+        Matrix6d SI_co_b_;        //spatial inertia matrix from Contact Model from base frame;
+        Matrix6d SI_nc_b_;        //spatial inertia matrix from non-contact model from base frame;
+
+        Matrix6d SI_co_l_;      //Spatial inertia matrix from Contact Model from contact model COM frame;
+        Matrix6d SI_nc_l_;      //Spatial inertia matrix from non-contact model from non-contact model com frame;
 
         MatrixXd A_R;
         MatrixXd A_NC;
@@ -162,6 +165,8 @@ namespace DWBC
 
         MatrixXd cmm_co_;
         MatrixXd cmm_nc_;
+
+        MatrixXd jac_inertial_nc_;
 
 
 
