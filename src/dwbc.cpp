@@ -313,9 +313,6 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     for (int i = 0; i < (link_.size() - 1); i++)
     {
         link_[i].UpdateAll(model_, q_virtual, q_dot_virtual);
-        // J_com_ += link_[i].jac_com_.topRows(3) * link_[i].mass / total_mass_;
-        // com_pos += link_[i].xipos * link_[i].mass / total_mass_;
-        // com_vel += link_[i].vi * link_[i].mass / total_mass_;
         joint_[i].parent_rotation_ = model_.X_lambda[link_[i].body_id_].E.transpose();
         joint_[i].parent_translation_ = model_.X_lambda[link_[i].body_id_].r;
     }
@@ -333,7 +330,15 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     // inertial frame ::: position of com, rotation frame from global.
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
     cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;       // rotation matrix of com from global
-    cm_rot6.block(3, 0, 3, 3) = skew(com_from_pelv); // skew matrix of com position from global
+    cm_rot6.block(3, 0, 3, 3) = skew(com_from_pelv).transpose(); // skew matrix of com position from global
+
+    // Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
+    // cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
+    // Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_from_pelv);
+    // cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
+
+
+
 
     CMM_ = cm_rot6 * A_.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from global frame
@@ -343,14 +348,16 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
 
     link_.back().inertia = link_[0].rotm * A_.block(3, 3, 3, 3) * link_[0].rotm.transpose() - total_mass_ * skew(com_from_pelv) * skew(com_from_pelv).transpose(); // inertia matrix of com at global frame.
 
-    Matrix6d inertial_matrix_global = Matrix6d::Zero(6, 6);
-    inertial_matrix_global.block(0, 0, 3, 3) = Eigen::Matrix3d::Identity() * total_mass_;
-    inertial_matrix_global.block(3, 3, 3, 3) = link_.back().inertia;
+    SI_body_ = Matrix6d::Zero(6, 6);
+    SI_body_.block(0, 0, 3, 3) = Eigen::Matrix3d::Identity() * total_mass_;
+    SI_body_.block(3, 3, 3, 3) = link_.back().inertia;
+
+
 
     link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
     link_.back().mass = total_mass_;
 
-    link_.back().jac_com_ = inertial_matrix_global.inverse() * CMM_;
+    link_.back().jac_com_ = SI_body_.inverse() * CMM_;
     link_.back().jac_ = link_.back().jac_com_;
 
     G_ = -link_.back().jac_.topRows(3).transpose() * total_mass_ * Vector3d(0, 0, -9.81);
@@ -2394,11 +2401,11 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
 
     InertiaMatrixSegment(SI_co_b_, inertia_co_, com_pos_co_, mass_co_);
 
-    SI_co_b_ = Arot_pelv.transpose() * SI_co_b_ * Arot_pelv;
-    SI_co_l_ = InertiaMatrix(inertia_co_, mass_co_);
-
     inertia_co_ = link_[0].rotm.transpose() * inertia_co_ * link_[0].rotm; // Make local inertia of non contact model
     com_pos_co_ = link_[0].rotm.transpose() * com_pos_co_;
+
+    SI_co_b_ = Arot_pelv.transpose() * SI_co_b_ * Arot_pelv;
+    SI_co_l_ = InertiaMatrix(inertia_co_, mass_co_);
 
     A_NC.setZero(6 + nc_dof, 6 + nc_dof);
     A_NC.block(0, 0, 6, 6) = SI_nc_b_;
@@ -2423,7 +2430,7 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
     A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
 
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
-    cm_rot6.block(3, 0, 3, 3) = skew(com_pos_nc_);         // skew matrix of com position from pelvis
+    cm_rot6.block(3, 0, 3, 3) = skew(com_pos_nc_).transpose();         // skew matrix of com position from pelvis
     cmm_nc_ = cm_rot6 * A_NC.topRows(6).rightCols(nc_dof); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from local frame (robot frame)
 
@@ -2463,7 +2470,6 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
         Vector3d local_com = link_[0].rotm.transpose() * (link_.back().xpos - link_[0].xpos);
 
         Matrix3d rt_p = link_[0].rotm.transpose();
-        // rt_p = Matrix3d::Identity();
 
         tr1.block(0, 0, 3, 3) = rt_p;
         tr1.block(3, 3, 3, 3) = rt_p;

@@ -45,7 +45,7 @@ sudo make install
 
 ### Unit Test and Benchmark
 ```sh
-cmake -DRUN_TEST=ON -DCMAKE_BUILD_TYPE=Debug ..
+cmake -DRUN_TEST=ON -DRUN_BENCHMARK=ON -DCMAKE_BUILD_TYPE=Debug ..
 ```
 
 ### How to play with

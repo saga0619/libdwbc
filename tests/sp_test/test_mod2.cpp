@@ -12,7 +12,7 @@ using namespace std;
 
 int main(void)
 {
-    double rot_z = 0;
+    double rot_z = M_PI_2;
 
     RobotData rd2_;
 
@@ -167,13 +167,13 @@ int main(void)
 
     MatrixXd widepsd = rd2_.jac_inertial_nc_.transpose() * (rd2_.jac_inertial_nc_ * rd2_.jac_inertial_nc_.transpose()).inverse();
 
-    std::cout << "widepsd : \n";
-    std::cout << widepsd << std::endl;
+    // std::cout << "widepsd : \n";
+    // std::cout << widepsd << std::endl;
 
     MatrixXd widepsd2 = testMatrix.transpose() * (testMatrix * testMatrix.transpose()).inverse();
 
-    std::cout << "widepsd2 : \n";
-    std::cout << widepsd2 << std::endl;
+    // std::cout << "widepsd2 : \n";
+    // std::cout << widepsd2 << std::endl;
 
     MatrixXd segA_inv = testMatrix * rd2_.A_inv_ * testMatrix.transpose();
     MatrixXd segA = (segA_inv).inverse();
@@ -219,7 +219,7 @@ int main(void)
 
     tr3.block(0, 0, 3, 3) = rt_p;
     tr3.block(3, 3, 3, 3) = rt_p;
-    tr3.block(0, 3, 3, 3) = skew(local_com_nc_from_com) * rt_p;
+    tr3.block(0, 3, 3, 3) = skew(local_com_nc_from_com).transpose() * rt_p;
 
     if (desired_control_target == "COM")
     {
@@ -231,21 +231,21 @@ int main(void)
         // J_task_.block(0, 0, 6, 18) = original_J_task.block(0, 0, 6, 18);
     }
 
-    std::cout << "J_task original : " << std::endl;
-    std::cout << original_J_task << std::endl;
+    // std::cout << "J_task original : " << std::endl;
+    // std::cout << original_J_task << std::endl;
 
-    std::cout << "J_task reduced : " << std::endl;
-    std::cout << J_task_ << std::endl;
+    // std::cout << "J_task reduced : " << std::endl;
+    // std::cout << J_task_ << std::endl;
 
-    std::cout << "J_task reduced 2 : " << std::endl;
-    std::cout << original_J_task.rightCols(21) * widepsd << std::endl;
+    // std::cout << "J_task reduced 2 : " << std::endl;
+    // std::cout << original_J_task.rightCols(21) * widepsd << std::endl;
 
 
-    std::cout << "J_task reduced 2 : " << std::endl;
-    std::cout << original_J_task * widepsd2 << std::endl;
+    // std::cout << "J_task reduced 2 : " << std::endl;
+    // std::cout << original_J_task * widepsd2 << std::endl;
 
-    std::cout << "J task non-contact : " << std::endl;
-    std::cout << rd2_.jac_inertial_nc_ << std::endl;
+    // std::cout << "J task non-contact : " << std::endl;
+    // std::cout << rd2_.jac_inertial_nc_ << std::endl;
 
     MatrixXd J_kt_;
     J_kt_.setZero(6, model_dof_);

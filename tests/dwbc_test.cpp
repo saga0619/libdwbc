@@ -591,8 +591,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
 
     rd_.SetContact(true, true);
 
-
-    Eigen::VectorXd ans1, ans2;
+    Eigen::VectorXd ang_momentum_from_rbdl, ang_momentum_from_dwbc;
 
     Eigen::MatrixXd com_inertia;
     Eigen::VectorXd com_mom;
@@ -603,14 +602,15 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     RigidBodyDynamics::Math::Vector3d _com_vel;
     RigidBodyDynamics::Math::Vector3d _ang_momentum;
     RigidBodyDynamics::Utils::CalcCenterOfMass(rd_.model_, q, qdot, &qddot, mass_, com, &_com_vel, &_com_acc, &_ang_momentum);
-    rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
-    BENCHMARK("calc com information")
-    {
-        rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
-    };
+    // rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
+    // BENCHMARK("calc com information")
+    // {
+    //     rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
+    // };
 
-    ans1 = _ang_momentum;
-    // std::cout << "ang momentum from rbdl : " << _ang_momentum.transpose() << std::endl;
+    ang_momentum_from_rbdl = _ang_momentum;
+    // std::cout << "\nang momentum from rbdl : " << _ang_momentum.transpose() << std::endl;
+    // std::cout << "com : " << com.transpose() << std::endl;
 
     // std::cout << " com inertia : " << std::endl;
     // std::cout << com_inertia << std::endl;
@@ -621,14 +621,15 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     // std::cout << rd_.total_mass_ * skew(rd_.com_pos - rd_.link_[0].xpos) << std::endl;
 
     Eigen::VectorXd ans3 = Eigen::VectorXd::Zero(6);
-    ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
+    // ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
     BENCHMARK("angular momentum matrix calculation")
     {
-        ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
+        ang_momentum_from_dwbc = (rd_.CMM_ * qdot).segment(3, 3);
     };
 
-    // std::cout << "CMM from rd_ : " << std::endl
-    //           << rd_.CalcAngularMomentumMatrix() - rd_.CMM_.bottomRows(3) << std::endl;
+    // std::cout << "\nCMM from rd_ : " << std::endl
+    //           << ang_momentum_from_dwbc.transpose() << std::endl;
+    // std::cout << " com : " << rd_.com_pos.transpose() << std::endl;
 
     // BENCHMARK("angular momentum matrix calculation2")
     // {
@@ -688,12 +689,12 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     };
 
     Eigen::MatrixXd cmm = Eigen::MatrixXd::Zero(3, rd_.model_.qdot_size);
-    BENCHMARK("angular momentum matrix calculation2")
-    {
-        // rd_.CalcAngularMomentumMatrix(cmm);
+    // BENCHMARK("angular momentum matrix calculation2")
+    // {
+    //     // rd_.CalcAngularMomentumMatrix(cmm);
 
-        ans3 = rd_.CMM_ * qdot;
-    };
+    //     ans3 = rd_.CMM_ * qdot;
+    // };
 
     //
     //
@@ -703,26 +704,26 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     Eigen::Matrix3d upper_ic;
     Matrix6d i_temp_6 = Eigen::MatrixXd::Zero(6, 6);
 
-    BENCHMARK("UPPERBODY MASS MATRIX CALCULATION")
-    {
-        i_temp_6.setZero();
-        for (int i = 0; i < 21; i++)
-        {
+    // BENCHMARK("UPPERBODY MASS MATRIX CALCULATION")
+    // {
+    //     i_temp_6.setZero();
+    //     for (int i = 0; i < 21; i++)
+    //     {
 
-            // std::cout << "link " << i + 13 << " : " << rd_.link_[i + 13].name_ << std::endl;
-            Matrix6d I_rotation = Matrix6d::Zero(6, 6);
-            Matrix6d temp1 = Matrix6d::Identity(6, 6);
-            temp1.block(0, 0, 3, 3) = rd_.link_[i + 13].rotm.transpose();
-            temp1.block(3, 3, 3, 3) = rd_.link_[i + 13].rotm.transpose();
+    //         // std::cout << "link " << i + 13 << " : " << rd_.link_[i + 13].name_ << std::endl;
+    //         Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+    //         Matrix6d temp1 = Matrix6d::Identity(6, 6);
+    //         temp1.block(0, 0, 3, 3) = rd_.link_[i + 13].rotm.transpose();
+    //         temp1.block(3, 3, 3, 3) = rd_.link_[i + 13].rotm.transpose();
 
-            temp1.block(0, 3, 3, 3) = -rd_.link_[i + 13].rotm.transpose() * skew(rd_.link_[i + 13].xpos - rd_.link_[0].xpos);
-            i_temp_6 += temp1.transpose() * rd_.link_[i + 13].GetSpatialInertiaMatrix(false) * temp1;
-        }
-        double upper_mass = 42.6195;
-        Matrix6d skm_temp = i_temp_6.block(3, 0, 3, 3) / upper_mass;
-        Eigen::Vector3d com_upper(skm_temp(2, 1), skm_temp(0, 2), skm_temp(1, 0));
-        upper_ic = i_temp_6.block(3, 3, 3, 3) - upper_mass * skew(com_upper) * skew(com_upper).transpose();
-    };
+    //         temp1.block(0, 3, 3, 3) = -rd_.link_[i + 13].rotm.transpose() * skew(rd_.link_[i + 13].xpos - rd_.link_[0].xpos);
+    //         i_temp_6 += temp1.transpose() * rd_.link_[i + 13].GetSpatialInertiaMatrix(false) * temp1;
+    //     }
+    //     double upper_mass = 42.6195;
+    //     Matrix6d skm_temp = i_temp_6.block(3, 0, 3, 3) / upper_mass;
+    //     Eigen::Vector3d com_upper(skm_temp(2, 1), skm_temp(0, 2), skm_temp(1, 0));
+    //     upper_ic = i_temp_6.block(3, 3, 3, 3) - upper_mass * skew(com_upper) * skew(com_upper).transpose();
+    // };
 
     // std::cout << " calculated upperbody mass mat : " << std::endl;
     // std::cout << i_temp_6 << std::endl;
@@ -737,11 +738,10 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     //           << rd_.link_.back().jac_com_ << std::endl;
     // Eigen::MatrixXd H_C = Eigen::MatrixXd::Zero(6, rd_.model_.qdot_size);
 
-    REQUIRE(ans1.isApprox((ans2), 1e-5) == true);
+    REQUIRE(ang_momentum_from_rbdl.isApprox((ang_momentum_from_dwbc), 1e-5));
 
     BENCHMARK("SEQDYN CALC")
     {
-
         rd_.SequentialDynamicsCalculate();
     };
 
@@ -780,132 +780,6 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     // {
     //     H_temp2 = H_TEMP1 * j_temp;
     // };
-}
-TEST_CASE("MODEL MODIFICATION BENCHMARK")
-{
-    bool verbose = false;
-
-    RobotData rd_;
-    std::string resource_path = URDF_DIR;
-    std::string urdf_name = "/dyros_tocabi.urdf";
-    std::string urdf_path = resource_path + urdf_name;
-
-    rd_.LoadModelData(urdf_path, true, false);
-    VectorXd q = VectorXd::Zero(rd_.system_dof_ + 1);
-    VectorXd qdot = VectorXd::Zero(rd_.system_dof_);
-    VectorXd qddot = VectorXd::Zero(rd_.system_dof_);
-
-    VectorXd fstar_1;
-    fstar_1.setZero(6);
-    fstar_1 << 0.1, 4.0, 0.1, 0.1, -0.1, 0.1;
-
-    VectorXd tlim;
-    tlim.setConstant(rd_.model_dof_, 500);
-
-    rd_.SetTorqueLimit(tlim);
-    q << 0, 0, 0.92983, 0, 0, 0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0, 0, 0,
-        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
-        0, 0,
-        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
-
-    rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
-    rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
-
-    rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero(), verbose);
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
-
-    rd_.UpdateKinematics(q, qdot, qddot);
-    rd_.SetContact(true, true);
-
-    rd_.SetTaskSpace(0, fstar_1);
-    rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
-    rd_.CalcGravCompensation();
-    rd_.CalcTaskControlTorque(true);
-    rd_.CalcContactRedistribute(true);
-
-    BENCHMARK("ORIGINAL MODEL CALCULATION")
-    {
-        rd_.UpdateKinematics(q, qdot, qddot);
-        rd_.SetContact(true, true);
-
-        rd_.SetTaskSpace(0, fstar_1);
-        rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
-        rd_.CalcGravCompensation();
-        rd_.CalcTaskControlTorque(false);
-        rd_.CalcContactRedistribute(false);
-    };
-
-    std::vector<Link> Link_RArm;
-    std::vector<Joint> joint_RArm;
-    for (int i = 13; i <= 33; i++)
-    {
-        Link_RArm.push_back(rd_.link_[i]);
-        joint_RArm.push_back(rd_.joint_[i]);
-    }
-    rd_.DeleteLink("Waist1_Link", verbose);
-
-    Link_RArm[2].parent_id_ = rd_.getLinkID("pelvis_link");
-    joint_RArm[2].joint_type_ = JOINT_6DOF;
-    rd_.AddLink(joint_RArm[2], Link_RArm[2], verbose); // UpperBody
-
-    rd_.ClearContactConstraint();
-    rd_.ClearTaskSpace();
-
-    tlim.resize(rd_.model_dof_);
-    tlim.setConstant(rd_.model_dof_, 300);
-
-    rd_.SetTorqueLimit(tlim);
-    q << 0, 0, 0.92983, 0, 0, 0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0, 0, 0,
-        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
-        0, 0,
-        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
-    rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
-    rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
-    rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero(), verbose);
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
-
-    VectorXd q2;
-    VectorXd qdot2;
-    VectorXd qddot2;
-    q2.setZero(rd_.model_.q_size);
-    qdot2.setZero(rd_.model_.qdot_size);
-    qddot2.setZero(rd_.model_.qdot_size);
-    q2 << 0, 0, 0.92983, 0, 0, 0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-        0, 0, 0,
-        0, 0, 0, 1;
-
-    rd_.UpdateKinematics(q2, qdot2, qddot2);
-    rd_.SetContact(true, true);
-
-    rd_.SetTaskSpace(0, fstar_1);
-    rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
-    rd_.CalcGravCompensation();
-    rd_.CalcTaskControlTorque(true);
-    rd_.CalcContactRedistribute(true);
-
-    BENCHMARK("MODEL MODIFIED CONTROL CALCULATION")
-    {
-        rd_.UpdateKinematics(q2, qdot2, qddot2);
-        rd_.SetContact(true, true);
-
-        rd_.SetTaskSpace(0, fstar_1);
-        rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
-        rd_.CalcGravCompensation();
-        rd_.CalcTaskControlTorque(false);
-        rd_.CalcContactRedistribute(false);
-    };
 }
 
 TEST_CASE("COPY AND CALCULATION TEST")

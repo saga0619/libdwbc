@@ -145,6 +145,8 @@ namespace DWBC
         unsigned int nc_dof;
         unsigned int co_dof;
 
+        Matrix6d SI_body_;        //spatial inertia matrix from global frame
+
         Matrix6d SI_co_b_;        //spatial inertia matrix from Contact Model from base frame;
         Matrix6d SI_nc_b_;        //spatial inertia matrix from non-contact model from base frame;
 
@@ -328,18 +330,23 @@ namespace DWBC
         void ChangeLinkToFixedJoint(std::string link_name, bool verbose = false);
 
         void printLinkInfo();
-        int getLinkID(std::string link_name);
-
-        void CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum);
-
+        int getLinkID(std::string link_name);        
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
+
+
+        void SequentialDynamicsCalculate(bool verbose = false);
+
+
+        /*
+        Deprecated : SLOW COMPUTATION 
+        */
+        void CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum);
         void CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints);
         void UpdateVModel(RigidBodyDynamics::Model &vmodel, VectorXd &q_virtual, VectorXd &q_dot_virtual, VectorXd &q_ddot_virtual, std::vector<Link> &links, std::vector<Joint> &joints);
         void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
         void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, Vector3d &com_position, double com_mass, bool verbose = false);
         void CalcVirtualCMM(RigidBodyDynamics::Model v_model, std::vector<Link> &_link, Vector3d &com_pos, MatrixXd &cmm, bool verbose = false);
 
-        void SequentialDynamicsCalculate(bool verbose = false);
 
 
     };
