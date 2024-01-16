@@ -135,7 +135,7 @@ namespace DWBC
                 vel_traj_(j) = quintic(1);
                 acc_traj_(j) = quintic(2);
             }
-            f_star_ = pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(pos_traj_ - current_pos) + pos_d_gain_.cwiseProduct(vel_traj_ - current_vel);
+            f_star_.segment(0,3) = pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(pos_traj_ - current_pos) + pos_d_gain_.cwiseProduct(vel_traj_ - current_vel);
             break;
         default:
             break;
