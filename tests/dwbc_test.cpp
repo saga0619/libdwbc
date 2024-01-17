@@ -273,6 +273,7 @@ TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 1", "[LIBDWBC]")
     // rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
     rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
 
     std::string f_name = "/J_C";
 
@@ -376,6 +377,7 @@ TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 2", "[LIBDWBC]")
     // rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
     rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
 
     std::string f_name = "/J_C";
 
@@ -497,10 +499,12 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
     // rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
     rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
 
     BENCHMARK("contact space calculation")
     {
         rd_.SetContact(true, true);
+        rd_.CalcContactConstraint();
     };
 
     rd_.SetTaskSpace(0, fstar_1);
@@ -580,16 +584,16 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
 
     int left_foot_id = 6;
     int right_foot_id = 12;
-    
+
     rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
     rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-    
 
     // std::cout << qdot.transpose() << std::endl;
 
     rd_.UpdateKinematics(q, qdot, qddot);
 
     rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
 
     Eigen::VectorXd ang_momentum_from_rbdl, ang_momentum_from_dwbc;
 
@@ -742,7 +746,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
 
     BENCHMARK("SEQDYN CALC")
     {
-        rd_.SequentialDynamicsCalculate();
+        rd_.ReducedDynamicsCalculate();
     };
 
     // rd_.SequentialDynamicsCalculate(true);
@@ -845,6 +849,7 @@ TEST_CASE("COPY AND CALCULATION TEST")
     // rd_.save_mat_file_ = true;
 
     rd2_.SetContact(true, true);
+    rd2_.CalcContactConstraint();
 
     REQUIRE_MESSAGE(check_binary("/1/J_C", rd2_.J_C), "J_C is not correct");
 
@@ -876,6 +881,93 @@ TEST_CASE("COPY AND CALCULATION TEST")
 
     REQUIRE_MESSAGE(check_binary("/1/torque_contact_", rd2_.torque_contact_), "Contact torque is not correct");
 }
+
+TEST_CASE("2LEVEL WBC TEST")
+{
+    double rot_z = M_PI_2;
+
+    RobotData rd_;
+
+    std::string urdf_file = std::string(URDF_DIR) + "/dyros_tocabi.urdf";
+
+    std::string desired_control_target = "COM";
+
+    VectorXd fstar_1;
+    fstar_1.setZero(6);
+    fstar_1 << 0.11, 0.5, 0.13, 0.12, -0.11, 0.05; // based on local frmae.
+
+    // fstar_1
+    rd_.LoadModelData(urdf_file, true, false);
+
+    VectorXd t2lim;
+    VectorXd q2 = VectorXd::Zero(rd_.model_.q_size);
+    VectorXd q2dot = VectorXd::Zero(rd_.model_.qdot_size);
+    VectorXd q2ddot = VectorXd::Zero(rd_.model_.qdot_size);
+
+    VectorXd tlim;
+    tlim.setConstant(rd_.model_dof_, 500);
+    rd_.SetTorqueLimit(tlim);
+
+    Vector3d euler_rotation(0, 0, rot_z);
+
+    // get quaternion from euler angle in radian, euler_rotation
+    Eigen::Quaterniond qu = Eigen::AngleAxisd(euler_rotation[0], Eigen::Vector3d::UnitX()) *
+                            Eigen::AngleAxisd(euler_rotation[1], Eigen::Vector3d::UnitY()) *
+                            Eigen::AngleAxisd(euler_rotation[2], Eigen::Vector3d::UnitZ());
+
+    q2 << 0, 0, 0.92983, qu.x(), qu.y(), qu.z(),
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
+        0, 0, 0,
+        0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, qu.w();
+
+    bool verbose = false;
+    rd_.UpdateKinematics(q2, q2dot, q2ddot);
+    rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
+    rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
+
+    rd_.AddTaskSpace(TASK_LINK_6D, desired_control_target.c_str(), Vector3d::Zero(), verbose);
+    // rd2_.AddTaskSpace(TASK_LINK_ROTATION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
+
+    rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
+
+    fstar_1.segment(0, 3) = rd_.link_[0].rotm * fstar_1.segment(0, 3);
+    fstar_1.segment(3, 3) = rd_.link_[0].rotm * fstar_1.segment(3, 3);
+
+    rd_.SetTaskSpace(0, fstar_1);
+
+    rd_.CalcGravCompensation();
+    rd_.CalcTaskControlTorque(true);
+    rd_.CalcContactRedistribute(true);
+
+    MatrixXd original_J_task = rd_.ts_[0].J_task_;
+
+    // std::cout << "Result Task Torque : " << std::endl;
+    // std::cout << rd_.torque_grav_.transpose() << std::endl;
+    // std::cout << rd_.torque_task_.transpose() << std::endl;
+
+    MatrixXd s_k = MatrixXd::Zero(rd_.model_dof_, rd_.model_dof_ + 6);
+    s_k.block(0, 6, rd_.model_dof_, rd_.model_dof_) = MatrixXd::Identity(rd_.model_dof_, rd_.model_dof_);
+    MatrixXd give_me_fstar = rd_.ts_[0].J_task_ * rd_.A_inv_ * rd_.N_C * s_k.transpose();
+
+    // std::cout << "fstar : " << (give_me_fstar * rd_.torque_task_).transpose() << std::endl;
+
+    BENCHMARK("2LEVEL WBC")
+    {
+        rd_.UpdateKinematics(q2, q2dot, q2ddot);
+        rd_.SetContact(true, true);
+        rd_.CalcContactConstraint();
+        rd_.SetTaskSpace(0, fstar_1);
+
+        rd_.CalcGravCompensation();
+
+        rd_.CalcTaskControlTorque(true);
+        rd_.CalcContactRedistribute(true);
+    };
+};
 
 /*
 if (save_mat_file_)

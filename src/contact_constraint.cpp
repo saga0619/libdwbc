@@ -51,10 +51,27 @@ namespace DWBC
         xc_pos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, rbdl_body_id_, contact_point_, false);
         rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, rbdl_body_id_, false)).transpose();
 
-        j_contact.setZero(6, model_.qdot_size);
-        RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_body_id_, contact_point_, j_contact, false);
+        if (contact_type_ == CONTACT_6D)
+        {
+            j_contact.setZero(contact_dof_, model_.qdot_size);
+            RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_body_id_, contact_point_, j_contact, false);
 
-        j_contact.topRows(3).swap(j_contact.bottomRows(3));
+            j_contact.topRows(3).swap(j_contact.bottomRows(3));
+        }
+        else if (contact_type_ == CONTACT_LINE)
+        {
+            // j_contact.setZero(contact_dof_, model_.qdot_size);
+            // RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_body_id_, contact_point_, j_contact, false);
+
+            // j_contact.topRows(3).swap(j_contact.bottomRows(3));
+        }
+        else if (contact_type_ == CONTACT_POINT)
+        {
+            j_contact.setZero(contact_dof_, model_.qdot_size);
+            RigidBodyDynamics::CalcPointJacobian6D(model_, q_virtual_, rbdl_body_id_, contact_point_, j_contact, false);
+
+            j_contact.topRows(3).swap(j_contact.bottomRows(3));
+        }
     }
     void ContactConstraint::SetContact(bool cont)
     {
