@@ -79,6 +79,7 @@ int main(void)
     MatrixXd origin_A_66 = rd2_.A_.block(0, 0, 6, 6);
 
     rd2_.SetContact(true, true);
+    rd2_.CalcContactConstraint();
 
     fstar_1.segment(0, 3) = rd2_.link_[0].rotm * fstar_1.segment(0, 3);
     fstar_1.segment(3, 3) = rd2_.link_[0].rotm * fstar_1.segment(3, 3);
@@ -113,6 +114,9 @@ int main(void)
 
     std::cout << rd2_.torque_task_.transpose() << std::endl;
 
+    std::cout << "Result grav Torque : " << std::endl;
+    std::cout << rd2_.torque_grav_.transpose() << std::endl;
+
     MatrixXd s_k = MatrixXd::Zero(rd2_.model_dof_, rd2_.model_dof_ + 6);
     s_k.block(0, 6, rd2_.model_dof_, rd2_.model_dof_) = MatrixXd::Identity(rd2_.model_dof_, rd2_.model_dof_);
     MatrixXd give_me_fstar = rd2_.ts_[0].J_task_ * rd2_.A_inv_ * rd2_.N_C * s_k.transpose();
@@ -132,7 +136,6 @@ int main(void)
     // VectorXd q3dot = VectorXd::Zero(rd2_.model_.qdot_size);
     // VectorXd q3ddot = VectorXd::Zero(rd2_.model_.qdot_size);
 
-    rd2_.SequentialDynamicsCalculate();
     // q3 << 0, 0, 0.92983, 0, 0, 0,
     //     0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
     //     0.0, 0.0, -0.24, 0.6, -0.36, 0.0;
@@ -160,55 +163,21 @@ int main(void)
 
     */
 
-    MatrixXd testMatrix = MatrixXd::Zero(24, 39);
+    rd2_.ReducedDynamicsCalculate();
+    rd2_.ReducedCalcContactConstraint();
+    rd2_.ReducedCalcGravCompensation();
 
-    testMatrix.block(0, 0, 18, 18) = MatrixXd::Identity(18, 18);
-    testMatrix.block(18, 18, 6, 21) = rd2_.jac_inertial_nc_;
-
-    MatrixXd widepsd = rd2_.jac_inertial_nc_.transpose() * (rd2_.jac_inertial_nc_ * rd2_.jac_inertial_nc_.transpose()).inverse();
-
-    // std::cout << "widepsd : \n";
-    // std::cout << widepsd << std::endl;
-
-    MatrixXd widepsd2 = testMatrix.transpose() * (testMatrix * testMatrix.transpose()).inverse();
-
-    // std::cout << "widepsd2 : \n";
-    // std::cout << widepsd2 << std::endl;
-
-    MatrixXd segA_inv = testMatrix * rd2_.A_inv_ * testMatrix.transpose();
-    MatrixXd segA = (segA_inv).inverse();
-
-    // std::cout << "segA : \n";
-    // std::cout << segA << std::endl;
-
-    int contact_dof_ = 12;
-    int system_dof_ = 24;
-    int model_dof_ = 18;
-
-    MatrixXd Lambda_contact, J_C_INV_T, N_C, W, W_inv, V2, NwJw, P_C;
-
-    Lambda_contact.setZero(contact_dof_, contact_dof_);
-    J_C_INV_T.setZero(contact_dof_, system_dof_);
-    N_C.setZero(system_dof_, system_dof_);
-
-    W.setZero(model_dof_, model_dof_);
-    W_inv.setZero(model_dof_, model_dof_);
-
-    int contact_null_dof = contact_dof_ - 6;
-
-    V2.setZero(contact_null_dof, model_dof_);
-    NwJw.setZero(model_dof_, model_dof_);
-
-    P_C.setZero(contact_dof_, system_dof_);
-
-    MatrixXd J_C = MatrixXd::Zero(contact_dof_, system_dof_);
-    J_C.block(0, 0, 12, 18) = rd2_.J_C.block(0, 0, 12, 18);
-
-    int res_cal = CalculateContactConstraint(J_C, segA_inv, Lambda_contact, J_C_INV_T, N_C, W, NwJw, W_inv, V2);
+    // std::cout << "AR " << std::endl;
+    // std::cout << rd2_.A_R << std::endl;
+  
 
     MatrixXd J_task_;
     J_task_.setZero(6, 24);
-    J_task_.block(0, 0, 6, 18) = original_J_task.block(0, 0, 6, 18);
+    J_task_.block(0, 0, 6, 18) = original_J_task.leftCols(rd2_.vc_dof);
+    // J_task_.block(0, 18, 6, 6) = rd2_.J_I_nc_inv_T * original_J_task.rightCols(21);
+
+    // T = J' F
+    // Tr = Jr' F
 
     Matrix6d IM_ALL = InertiaMatrix(rd2_.link_.back().inertia, rd2_.link_.back().mass);
 
@@ -231,28 +200,30 @@ int main(void)
         // J_task_.block(0, 0, 6, 18) = original_J_task.block(0, 0, 6, 18);
     }
 
+    // x_task_d = J_task * qdot
+    // x_r_task_d = J_r_task * qdot_r
+    // x_r_task_d is desired task velocity of reduced model, which the projection of original desired task velocity to reduced model
+
     // std::cout << "J_task original : " << std::endl;
     // std::cout << original_J_task << std::endl;
-
     // std::cout << "J_task reduced : " << std::endl;
     // std::cout << J_task_ << std::endl;
-
     // std::cout << "J_task reduced 2 : " << std::endl;
     // std::cout << original_J_task.rightCols(21) * widepsd << std::endl;
-
-
     // std::cout << "J_task reduced 2 : " << std::endl;
     // std::cout << original_J_task * widepsd2 << std::endl;
-
+    // std::cout << "J_task reduced 3 : " << std::endl;
+    // std::cout << original_J_task * JRINV_T.transpose() << std::endl;
     // std::cout << "J task non-contact : " << std::endl;
     // std::cout << rd2_.jac_inertial_nc_ << std::endl;
 
     MatrixXd J_kt_;
-    J_kt_.setZero(6, model_dof_);
+    J_kt_.setZero(6, rd2_.reduced_model_dof_);
     MatrixXd Lambda_task_;
     Lambda_task_.setZero(6, 6);
 
-    CalculateJKT(J_task_, segA_inv, N_C, W_inv, J_kt_, Lambda_task_);
+    CalculateJKT(J_task_, rd2_.A_R_inv, rd2_.N_CR, rd2_.W_R_inv, J_kt_, Lambda_task_);
+    // CalculateJKT(J_task_, segA_inv, N_C, W_inv, J_kt_, Lambda_task_);
 
     VectorXd torque_recalc = VectorXd::Zero(33);
     torque_recalc.segment(0, 18) = J_kt_ * Lambda_task_ * fstar_1;
@@ -291,11 +262,22 @@ int main(void)
 
     Vector6d fnc = torque_recalc.segment(12, 6);
 
-    torque_recalc.segment(12, 21) = rd2_.jac_inertial_nc_.transpose() * fnc;
+    torque_recalc.segment(12, 21) = rd2_.J_I_nc_.transpose() * fnc;
     std::cout << torque_recalc.transpose() << std::endl;
 
     std::cout << "fstar 2 :";
     std::cout << (give_me_fstar * torque_recalc).transpose() << std::endl;
+
+    std::cout << "grav torque : " << std::endl;
+    std::cout << rd2_.torque_grav_.transpose() << std::endl;
+    // std::cout << "A_R : " << std::endl;
+
+
+    // std::cout << " J_R_INV_T : \n";
+    // std::cout << rd2_.J_R_INV_T << std::endl;
+
+    // std::cout << "J_I_nc_inv_T : " << std::endl;
+    // std::cout << rd2_.J_I_nc_inv_T << std::endl;
 
     return 0;
 }
