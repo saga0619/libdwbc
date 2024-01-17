@@ -1,5 +1,5 @@
 #include <chrono>
-#include <dwbc/dwbc.h>
+#include <libdwbc/dwbc.h>
 
 class MyRobotData : public DWBC::RobotData
 {
@@ -15,7 +15,7 @@ int main()
 
     std::string urdf_path = "../../test/dyros_tocabi.urdf";
 
-    rd_.InitModelData(urdf_path, true, false);
+    rd_.LoadModelData(urdf_path, true, false);
 
     VectorXd q;
     VectorXd qdot;
@@ -96,6 +96,7 @@ int main()
     for (int i = 0; i < repeat_time; i++)
     {
         rd_.SetContact(true, true);
+        rd_.CalcContactConstraint();
         // rd_.CalcTaskSpaceTorqueHQPWithThreaded(); // Calculate Task Spaces...
         rd_.SetTaskSpace(0,fstar_1);
 	    rd_.SetTaskSpace(1,fstar_1.segment(3,3));
