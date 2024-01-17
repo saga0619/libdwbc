@@ -329,16 +329,13 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     // Centroidal momentum calculation !
     // inertial frame ::: position of com, rotation frame from global.
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
-    cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;       // rotation matrix of com from global
+    cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;                   // rotation matrix of com from global
     cm_rot6.block(3, 0, 3, 3) = skew(com_from_pelv).transpose(); // skew matrix of com position from global
 
     // Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
     // cm_rot6.block(3, 3, 3, 3) = link_[0].rotm;
     // Eigen::Vector3d com_pos_local = link_[0].rotm.transpose() * (com_from_pelv);
     // cm_rot6.block(3, 0, 3, 3) = link_[0].rotm * (skew(com_pos_local)).transpose() * link_[0].rotm.transpose();
-
-
-
 
     CMM_ = cm_rot6 * A_.topRows(6); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from global frame
@@ -351,8 +348,6 @@ void RobotData::UpdateKinematics(const VectorXd q_virtual, const VectorXd q_dot_
     SI_body_ = Matrix6d::Zero(6, 6);
     SI_body_.block(0, 0, 3, 3) = Eigen::Matrix3d::Identity() * total_mass_;
     SI_body_.block(3, 3, 3, 3) = link_.back().inertia;
-
-
 
     link_.back().rotm = link_[0].rotm; // get info of pelvis rotation
     link_.back().mass = total_mass_;
@@ -443,10 +438,9 @@ void RobotData::UpdateContactConstraint()
     }
 }
 
-int RobotData::CalcContactConstraint(bool update)
+int RobotData::CalcContactConstraint()
 {
-    if (update)
-        UpdateContactConstraint();
+    // UpdateContactConstraint();
     // int contact_dof
     if (J_C.rows() != contact_dof_ || J_C.cols() != system_dof_)
     {
@@ -2311,7 +2305,9 @@ void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, 
     // AddLink(joint, link);
 }
 
-void RobotData::SequentialDynamicsCalculate(bool verbose)
+// void RobotData::
+
+void RobotData::ReducedDynamicsCalculate(bool verbose)
 {
     contact_dependency_joint_.setZero(system_dof_);
     contact_dependency_link_.setZero(link_num_);
@@ -2356,8 +2352,12 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
         }
     }
 
-    nc_dof = l_joint_idx_non_contact_.size();
+    nc_dof = l_joint_idx_non_contact_.size(); // nc_dof + co_dof + 6 = system_dof_
     co_dof = l_joint_idx_conact_.size();
+    vc_dof = co_dof + 6;
+
+    reduced_model_dof_ = model_dof_ - nc_dof + 6;
+    reduced_system_dof_ = reduced_model_dof_ + 6;
 
     Matrix6d Arot_pelv = Matrix6d::Identity(6, 6);
     Arot_pelv.block(0, 0, 3, 3) = link_[0].rotm;
@@ -2430,12 +2430,46 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
     A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
 
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
-    cm_rot6.block(3, 0, 3, 3) = skew(com_pos_nc_).transpose();         // skew matrix of com position from pelvis
-    cmm_nc_ = cm_rot6 * A_NC.topRows(6).rightCols(nc_dof); // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
+    cm_rot6.block(3, 0, 3, 3) = skew(com_pos_nc_).transpose(); // skew matrix of com position from pelvis
+    cmm_nc_ = cm_rot6 * A_NC.topRows(6).rightCols(nc_dof);     // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from local frame (robot frame)
+    J_I_nc_.setZero(6, nc_dof);
+    J_I_nc_ = SI_nc_l_.inverse() * cmm_nc_;
 
-    jac_inertial_nc_.setZero(6, nc_dof);
-    jac_inertial_nc_ = SI_nc_l_.inverse() * cmm_nc_;
+    J_R = MatrixXd::Zero(reduced_system_dof_, system_dof_);
+    J_R.block(0, 0, vc_dof, vc_dof) = MatrixXd::Identity(vc_dof, vc_dof);
+    J_R.block(vc_dof, vc_dof, 6, nc_dof) = J_I_nc_;
+
+    /* 
+    Simplified Calculation of 
+    A_R_inv = J_R * A_inv_ * J_R.transpose();
+
+    */
+    A_R_inv.setZero(reduced_system_dof_, reduced_system_dof_);
+    A_R_inv.block(0, 0, vc_dof, vc_dof) = A_inv_.block(0, 0, vc_dof, vc_dof);
+    A_R_inv.block(vc_dof, 0, 6, vc_dof) = J_I_nc_ * A_inv_.block(vc_dof, 0, nc_dof, vc_dof);
+    A_R_inv.block(vc_dof, vc_dof, 6, 6) = J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof) * J_I_nc_.transpose();
+    A_R_inv.block(0, vc_dof, vc_dof, 6) = A_R_inv.block(vc_dof, 0, 6, vc_dof).transpose();
+
+
+    A_R = A_R_inv.inverse();
+
+    // A_R.setZero(reduced_system_dof_, reduced_system_dof_);
+    // A_R.block(0,0,vc_dof,vc_dof) = A_.block(0,0,vc_dof,vc_dof);
+
+
+    J_I_nc_inv_T.setZero(6, nc_dof);
+    J_I_nc_inv_T = A_R.block(vc_dof, 0, 6, vc_dof) * A_inv_.block(0, vc_dof, vc_dof, nc_dof) + A_R.block(vc_dof, vc_dof, 6, 6) * J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof);
+
+    // J_R_INV_T = A_R * J_R * A_inv_;
+    J_R_INV_T = MatrixXd::Zero(reduced_system_dof_, system_dof_);
+    J_R_INV_T.block(0, 0, vc_dof, vc_dof).setIdentity();
+
+    J_R_INV_T.block(vc_dof, vc_dof, 6, nc_dof) = J_I_nc_inv_T;
+
+    G_R.setZero(reduced_system_dof_);
+    G_R.segment(0, vc_dof) = G_.segment(0, vc_dof);
+    G_R.segment(vc_dof, 6) = J_I_nc_inv_T * G_.segment(vc_dof, nc_dof);
 
     if (verbose)
     {
@@ -2521,4 +2555,45 @@ void RobotData::SequentialDynamicsCalculate(bool verbose)
 
         std::cout << "Spatial Momentum : " << std::endl;
     }
+}
+
+int RobotData::ReducedCalcContactConstraint()
+{
+    Lambda_CR.setZero(contact_dof_, contact_dof_);
+    J_CR.setZero(contact_dof_, reduced_system_dof_);
+    J_CR_INV_T.setZero(contact_dof_, reduced_system_dof_);
+    N_CR.setZero(reduced_system_dof_, reduced_system_dof_);
+
+    W_R.setZero(reduced_model_dof_, reduced_model_dof_);
+    W_R_inv.setZero(reduced_model_dof_, reduced_model_dof_);
+
+    V2_R.setZero(contact_dof_ - 6, reduced_model_dof_);
+    NwJw_R.setZero(reduced_model_dof_, reduced_model_dof_);
+
+    P_CR.setZero(contact_dof_, reduced_system_dof_);
+
+    // J_CR = J_C.block(0, 0, contact_dof_, reduced_system_dof_);
+
+    J_CR = MatrixXd::Zero(contact_dof_, reduced_system_dof_);
+    J_CR.block(0, 0, 12, 18) = J_C.block(0, 0, 12, 18);
+
+
+    return CalculateContactConstraint(J_CR, A_R_inv, Lambda_CR, J_CR_INV_T, N_CR, W_R, NwJw_R, W_R_inv, V2_R);
+}
+
+void RobotData::ReducedCalcGravCompensation()
+{
+    torque_grav_.segment(0, reduced_model_dof_) = W_R_inv * (A_R_inv.bottomRows(reduced_model_dof_) * (N_CR * G_R));
+    torque_grav_.segment(co_dof, nc_dof) = G_.segment(vc_dof, nc_dof);
+    P_CR = J_CR_INV_T * G_R;
+}
+
+int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp = true, bool update_task_space = true)
+{
+
+}
+
+int RobotData::ReducedCalcContactRedistribute(bool init)
+{
+
 }

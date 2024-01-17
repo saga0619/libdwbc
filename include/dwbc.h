@@ -134,28 +134,35 @@ namespace DWBC
         std::vector<ContactConstraint> cc_; // contact constraint information
         std::vector<TaskSpace> ts_;         // task space information
 
-        //2level dynamics computation
+        // 2level dynamics computation
 
-        Eigen::VectorXi contact_dependency_joint_;  // 1 if the joint is contact dependant, 0 if not
-        Eigen::VectorXi contact_dependency_link_;   // 1 if the link is contact dependant, 0 if not
+        Eigen::VectorXi contact_dependency_joint_; // 1 if the joint is contact dependant, 0 if not
+        Eigen::VectorXi contact_dependency_link_;  // 1 if the link is contact dependant, 0 if not
 
         std::vector<int> l_joint_idx_conact_;
         std::vector<int> l_joint_idx_non_contact_;
 
         unsigned int nc_dof;
         unsigned int co_dof;
+        unsigned int vc_dof;
+        unsigned int reduced_model_dof_;
+        unsigned int reduced_system_dof_;
 
-        Matrix6d SI_body_;        //spatial inertia matrix from global frame
+        Matrix6d SI_body_; // spatial inertia matrix from global frame
 
-        Matrix6d SI_co_b_;        //spatial inertia matrix from Contact Model from base frame;
-        Matrix6d SI_nc_b_;        //spatial inertia matrix from non-contact model from base frame;
+        Matrix6d SI_co_b_; // spatial inertia matrix from Contact Model from base frame;
+        Matrix6d SI_nc_b_; // spatial inertia matrix from non-contact model from base frame;
 
-        Matrix6d SI_co_l_;      //Spatial inertia matrix from Contact Model from contact model COM frame;
-        Matrix6d SI_nc_l_;      //Spatial inertia matrix from non-contact model from non-contact model com frame;
+        Matrix6d SI_co_l_; // Spatial inertia matrix from Contact Model from contact model COM frame;
+        Matrix6d SI_nc_l_; // Spatial inertia matrix from non-contact model from non-contact model com frame;
 
-        MatrixXd A_R;
+        MatrixXd A_R, A_R_inv;
         MatrixXd A_NC;
-        
+
+        VectorXd G_R;
+
+        MatrixXd J_R, J_R_INV_T;
+
         double mass_co_;
         double mass_nc_;
 
@@ -168,10 +175,8 @@ namespace DWBC
         MatrixXd cmm_co_;
         MatrixXd cmm_nc_;
 
-        MatrixXd jac_inertial_nc_;
-
-
-
+        MatrixXd J_I_nc_;
+        MatrixXd J_I_nc_inv_T;
 
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
@@ -191,7 +196,7 @@ namespace DWBC
         void LoadModelData(std::string urdf_path, bool floating, int verbose = 0);
 
         void InitModelData(int verbose = 0);
-        void InitModelWithLinkJoint(RigidBodyDynamics::Model& lmodel, std::vector<Link>& links, std::vector<Joint>& joints);
+        void InitModelWithLinkJoint(RigidBodyDynamics::Model &lmodel, std::vector<Link> &links, std::vector<Joint> &joints);
 
         void InitializeMatrix();
         /*
@@ -230,9 +235,8 @@ namespace DWBC
 
         /*
         Calculate Contact Constraint Dynamics
-        bool update : Call UpdateContactConstraint()
         */
-        int CalcContactConstraint(bool update = true);
+        int CalcContactConstraint();
 
         /*
         Set Contact status, true or false
@@ -330,15 +334,19 @@ namespace DWBC
         void ChangeLinkToFixedJoint(std::string link_name, bool verbose = false);
 
         void printLinkInfo();
-        int getLinkID(std::string link_name);        
+        int getLinkID(std::string link_name);
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
 
+        MatrixXd Lambda_CR, J_CR, J_CR_INV_T, N_CR, W_R, W_R_inv, V2_R, NwJw_R, P_CR;
 
-        void SequentialDynamicsCalculate(bool verbose = false);
-
+        void ReducedDynamicsCalculate(bool verbose = false);
+        int ReducedCalcContactConstraint();
+        int ReducedCalcTaskControlTorque(bool init, bool hqp = true, bool update_task_space = true);
+        int ReducedCalcContactRedistribute(bool init);
+        void ReducedCalcGravCompensation();
 
         /*
-        Deprecated : SLOW COMPUTATION 
+        Deprecated : SLOW COMPUTATION
         */
         void CalcCOMInertia(std::vector<Link> &links, MatrixXd &com_inertia, VectorXd &com_momentum);
         void CreateVModel(std::vector<Link> &links, std::vector<Joint> &joints);
@@ -346,9 +354,6 @@ namespace DWBC
         void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
         void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, Vector3d &com_position, double com_mass, bool verbose = false);
         void CalcVirtualCMM(RigidBodyDynamics::Model v_model, std::vector<Link> &_link, Vector3d &com_pos, MatrixXd &cmm, bool verbose = false);
-
-
-
     };
 
     template <typename... Types>
@@ -389,7 +394,8 @@ namespace DWBC
                 }
             }
         }
-        CalcContactConstraint();
+        // CalcContactConstraint();
+        UpdateContactConstraint();
     }
 }
 
