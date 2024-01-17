@@ -50,6 +50,7 @@ namespace DWBC
 
         bool traj_pos_set = false;
         bool traj_rot_set = false;
+        bool traj_gain_set = false;
 
         Vector3d pos_init_;
         Matrix3d rot_init_;

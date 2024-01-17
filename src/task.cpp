@@ -101,7 +101,7 @@ namespace DWBC
         rot_desired_ = rot_desired;
         w_desired_ = twist_desired;
 
-        traj_pos_set = true;
+        traj_rot_set = true;
     }
 
     void TaskSpace::SetTaskGain(Vector3d pos_p_gain, Vector3d pos_d_gain, Vector3d pos_a_gain, Vector3d rot_p_gain, Vector3d rot_d_gain, Vector3d rot_a_gain)
@@ -114,7 +114,7 @@ namespace DWBC
         rot_d_gain_ = rot_d_gain;
         rot_a_gain_ = rot_a_gain;
 
-        traj_rot_set = true;
+        // traj_gain_set = true;
     }
 
     void TaskSpace::GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel)
@@ -134,8 +134,10 @@ namespace DWBC
                 pos_traj_(j) = quintic(0);
                 vel_traj_(j) = quintic(1);
                 acc_traj_(j) = quintic(2);
+
+                f_star_(j) = pos_a_gain_(j) * acc_traj_(j) + pos_p_gain_(j) * (pos_traj_(j) - current_pos(j)) + pos_d_gain_(j) * (vel_traj_(j) - current_vel(j));
             }
-            f_star_ = pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(pos_traj_ - current_pos) + pos_d_gain_.cwiseProduct(vel_traj_ - current_vel);
+            // f_star_.segment(0,3) = pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(pos_traj_ - current_pos) + pos_d_gain_.cwiseProduct(vel_traj_ - current_vel);
             break;
         default:
             break;
