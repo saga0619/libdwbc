@@ -319,4 +319,14 @@ namespace DWBC
         return inertia_matrix;
     }
 
+    //Rotationmatrix to quaternion using Eigen
+    Eigen::Quaterniond Rot2Quat(const Eigen::Matrix3d &Rot)
+    {
+        Eigen::Quaterniond quat;
+        quat = Rot;
+        return quat;
+    }
+
+
+
 }
