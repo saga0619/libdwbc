@@ -175,6 +175,19 @@ namespace DWBC
     }
 
     /*
+     * Get Jkt reduced
+     * input  : J_task, A_inv, N_C, W_inv,
+     * output : J_kt, lambda_task
+     */
+    void CalculateJKT_R(const MatrixXd &J_task_R, const MatrixXd &A_R_inv, const MatrixXd &N_CR, const MatrixXd &W_R_inv,
+                      MatrixXd &J_kt_R, MatrixXd &lambda_task)
+    {
+        lambda_task = (J_task_R * A_R_inv * N_CR * J_task_R.transpose()).inverse();
+        MatrixXd Q = (lambda_task * J_task_R * A_R_inv * N_CR).rightCols(J_task_R.cols() - 6);
+        J_kt_R = W_R_inv * Q.transpose() * PinvCODWB(Q * W_R_inv * Q.transpose());
+    }
+
+    /*
      *
      *
      *

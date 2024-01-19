@@ -20,6 +20,7 @@ namespace DWBC
         TASK_LINK_POSITION_CUSTOM_FRAME,
         TASK_LINK_ROTATION,
         TASK_LINK_ROTATION_CUSTOM_FRAME,
+        TASK_LINK_BOTH_HAND_6D,
         TASK_CUSTOM,
         TASK_NULL,
     };
@@ -32,6 +33,7 @@ namespace DWBC
                                          "TASK_LINK_POSITION_COM_FRAME",
                                          "TASK_LINK_POSITION_CUSTOM_FRAME",
                                          "TASK_LINK_ROTATION_CUSTOM_FRAME",
+                                         "TASK_LINK_BOTH_HAND_6D",
                                          "TASK_CUSTOM",
                                          "TASK_NULL"};
 
@@ -87,6 +89,20 @@ namespace DWBC
         MatrixXd Lambda_task_;
         VectorXd torque_h_;
 
+        bool reduced_task_ = false;
+        bool noncont_task = false;
+
+        MatrixXd J_task_R_;
+        MatrixXd J_kt_R_;
+        MatrixXd Lambda_task_R_;
+        MatrixXd Null_task_R_;
+
+        MatrixXd J_task_NC_;
+        // MatrixXd J_kt_R_;
+        MatrixXd Lambda_task_NC_;
+        MatrixXd Null_task_NC_;
+        VectorXd torque_h_R_;
+
         MatrixXd Q_;
         MatrixXd Q_temp_;
 
@@ -102,15 +118,23 @@ namespace DWBC
         TaskSpace(int task_mode, int heirarchy, int link_number, const Vector3d &task_point);
         ~TaskSpace();
 
+        // void SetReducedTask(int contact_dof, int system_dof);
+
         void Update(const VectorXd &f_star);
 
         void Update(const MatrixXd &J_task, const VectorXd &f_star);
 
         void CalcJKT(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv);
 
+        void CalcJKT_R(const MatrixXd &A_R_inv, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv, const MatrixXd &J_I_NC);
+
         void CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null);
 
         void CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C);
+
+        void CalcNullMatrix_R(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null);
+
+        void CalcNullMatrix_R(const MatrixXd &A_inv, const MatrixXd &N_C);
 
         void SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired);
 
@@ -126,6 +150,25 @@ namespace DWBC
 
         // void GetFstarRotationalPDF(double current_time, );
     };
+
+    class TaskSpaceReduced : public TaskSpace
+    {
+    public:
+        MatrixXd J_task_R_;
+        MatrixXd J_kt_R_;
+        MatrixXd Null_task_R_;
+        MatrixXd Lambda_task_R_;
+    };
+
+    class TaskSpaceNC : public TaskSpace
+    {
+    public:
+        MatrixXd J_task_NC_;
+        MatrixXd J_kt_NC_;
+        MatrixXd Null_task_NC_;
+        MatrixXd Lambda_task_NC_;
+    };
+
 }
 
 #endif

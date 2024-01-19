@@ -108,9 +108,9 @@ namespace DWBC
         VectorXd q_ddot_system_; // qddot size       : (system_dof)
 
         VectorXd G_;              // gravity vector   : (system_dof)
-        VectorXd torque_grav_;    // gravity torque   : (system_dof)
-        VectorXd torque_task_;    // task torque      : (system_dof)
-        VectorXd torque_contact_; // contact torque   : (system_dof)
+        VectorXd torque_grav_;    // gravity torque   : (model_dof_)
+        VectorXd torque_task_;    // task torque      : (model_dof_)
+        VectorXd torque_contact_; // contact torque   : (model_dof_)
 
         MatrixXd Lambda_contact; // contact space inertia matrix         : (contact_dof * contact_dof)
         MatrixXd J_C;            // contact jacobian                     : (contact_dof * system_dof)
@@ -161,6 +161,12 @@ namespace DWBC
 
         VectorXd G_R;
 
+        VectorXd torque_grav_R_;    // gravity torque   : (reduced_model_dof_)
+        VectorXd torque_task_R_;    // task torque      : (reduced_model_dof_)
+        VectorXd torque_contact_R_; // contact torque   : (reduced_model_dof_)
+
+        VectorXd torque_task_NC_;    // task torque      : (nc_dof)
+
         MatrixXd J_R, J_R_INV_T;
 
         double mass_co_;
@@ -177,6 +183,7 @@ namespace DWBC
 
         MatrixXd J_I_nc_;
         MatrixXd J_I_nc_inv_T;
+        MatrixXd N_I_nc_;
 
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
@@ -299,6 +306,10 @@ namespace DWBC
         */
         int CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
+        int CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
+
+
+
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 
         void CopyKinematicsData(RobotData &target_rd);
@@ -344,6 +355,9 @@ namespace DWBC
         int ReducedCalcTaskControlTorque(bool init, bool hqp = true, bool update_task_space = true);
         int ReducedCalcContactRedistribute(bool init);
         void ReducedCalcGravCompensation();
+
+        int CalcContactRedistributeR(VectorXd torque_input, bool init = true);
+        int CalcContactRedistributeR(bool init = true);
 
         /*
         Deprecated : SLOW COMPUTATION
