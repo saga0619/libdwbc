@@ -117,6 +117,8 @@ namespace DWBC
         MatrixXd J_C_INV_T;      // contact jacobian inverse transpose   : (system_dof * contact_dof)
         MatrixXd N_C;            // null space of contact jacobian       : (system_dof * system_dof)
 
+        MatrixXd A_inv_N_C;     // A_inv * N_C
+
         MatrixXd P_C; // contact projection matrix
 
         MatrixXd W;     // W matrix
@@ -184,6 +186,10 @@ namespace DWBC
         MatrixXd J_I_nc_;
         MatrixXd J_I_nc_inv_T;
         MatrixXd N_I_nc_;
+
+        MatrixXd Lambda_CR, J_CR, J_CR_INV_T, N_CR, W_R, W_R_inv, V2_R, NwJw_R, P_CR;
+
+        MatrixXd A_R_inv_N_CR;
 
 #ifdef COMPILE_QPSWIFT
         std::vector<QP *> qp_task_;
@@ -348,7 +354,6 @@ namespace DWBC
         int getLinkID(std::string link_name);
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
 
-        MatrixXd Lambda_CR, J_CR, J_CR_INV_T, N_CR, W_R, W_R_inv, V2_R, NwJw_R, P_CR;
 
         void ReducedDynamicsCalculate(bool verbose = false);
         int ReducedCalcContactConstraint();

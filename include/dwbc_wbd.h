@@ -42,7 +42,11 @@ namespace DWBC
      */
     int CalculateContactConstraint(
         const MatrixXd &J_contact, const MatrixXd &A_inv,
-        MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2);
+        MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &A_inv_N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2);
+
+    // int CalculateContactConstraintR(
+    //     const MatrixXd &J_CR, const MatrixXd &A_R_inv,
+    //     MatrixXd &lambda_contact_R, MatrixXd &J_CR_INV_T, MatrixXd &N_CR, MatrixXd &A_R_inv_N_CR, MatrixXd &W_R, MatrixXd &NwJw_R, MatrixXd &W_R_inv, MatrixXd &V2_R);
 
     /*
      * Gravity Compensation Torque Calculation
@@ -66,6 +70,11 @@ namespace DWBC
      */
     void CalculateJKT(const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv,
                       MatrixXd &J_kt, MatrixXd &lambda_task);
+    void CalculateJKT2(const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W,
+                       MatrixXd &J_kt, MatrixXd &lambda_task);
+
+    void CalculateJKT_R(const MatrixXd &J_task_R, const MatrixXd &A_R_inv_N_CR, const MatrixXd &W_R_inv,
+                        MatrixXd &J_kt_R, MatrixXd &lambda_task);
 
     void CalculateJKTThreaded(const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv,
                               MatrixXd &Q, MatrixXd &Q_temp, MatrixXd &lambda_task);
@@ -77,7 +86,7 @@ namespace DWBC
      * input  : J_kt, lambda_task, J_task, A_inv, N_C, upper_task_null
      * output : Null_task
      */
-    void CalculateTaskNullSpace(const MatrixXd &J_kt, const MatrixXd &Lambda_task, const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null, MatrixXd &Null_task);
+    void CalculateTaskNullSpace(const MatrixXd &J_kt, const MatrixXd &Lambda_task, const MatrixXd &J_task, const MatrixXd &A_inv_N_C, const MatrixXd &prev_null, MatrixXd &Null_task);
     /*
      * Calculate contact force from command torque
      * input  : command_torque, J_C_INV_T, P_C

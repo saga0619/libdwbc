@@ -64,21 +64,22 @@ namespace DWBC
         CalculateJKT(J_task_, A_inv, N_C, W_inv, J_kt_, Lambda_task_);
     }
 
-    void TaskSpace::CalcJKT_R(const MatrixXd &A_R_inv, const MatrixXd &A_inv, const MatrixXd &N_CR, const MatrixXd &W_R_inv, const MatrixXd &J_I_NC_INV_T)
+    void TaskSpace::CalcJKT_R(const MatrixXd &A_inv, const MatrixXd &A_inv_N_C, const MatrixXd &A_R_inv_N_CR, const MatrixXd &W_R_inv, const MatrixXd &J_I_NC_INV_T)
     {
         int sys_dof = J_task_.cols();
-        int r_sys_dof = A_R_inv.cols();
+        int r_sys_dof = A_R_inv_N_CR.rows();
         int nc_dof = J_I_NC_INV_T.cols();
         int vc_dof = sys_dof - nc_dof;
         J_task_R_.setZero(task_dof_, r_sys_dof);
         Lambda_task_R_.setZero(task_dof_, task_dof_);
         J_kt_R_.setZero(task_dof_, r_sys_dof - 6);
+        Lambda_task_ = (J_task_ * A_inv_N_C * J_task_.transpose()).inverse();
         // if (J_task_.leftCols(vc_dof).norm() > 1.0E-4) // if contact task is not empty
         // {
         reduced_task_ = true;
         J_task_R_.block(0, 0, task_dof_, vc_dof) = J_task_.block(0, 0, task_dof_, vc_dof);
         J_task_R_.block(0, vc_dof, task_dof_, 6) = J_task_.block(0, vc_dof, task_dof_, nc_dof) * J_I_NC_INV_T.transpose();
-        CalculateJKT(J_task_R_, A_R_inv, N_CR, W_R_inv, J_kt_R_, Lambda_task_R_);
+        CalculateJKT_R(J_task_R_, A_R_inv_N_CR, W_R_inv, J_kt_R_, Lambda_task_R_);
         // }
         // else
         // {
@@ -97,26 +98,26 @@ namespace DWBC
         }
     }
 
-    void TaskSpace::CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null)
+    void TaskSpace::CalcNullMatrix(const MatrixXd &A_inv_N_C, const MatrixXd &prev_null)
     {
-        CalculateTaskNullSpace(J_kt_, Lambda_task_, J_task_, A_inv, N_C, prev_null, Null_task_);
+        CalculateTaskNullSpace(J_kt_, Lambda_task_, J_task_, A_inv_N_C, prev_null, Null_task_);
     }
 
-    void TaskSpace::CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C)
+    void TaskSpace::CalcNullMatrix(const MatrixXd &A_inv_N_C)
     {
         int model_size = J_task_.cols() - 6;
-        CalculateTaskNullSpace(J_kt_, Lambda_task_, J_task_, A_inv, N_C, MatrixXd::Identity(model_size, model_size), Null_task_);
+        CalculateTaskNullSpace(J_kt_, Lambda_task_, J_task_, A_inv_N_C, MatrixXd::Identity(model_size, model_size), Null_task_);
     }
 
-    void TaskSpace::CalcNullMatrix_R(const MatrixXd &A_R_inv, const MatrixXd &N_CR, const MatrixXd &prev_null)
+    void TaskSpace::CalcNullMatrix_R(const MatrixXd &A_R_inv_N_CR, const MatrixXd &prev_null)
     {
-        CalculateTaskNullSpace(J_kt_R_, Lambda_task_R_, J_task_R_, A_R_inv, N_CR, prev_null, Null_task_R_);
+        CalculateTaskNullSpace(J_kt_R_, Lambda_task_R_, J_task_R_, A_R_inv_N_CR, prev_null, Null_task_R_);
     }
 
-    void TaskSpace::CalcNullMatrix_R(const MatrixXd &A_R_inv, const MatrixXd &N_CR)
+    void TaskSpace::CalcNullMatrix_R(const MatrixXd &A_R_inv_N_CR)
     {
         int model_size = J_task_R_.cols() - 6;
-        CalculateTaskNullSpace(J_kt_R_, Lambda_task_R_, J_task_R_, A_R_inv, N_CR, MatrixXd::Identity(model_size, model_size), Null_task_R_);
+        CalculateTaskNullSpace(J_kt_R_, Lambda_task_R_, J_task_R_, A_R_inv_N_CR, MatrixXd::Identity(model_size, model_size), Null_task_R_);
     }
 
     void TaskSpace::SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired)

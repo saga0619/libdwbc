@@ -595,7 +595,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     rd_.SetContact(true, true);
     rd_.CalcContactConstraint();
 
-    Eigen::VectorXd ang_momentum_from_rbdl, ang_momentum_from_dwbc;
+    Eigen::Vector3d ang_momentum_from_rbdl, ang_momentum_from_dwbc;
 
     Eigen::MatrixXd com_inertia;
     Eigen::VectorXd com_mom;
@@ -611,7 +611,6 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     // {
     //     rd_.CalcCOMInertia(rd_.link_, com_inertia, com_mom);
     // };
-
     ang_momentum_from_rbdl = _ang_momentum;
     // std::cout << "\nang momentum from rbdl : " << _ang_momentum.transpose() << std::endl;
     // std::cout << "com : " << com.transpose() << std::endl;
@@ -626,6 +625,7 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
 
     Eigen::VectorXd ans3 = Eigen::VectorXd::Zero(6);
     // ans2 = rd_.CalcAngularMomentumMatrix() * qdot;
+    ang_momentum_from_dwbc = (rd_.CMM_ * qdot).segment(3, 3);
     BENCHMARK("angular momentum matrix calculation")
     {
         ang_momentum_from_dwbc = (rd_.CMM_ * qdot).segment(3, 3);
@@ -742,13 +742,16 @@ TEST_CASE("CENTROIDAL MOMENTUM MATRIX TEST")
     //           << rd_.link_.back().jac_com_ << std::endl;
     // Eigen::MatrixXd H_C = Eigen::MatrixXd::Zero(6, rd_.model_.qdot_size);
 
-    REQUIRE(ang_momentum_from_rbdl.isApprox((ang_momentum_from_dwbc), 1e-5));
-
     BENCHMARK("SEQDYN CALC")
     {
         rd_.ReducedDynamicsCalculate();
     };
 
+    // std::cout << "13" << std::endl;
+    // std::cout << ang_momentum_from_dwbc.transpose() << std::endl;
+    // std::cout << ang_momentum_from_rbdl.transpose() << std::endl;
+
+    REQUIRE(ang_momentum_from_rbdl.segment(0, 3).isApprox((ang_momentum_from_dwbc.segment(0, 3)), 1e-5));
     // rd_.SequentialDynamicsCalculate(true);
     // Eigen::MatrixXd H_C = MatrixXd::Zero(6, rd_.system_dof_);
 

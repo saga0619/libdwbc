@@ -126,15 +126,15 @@ namespace DWBC
 
         void CalcJKT(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv);
 
-        void CalcJKT_R(const MatrixXd &A_R_inv, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &W_inv, const MatrixXd &J_I_NC);
+        void CalcJKT_R(const MatrixXd &A_inv, const MatrixXd &A_inv_N_C, const MatrixXd &A_R_inv_N_CR, const MatrixXd &W_R_inv, const MatrixXd &J_I_NC_INV_T);
 
-        void CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null);
+        void CalcNullMatrix(const MatrixXd &A_inv_N_C, const MatrixXd &prev_null);
 
-        void CalcNullMatrix(const MatrixXd &A_inv, const MatrixXd &N_C);
+        void CalcNullMatrix(const MatrixXd &A_inv_N_C);
 
-        void CalcNullMatrix_R(const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null);
+        void CalcNullMatrix_R(const MatrixXd &A_R_inv_N_CR, const MatrixXd &prev_null);
 
-        void CalcNullMatrix_R(const MatrixXd &A_inv, const MatrixXd &N_C);
+        void CalcNullMatrix_R(const MatrixXd &A_R_inv_N_CR);
 
         void SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired);
 

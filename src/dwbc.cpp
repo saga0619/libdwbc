@@ -471,7 +471,9 @@ int RobotData::CalcContactConstraint()
 
     P_C.setZero(contact_dof_, system_dof_);
 
-    return CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, W, NwJw, W_inv, V2);
+    A_inv_N_C.setZero(system_dof_, system_dof_);
+
+    return CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, A_inv_N_C, W, NwJw, W_inv, V2);
 }
 
 void RobotData::ClearTaskSpace()
@@ -560,6 +562,7 @@ void RobotData::SetTaskSpace(int heirarchy, const VectorXd &f_star, const Matrix
     {
         ts_[heirarchy].J_task_ = J_task;
         ts_[heirarchy].f_star_ = f_star;
+        ts_[heirarchy].f_star_qp_.setZero(f_star.size());
     }
 }
 
@@ -573,6 +576,9 @@ void RobotData::UpdateTaskSpace()
 
     for (int i = 0; i < ts_.size(); i++)
     {
+        if (ts_[i].task_mode_ != TASK_CUSTOM)
+        {
+
         if (link_[ts_[i].link_id_].name_ != "COM")
         {
             link_[ts_[i].link_id_].UpdateJac(model_, q_system_);
@@ -657,6 +663,7 @@ void RobotData::UpdateTaskSpace()
             break;
         default:
             break;
+            }
         }
     }
 }
@@ -691,7 +698,7 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
                 if (qp_res == 0)
                     return 0;
 
-                ts_[i].CalcNullMatrix(A_inv_, N_C);
+                ts_[i].CalcNullMatrix(A_inv_N_C);
                 ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                 torque_task_ = ts_[i].torque_h_;
             }
@@ -703,7 +710,7 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
 
                 if (i != ts_.size() - 1)
                 {
-                    ts_[i].CalcNullMatrix(A_inv_, N_C, ts_[i - 1].Null_task_);
+                    ts_[i].CalcNullMatrix(A_inv_N_C, ts_[i - 1].Null_task_);
                 }
 
                 ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
@@ -720,14 +727,14 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
             ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
             if (i == 0)
             {
-                ts_[i].CalcNullMatrix(A_inv_, N_C);
+                ts_[i].CalcNullMatrix(A_inv_N_C);
                 torque_task_ = ts_[i].torque_h_;
             }
             else
             {
                 if (i != (ts_.size() - 1))
                 {
-                    ts_[i].CalcNullMatrix(A_inv_, N_C, ts_[i - 1].Null_task_);
+                    ts_[i].CalcNullMatrix(A_inv_N_C, ts_[i - 1].Null_task_);
                 }
 
                 torque_task_ += ts_[i - 1].Null_task_ * ts_[i].torque_h_;
@@ -976,7 +983,7 @@ void RobotData::CalcTaskSpaceTorqueHQPWithThreaded(bool init)
         }
 
         if (i != ts_.size() - 1)
-            ts_[i].CalcNullMatrix(A_inv_, N_C);
+            ts_[i].CalcNullMatrix(A_inv_N_C);
     }
 }
 
@@ -2452,10 +2459,12 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
     A_R_inv.block(vc_dof, vc_dof, 6, 6) = J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof) * J_I_nc_.transpose();
     A_R_inv.block(0, vc_dof, vc_dof, 6) = A_R_inv.block(vc_dof, 0, 6, vc_dof).transpose();
 
-    A_R = A_R_inv.inverse();
+    // A_R = A_R_inv.inverse(); //5us
 
-    // A_R.setZero(reduced_system_dof_, reduced_system_dof_);
-    // A_R.block(0,0,vc_dof,vc_dof) = A_.block(0,0,vc_dof,vc_dof);
+    A_R = A_R_inv.llt().solve(Eigen::MatrixXd::Identity(reduced_system_dof_, reduced_system_dof_)); // Faster than inverse()
+
+    // // A_R.setZero(reduced_system_dof_, reduced_system_dof_);
+    // // A_R.block(0,0,vc_dof,vc_dof) = A_.block(0,0,vc_dof,vc_dof);
 
     J_I_nc_inv_T.setZero(6, nc_dof);
     J_I_nc_inv_T = A_R.block(vc_dof, 0, 6, vc_dof) * A_inv_.block(0, vc_dof, vc_dof, nc_dof) + A_R.block(vc_dof, vc_dof, 6, 6) * J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof);
@@ -2560,6 +2569,7 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
 
 int RobotData::ReducedCalcContactConstraint()
 {
+    const int cdof = contact_dof_;
     Lambda_CR.setZero(contact_dof_, contact_dof_);
     J_CR.setZero(contact_dof_, reduced_system_dof_);
     J_CR_INV_T.setZero(contact_dof_, reduced_system_dof_);
@@ -2573,12 +2583,59 @@ int RobotData::ReducedCalcContactConstraint()
 
     P_CR.setZero(contact_dof_, reduced_system_dof_);
 
+    // Original Contact Constraint Calculation.
+
+    // Lambda_contact = (J_C * A_inv_ * J_C.transpose()).inverse();
+
     // J_CR = J_C.block(0, 0, contact_dof_, reduced_system_dof_);
 
     J_CR = MatrixXd::Zero(contact_dof_, reduced_system_dof_);
     J_CR.block(0, 0, contact_dof_, vc_dof) = J_C.block(0, 0, contact_dof_, vc_dof);
 
-    return CalculateContactConstraint(J_CR, A_R_inv, Lambda_CR, J_CR_INV_T, N_CR, W_R, NwJw_R, W_R_inv, V2_R);
+    int rows = J_CR.rows(); // rows == contact_dof
+    int cols = J_CR.cols(); // cols == system_dof
+
+    Lambda_CR = (J_CR * A_R_inv * J_CR.transpose()).inverse();
+    J_C_INV_T = (Lambda_CR * J_C) * A_inv_;
+
+    // J_CR_INV_T = J_C_INV_T * J_R.transpose();
+    J_CR_INV_T.block(0, 0, rows, vc_dof) = J_C_INV_T.block(0, 0, rows, vc_dof);
+    J_CR_INV_T.block(0, vc_dof, rows, 6) = J_C_INV_T.block(0, vc_dof, rows, nc_dof) * J_I_nc_.transpose();
+
+    N_C = MatrixXd::Identity(system_dof_, system_dof_) - J_C.transpose() * J_C_INV_T;
+    N_CR = MatrixXd::Identity(cols, cols) - J_CR.transpose() * J_CR_INV_T;
+
+    A_R_inv_N_CR = A_R_inv * N_CR;
+    W_R = A_R_inv_N_CR.block(6, 6, cols - 6, cols - 6);
+    // A_inv.bottomRows(cols - 6) * N_C.rightCols(cols - 6);
+    int result;
+    if (rows > 6)
+    {
+        PinvCODWB(W_R, W_R_inv, V2_R, cols - (rows));
+
+        if (rows - 6 == V2_R.rows())
+        {
+            NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(6) * V2_R.transpose()).inverse();
+            result = 1;
+        }
+        else
+        {
+            NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(6) * V2_R.transpose()).inverse();
+            std::cout << "Contact Space Factorization Error : Required contact null dimension : " << J_CR.rows() - 6 << " factorization rank : " << V2_R.rows() << std::endl;
+            result = 0;
+        }
+    }
+    else
+    {
+        PinvCODWB(W_R, W_R_inv);
+        result = 1;
+    }
+
+    // int result = CalculateContactConstraint(J_CR, A_R_inv, Lambda_CR, J_CR_INV_T, N_CR, A_R_inv_N_CR, W_R, NwJw_R, W_R_inv, V2_R);
+
+    A_inv_N_C = A_inv_ * N_C;
+
+    return result;
 }
 
 void RobotData::ReducedCalcGravCompensation()
@@ -2595,7 +2652,7 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
         UpdateTaskSpace();
     for (int i = 0; i < ts_.size(); i++)
     {
-        ts_[i].CalcJKT_R(A_R_inv, A_inv_, N_CR, W_R_inv, J_I_nc_inv_T);
+        ts_[i].CalcJKT_R(A_inv_, A_inv_N_C, A_R_inv_N_CR, W_R_inv, J_I_nc_inv_T);
     }
 
     torque_task_R_.setZero(reduced_model_dof_);
@@ -2620,9 +2677,9 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
 
                     if (qp_res == 0)
                         return 0;
-                    ts_[i].CalcNullMatrix_R(A_R_inv, N_CR);
+                    ts_[i].CalcNullMatrix_R(A_R_inv_N_CR);
 
-                    ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_R_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
+                    ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                     torque_task_R_ = ts_[i].torque_h_R_;
                     // first_heir = false;
                 }
@@ -2634,10 +2691,10 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
 
                     if (i != (ts_.size() - 1))
                     {
-                        ts_[i].CalcNullMatrix_R(A_R_inv, N_CR, ts_[i - 1].Null_task_R_);
+                        ts_[i].CalcNullMatrix_R(A_R_inv_N_CR, ts_[i - 1].Null_task_R_);
                     }
 
-                    ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_R_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
+                    ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                     torque_task_R_ += ts_[i - 1].Null_task_R_ * (ts_[i].torque_h_R_);
                 }
             }
@@ -2646,7 +2703,7 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
                 if (ts_[i].noncont_task)
                 {
                     non_contact_calc_required = true;
-                    torque_task_NC_ = N_I_nc_ * ts_[i].J_task_NC_.transpose() * ts_[i].Lambda_task_NC_ * ts_[i].f_star_;
+                    torque_task_NC_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_NC_ * ts_[i].f_star_));
                 }
             }
         }
@@ -2659,25 +2716,30 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
     {
         for (int i = 0; i < ts_.size(); i++)
         {
-            ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_R_ * ts_[i].f_star_;
+            ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
             if (i == 0)
             {
-                ts_[i].CalcNullMatrix_R(A_R_inv, N_CR);
+                ts_[i].CalcNullMatrix_R(A_R_inv_N_CR);
                 torque_task_R_ = ts_[i].torque_h_R_;
             }
             else
             {
                 if (i != (ts_.size() - 1))
                 {
-                    ts_[i].CalcNullMatrix_R(A_R_inv, N_CR, ts_[i - 1].Null_task_R_);
+                    ts_[i].CalcNullMatrix_R(A_R_inv_N_CR, ts_[i - 1].Null_task_R_);
                 }
 
                 torque_task_R_ += ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
             }
+            if (ts_[i].noncont_task)
+            {
+                non_contact_calc_required = true;
+                torque_task_NC_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+            }
         }
 
         torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof);
-        torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6);
+        torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + torque_task_NC_;
         return 1;
     }
 }
@@ -2738,7 +2800,7 @@ int RobotData::CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task
     A.setZero(total_constraint_size, variable_size);
     lbA.setZero(total_constraint_size);
     ubA.setZero(total_constraint_size);
-    Eigen::MatrixXd Ntorque_task = task_null_matrix_ * ts_.J_kt_R_ * ts_.Lambda_task_R_;
+    Eigen::MatrixXd Ntorque_task = task_null_matrix_ * (ts_.J_kt_R_ * ts_.Lambda_task_R_);
 
     if (torque_limit_set_)
     {

@@ -107,7 +107,7 @@ namespace DWBC
      */
     int CalculateContactConstraint(
         const MatrixXd &J_contact, const MatrixXd &A_inv,
-        MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2)
+        MatrixXd &lambda_contact, MatrixXd &J_C_INV_T, MatrixXd &N_C, MatrixXd &A_inv_N_C, MatrixXd &W, MatrixXd &NwJw, MatrixXd &Winv, MatrixXd &V2)
     {
         int rows = J_contact.rows(); // rows == contact_dof
         int cols = J_contact.cols(); // cols == system_dof
@@ -115,7 +115,9 @@ namespace DWBC
         lambda_contact = (J_contact * A_inv * J_contact.transpose()).inverse();
         J_C_INV_T = lambda_contact * J_contact * A_inv;
         N_C = MatrixXd::Identity(cols, cols) - J_contact.transpose() * J_C_INV_T;
-        W = A_inv.bottomRows(cols - 6) * N_C.rightCols(cols - 6);
+        A_inv_N_C = A_inv * N_C;
+        W = A_inv_N_C.block(6, 6, cols - 6, cols - 6);
+        // A_inv.bottomRows(cols - 6) * N_C.rightCols(cols - 6);
 
         if (rows > 6)
         {
@@ -140,6 +142,44 @@ namespace DWBC
         }
     }
 
+    // int CalculateContactConstraintR(
+    //     const MatrixXd &J_CR, const MatrixXd &A_R_inv,
+    //     MatrixXd &lambda_contact_R, MatrixXd &J_CR_INV_T, MatrixXd &N_CR, MatrixXd &A_R_inv_N_CR, MatrixXd &W_R, MatrixXd &NwJw_R, MatrixXd &W_R_inv, MatrixXd &V2_R)
+    // {
+    //     int rows = J_CR.rows(); // rows == contact_dof
+    //     int cols = J_CR.cols(); // cols == system_dof
+
+        
+
+    //     lambda_contact_R = (J_CR * A_R_inv * J_CR.transpose()).inverse();
+    //     J_CR_INV_T = lambda_contact_R * J_CR * A_R_inv;
+    //     N_CR = MatrixXd::Identity(cols, cols) - J_CR.transpose() * J_CR_INV_T;
+    //     A_R_inv_N_CR = A_R_inv * N_CR;
+    //     W_R_inv = A_R_inv_N_CR.block(6, 6, cols - 6, cols - 6);
+    //     // A_inv.bottomRows(cols - 6) * N_C.rightCols(cols - 6);
+
+    //     if (rows > 6)
+    //     {
+    //         PinvCODWB(W_R, W_R_inv, V2_R, cols - (rows));
+
+    //         if (rows - 6 == V2_R.rows())
+    //         {
+    //             NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(6) * V2_R.transpose()).inverse();
+    //             return 1;
+    //         }
+    //         else
+    //         {
+    //             NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(6) * V2_R.transpose()).inverse();
+    //             std::cout << "Contact Space Factorization Error : Required contact null dimension : " << J_CR.rows() - 6 << " factorization rank : " << V2_R.rows() << std::endl;
+    //             return 0;
+    //         }
+    //     }
+    //     else
+    //     {
+    //         PinvCODWB(W_R, W_R_inv);
+    //         return 1;
+    //     }
+    // }
     /*
      * Gravity Compensation Torque Calculation
      * input  : A_inv, W_inv, N_C, J_C_INV_T, G
@@ -179,11 +219,11 @@ namespace DWBC
      * input  : J_task, A_inv, N_C, W_inv,
      * output : J_kt, lambda_task
      */
-    void CalculateJKT_R(const MatrixXd &J_task_R, const MatrixXd &A_R_inv, const MatrixXd &N_CR, const MatrixXd &W_R_inv,
+    void CalculateJKT_R(const MatrixXd &J_task_R, const MatrixXd &A_R_inv_N_CR, const MatrixXd &W_R_inv,
                       MatrixXd &J_kt_R, MatrixXd &lambda_task)
     {
-        lambda_task = (J_task_R * A_R_inv * N_CR * J_task_R.transpose()).inverse();
-        MatrixXd Q = (lambda_task * J_task_R * A_R_inv * N_CR).rightCols(J_task_R.cols() - 6);
+        lambda_task = (J_task_R * A_R_inv_N_CR * J_task_R.transpose()).inverse();
+        MatrixXd Q = (lambda_task * J_task_R * A_R_inv_N_CR).rightCols(J_task_R.cols() - 6);
         J_kt_R = W_R_inv * Q.transpose() * PinvCODWB(Q * W_R_inv * Q.transpose());
     }
 
@@ -216,10 +256,10 @@ namespace DWBC
      * input  : J_kt, lambda_task, J_task, A_inv, N_C, upper_task_null
      * output : Null_task
      */
-    void CalculateTaskNullSpace(const MatrixXd &J_kt, const MatrixXd &Lambda_task, const MatrixXd &J_task, const MatrixXd &A_inv, const MatrixXd &N_C, const MatrixXd &prev_null, MatrixXd &Null_task)
+    void CalculateTaskNullSpace(const MatrixXd &J_kt, const MatrixXd &Lambda_task, const MatrixXd &J_task, const MatrixXd &A_inv_N_C, const MatrixXd &prev_null, MatrixXd &Null_task)
     {
         int model_size = J_task.cols() - 6;
-        Null_task = prev_null * (MatrixXd::Identity(model_size, model_size) - J_kt * Lambda_task * J_task * A_inv * N_C.rightCols(model_size));
+        Null_task = prev_null * (MatrixXd::Identity(model_size, model_size) - J_kt * Lambda_task * J_task * A_inv_N_C.rightCols(model_size));
     }
 
     /*
