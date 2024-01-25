@@ -256,8 +256,8 @@ TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 1", "[LIBDWBC]")
     rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
     rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+    rd_.AddTaskSpace(0, TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
     VectorXd tlim;
     tlim.setConstant(rd_.model_dof_, 300);
@@ -360,8 +360,8 @@ TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 2", "[LIBDWBC]")
     rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
     rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+    rd_.AddTaskSpace(0, TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
     VectorXd tlim;
     tlim.setConstant(rd_.model_dof_, 300);
@@ -474,8 +474,8 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
     rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
     rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+    rd_.AddTaskSpace(0, TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, 15, Vector3d::Zero());
 
     VectorXd fstar_1;
     fstar_1.setZero(6);
@@ -821,8 +821,8 @@ TEST_CASE("COPY AND CALCULATION TEST")
     rd_.AddContactConstraint("l_wrist2_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
     rd_.AddContactConstraint("r_wrist2_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero());
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero());
+    rd_.AddTaskSpace(0, TASK_LINK_6D, "pelvis_link", Vector3d::Zero());
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero());
 
     VectorXd fstar_1;
     fstar_1.setZero(6);
@@ -931,7 +931,7 @@ TEST_CASE("2LEVEL WBC TEST")
     rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
     rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, desired_control_target.c_str(), Vector3d::Zero(), verbose);
+    rd_.AddTaskSpace(0, TASK_LINK_6D, desired_control_target.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(TASK_LINK_ROTATION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
 
     rd_.SetContact(true, true);

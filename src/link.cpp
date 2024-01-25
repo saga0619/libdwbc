@@ -77,6 +77,9 @@ namespace DWBC
     {
         xpos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, body_id_, Eigen::Vector3d::Zero(), false);
         rotm = (RigidBodyDynamics::CalcBodyWorldOrientation(model_, q_virtual_, body_id_, false)).transpose();
+        
+        rpy = rotm.eulerAngles(2, 1, 0);
+
         // xipos = RigidBodyDynamics::CalcBodyToBaseCoordinates(model_, q_virtual_, body_id_, model_.mBodies[body_id_].mCenterOfMass, false);
         xipos = xpos + rotm * com_position_l_;
         vw = RigidBodyDynamics::CalcPointVelocity6D(model_, q_virtual_, q_dot_virtual_, body_id_, Eigen::Vector3d::Zero(), false);

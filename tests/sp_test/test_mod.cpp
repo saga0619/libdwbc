@@ -45,14 +45,15 @@ int main(void)
     rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
     rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero(), verbose);
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
+    rd_.AddTaskSpace(0, TASK_LINK_6D, "pelvis_link", Vector3d::Zero(), verbose);
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
 
     VectorXd q_dot_test = VectorXd::Random(rd_.model_.qdot_size);
     q_dot_test.segment(0, 6).setZero();
 
     rd_.UpdateKinematics(q, q_dot_test, qddot);
     rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
 
     double mass;
     RigidBodyDynamics::Math::Vector3d ang_m_;
@@ -89,6 +90,7 @@ int main(void)
     {
         rd_.UpdateKinematics(q, qdot, qddot);
         rd_.SetContact(true, true);
+        rd_.CalcContactConstraint();
 
         rd_.SetTaskSpace(0, fstar_1);
         rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
@@ -234,7 +236,7 @@ int main(void)
     //     -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
     rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
     rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
-    rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero(), verbose);
+    rd_.AddTaskSpace(0, TASK_LINK_6D, "upperbody_link", Vector3d::Zero(), verbose);
     // rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero(), verbose);
 
     VectorXd q2;
@@ -261,6 +263,7 @@ int main(void)
 
     rd_.UpdateKinematics(q2, qdot2, qddot2);
     rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
 
     rd_.SetTaskSpace(0, fstar_1);
     // rd_.SetTaskSpace(1, fstar_1.segment(3, 3));
@@ -268,6 +271,8 @@ int main(void)
     rd_.CalcGravCompensation();
     rd_.CalcTaskControlTorque(true);
     rd_.CalcContactRedistribute(true);
+
+    std::cout << rd_.ts_[0].Lambda_task_ << std::endl;
 
     std::cout << rd_.torque_grav_.transpose() << std::endl;
 
@@ -287,6 +292,7 @@ int main(void)
 
         rd_.UpdateKinematics(q2, qdot2, qddot2);
         rd_.SetContact(true, true);
+        rd_.CalcContactConstraint();
 
         rd_.SetTaskSpace(0, fstar_1);
         // rd_.SetTaskSpace(1, fstar_1.segment(3, 3));

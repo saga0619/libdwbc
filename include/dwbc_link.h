@@ -58,6 +58,7 @@ namespace DWBC
         Vector3d vi;
         Vector3d w;
         Matrix3d rotm;
+        Vector3d rpy;
 
         Vector3d joint_trans;
         Matrix3d joint_rotm;

@@ -159,7 +159,7 @@ namespace DWBC
         Matrix6d SI_nc_l_; // Spatial inertia matrix from non-contact model from non-contact model com frame;
 
         MatrixXd A_R, A_R_inv;
-        MatrixXd A_NC;
+        MatrixXd A_NC, A_NC_l_inv;
 
         VectorXd G_R;
 
@@ -169,7 +169,12 @@ namespace DWBC
 
         VectorXd torque_task_NC_;    // task torque      : (nc_dof)
 
+        Vector6d Resultant_force_on_nc_;
+
         MatrixXd J_R, J_R_INV_T;
+
+        MatrixXd J_nc_R_, J_nc_R_inv_T_, J_nc_R_kt_;
+        MatrixXd lambda_nc_R_;
 
         double mass_co_;
         double mass_nc_;
@@ -276,9 +281,11 @@ namespace DWBC
         /*
         Add Task Space
         */
-        void AddTaskSpace(int task_mode, int task_dof, bool verbose = false);
-        void AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose = false);
-        void AddTaskSpace(int task_mode, const char *link_name, Vector3d task_point, bool verbose = false); // find link with link name, ignore the case of string
+        void AddTaskSpace(int heirarchy, int task_mode, int task_dof, bool verbose = false);
+        void AddTaskSpace(int heirarchy, int task_mode, int link_number, Vector3d task_point, bool verbose = false);
+        void AddTaskSpace(int heirarchy, int task_mode, const char *link_name, Vector3d task_point, bool verbose = false); // find link with link name, ignore the case of string
+        void AddTaskLink(int heirarchy, int task_mode, int link_number, Vector3d task_point, bool verbose = false);
+        void AddTaskLink(int heirarchy, int task_mode, const char *link_name,  Vector3d task_point, bool verbose = false);
         void ClearQP();
         void AddQP();
         /*
@@ -354,10 +361,10 @@ namespace DWBC
         int getLinkID(std::string link_name);
         VectorXd GetControlTorque(bool task_control = false, bool init = true);
 
-
         void ReducedDynamicsCalculate(bool verbose = false);
         int ReducedCalcContactConstraint();
-        int ReducedCalcTaskControlTorque(bool init, bool hqp = true, bool update_task_space = true);
+        void ReducedCalcTaskSpace(bool update_task_space = true);
+        int ReducedCalcTaskControlTorque(bool init, bool hqp = true, bool calc_task_space = true);
         int ReducedCalcContactRedistribute(bool init);
         void ReducedCalcGravCompensation();
 

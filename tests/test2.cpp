@@ -93,8 +93,8 @@ int main()
     rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
     rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
 
-    rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
-    rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+    rd_.AddTaskSpace(0, TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, 15, Vector3d::Zero());
     VectorXd fstar_1;
     fstar_1.setZero(6);
     fstar_1(0) = 0.1;

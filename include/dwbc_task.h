@@ -4,13 +4,23 @@
 #include <Eigen/Dense>
 #include "dwbc_wbd.h"
 #include "dwbc_math.h"
+#include "vector"
 
 using namespace Eigen;
 
 namespace DWBC
 {
+    enum TASK_TYPE
+    {
+        TASK_UNDEFINED,
+        TASK_LINK,
+        TASK_CUSTOM,
+        TASK_NONCONTACT_CHAIN,  //Task from non-contact chain
+        TASK_CONTACT_CHAIN,     // Task from contact chain
+        TASK_CENTROIDAL,
+    };
 
-    enum TASK_MODE
+    enum LINK_MODE
     {
         TASK_LINK_6D,
         TASK_LINK_6D_COM_FRAME,
@@ -20,35 +30,32 @@ namespace DWBC
         TASK_LINK_POSITION_CUSTOM_FRAME,
         TASK_LINK_ROTATION,
         TASK_LINK_ROTATION_CUSTOM_FRAME,
-        TASK_LINK_BOTH_HAND_6D,
-        TASK_CUSTOM,
-        TASK_NULL,
     };
 
     static const char *taskmode_str[] = {"TASK_LINK_6D",
                                          "TASK_LINK_6D_COM_FRAME",
                                          "TASK_LINK_6D_CUSTOM_FRAME",
                                          "TASK_LINK_POSITION",
-                                         "TASK_LINK_ROTATION",
                                          "TASK_LINK_POSITION_COM_FRAME",
                                          "TASK_LINK_POSITION_CUSTOM_FRAME",
+                                         "TASK_LINK_ROTATION",
                                          "TASK_LINK_ROTATION_CUSTOM_FRAME",
-                                         "TASK_LINK_BOTH_HAND_6D",
+                                         "TASK_CENTROIDAL_6D",
+                                         "TASK_CENTROIDAL_LINEAR",
+                                         "TASK_CENTROIDAL_ANGULAR",
                                          "TASK_CUSTOM",
                                          "TASK_NULL"};
 
-    class TaskSpace
+    class TaskLink
     {
-    private:
-        /* data */
     public:
-        unsigned int task_dof_;
-        unsigned int heirarchy_;
-        unsigned int link_id_;
-
-        unsigned int task_mode_;
+        TaskLink(int task_link_mode, int link_id, const Vector3d &task_point);
 
         Vector3d task_point_;
+
+        unsigned int link_id_;
+        unsigned int task_link_mode_;
+        unsigned int t_dof_;
 
         bool traj_pos_set = false;
         bool traj_rot_set = false;
@@ -66,6 +73,10 @@ namespace DWBC
         Matrix3d rot_desired_;
         Vector3d w_desired_;
 
+        Vector3d rpy_traj;
+
+        MatrixXd wr_mat;
+
         double traj_start_time_;
         double traj_act_time_;
         double traj_end_time_;
@@ -82,15 +93,41 @@ namespace DWBC
         Vector3d vel_traj_;
         Vector3d acc_traj_;
 
+        void SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired);
+
+        void SetTrajectoryRotation(double start_time, double end_time, Eigen::Matrix3d rot_init, Eigen::Vector3d twist_init, Eigen::Matrix3d rot_desired, Eigen::Vector3d twist_desired);
+
+        void SetTaskGain(Vector3d pos_p_gain, Vector3d pos_d_gain_, Vector3d pos_a_gain, Vector3d rot_p_gain_, Vector3d rot_d_gain_, Vector3d rot_a_gain_);
+
+        Vector3d GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel);
+
+        Vector3d GetFstarRotPD(double current_time, Matrix3d current_vel, Vector3d current_twsit);
+    };
+
+    class TaskSpace
+    {
+    private:
+        /* data */
+    public:
+        unsigned int task_dof_;
+        unsigned int heirarchy_;
+        unsigned int link_size_; 
+        unsigned int task_type_;
+
+        std::vector<TaskLink> task_link_;
+
         MatrixXd J_task_;
         VectorXd f_star_;
         MatrixXd J_kt_;
         MatrixXd Null_task_;
         MatrixXd Lambda_task_;
         VectorXd torque_h_;
+        VectorXd torque_null_h_;
+        VectorXd torque_null_h_R_;
 
         bool reduced_task_ = false;
         bool noncont_task = false;
+        bool cmm_task = false;
 
         MatrixXd J_task_R_;
         MatrixXd J_kt_R_;
@@ -102,6 +139,11 @@ namespace DWBC
         MatrixXd Lambda_task_NC_;
         MatrixXd Null_task_NC_;
         VectorXd torque_h_R_;
+        VectorXd torque_nc_;
+
+        MatrixXd J_task_NC_inv_T;
+        MatrixXd wr_mat;
+        Vector6d force_on_nc_;
 
         MatrixXd Q_;
         MatrixXd Q_temp_;
@@ -113,12 +155,12 @@ namespace DWBC
 
         TaskSpace();
 
-        TaskSpace(int task_mode, int heirarchy, int task_dof);
+        TaskSpace(int task_link_mode, int heirarchy, int task_dof);
 
-        TaskSpace(int task_mode, int heirarchy, int link_number, const Vector3d &task_point);
+        TaskSpace(int task_link_mode, int heirarchy, int link_number, const Vector3d &task_point);
         ~TaskSpace();
 
-        // void SetReducedTask(int contact_dof, int system_dof);
+        void AddTaskLink(int task_link_mode, int link_number, const Vector3d &task_point);
 
         void Update(const VectorXd &f_star);
 
@@ -136,12 +178,6 @@ namespace DWBC
 
         void CalcNullMatrix_R(const MatrixXd &A_R_inv_N_CR);
 
-        void SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired);
-
-        void SetTrajectoryRotation(double start_time, double end_time, Eigen::Matrix3d rot_init, Eigen::Vector3d twist_init, Eigen::Matrix3d rot_desired, Eigen::Vector3d twist_desired);
-
-        void SetTaskGain(Vector3d pos_p_gain, Vector3d pos_d_gain_, Vector3d pos_a_gain, Vector3d rot_p_gain_, Vector3d rot_d_gain_, Vector3d rot_a_gain_);
-
         void GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel);
 
         void GetFstarRotPD(double current_time, Matrix3d current_vel, Vector3d current_twsit);
@@ -150,25 +186,6 @@ namespace DWBC
 
         // void GetFstarRotationalPDF(double current_time, );
     };
-
-    class TaskSpaceReduced : public TaskSpace
-    {
-    public:
-        MatrixXd J_task_R_;
-        MatrixXd J_kt_R_;
-        MatrixXd Null_task_R_;
-        MatrixXd Lambda_task_R_;
-    };
-
-    class TaskSpaceNC : public TaskSpace
-    {
-    public:
-        MatrixXd J_task_NC_;
-        MatrixXd J_kt_NC_;
-        MatrixXd Null_task_NC_;
-        MatrixXd Lambda_task_NC_;
-    };
-
 }
 
 #endif

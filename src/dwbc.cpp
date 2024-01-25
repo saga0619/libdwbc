@@ -436,12 +436,7 @@ void RobotData::UpdateContactConstraint()
     {
         cc_[i].Update(model_, q_system_);
     }
-}
 
-int RobotData::CalcContactConstraint()
-{
-    // UpdateContactConstraint();
-    // int contact_dof
     if (J_C.rows() != contact_dof_ || J_C.cols() != system_dof_)
     {
         J_C.setZero(contact_dof_, system_dof_);
@@ -456,6 +451,12 @@ int RobotData::CalcContactConstraint()
             dof_count += cc_[i].contact_dof_;
         }
     }
+}
+
+int RobotData::CalcContactConstraint()
+{
+    // UpdateContactConstraint();
+    // int contact_dof
 
     Lambda_contact.setZero(contact_dof_, contact_dof_);
     J_C_INV_T.setZero(contact_dof_, system_dof_);
@@ -483,7 +484,7 @@ void RobotData::ClearTaskSpace()
     ClearQP();
 }
 
-void RobotData::AddTaskSpace(int task_mode, int task_dof, bool verbose)
+void RobotData::AddTaskSpace(int heirarchy, int task_mode, int task_dof, bool verbose)
 {
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added with mode " << taskmode_str[task_mode] << std::endl;
@@ -492,17 +493,20 @@ void RobotData::AddTaskSpace(int task_mode, int task_dof, bool verbose)
 
     AddQP();
 }
-void RobotData::AddTaskSpace(int task_mode, int link_number, Vector3d task_point, bool verbose)
+void RobotData::AddTaskSpace(int heirarchy, int task_mode, int link_number, Vector3d task_point, bool verbose)
 {
     if (verbose)
         std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
 
     for (int i = 0; i < ts_.size(); i++)
     {
-        if (ts_[i].link_id_ == link_number)
+        for (int j = 0; j < ts_[i].link_size_; j++)
         {
-            std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
-            return;
+            if (ts_[i].task_link_[j].link_id_ == link_number)
+            {
+                std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
+                return;
+            }
         }
     }
 
@@ -511,7 +515,77 @@ void RobotData::AddTaskSpace(int task_mode, int link_number, Vector3d task_point
     AddQP();
 }
 
-void RobotData::AddTaskSpace(int task_mode, const char *link_name, Vector3d task_point, bool verbose)
+void RobotData::AddTaskSpace(int heirarchy, int task_mode, const char *link_name, Vector3d task_point, bool verbose)
+{
+    int link_number = -1;
+
+    for (int i = 0; i < link_.size(); i++)
+    {
+        // compare the name of link and link_name
+        //  ignore the case of nmame
+        if (strcasecmp(link_[i].name_.c_str(), link_name) == 0)
+        {
+            link_number = i;
+            break;
+        }
+    }
+
+    if (link_number == -1)
+    {
+        std::cout << "Link Name is not Correct" << std::endl;
+        return;
+    }
+
+    if (verbose)
+        std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
+
+    // if link_name is "COM",
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        for (int j = 0; j < ts_[i].task_link_.size(); j++)
+        {
+            if (ts_[i].task_link_[j].link_id_ == link_number)
+            {
+                std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
+                return;
+            }
+        }
+    }
+    int ts_size = ts_.size();
+
+    if (ts_size == heirarchy)
+    {
+        ts_.push_back(TaskSpace(task_mode, heirarchy, link_number, task_point));
+        AddQP();
+    }
+    else if (ts_size > heirarchy)
+    {
+        ts_[heirarchy].AddTaskLink(task_mode, link_number, task_point);
+    }
+}
+
+void RobotData::AddTaskLink(int heirarchy, int task_mode, int link_number, Vector3d task_point, bool verbose)
+{
+    if (verbose)
+        std::cout << "#" << ts_.size() << " Task Space Added : " << link_[link_number].name_ << " " << taskmode_str[task_mode] << " at point : " << task_point.transpose() << std::endl;
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        for (int j = 0; j < ts_[i].link_size_; j++)
+        {
+            if (ts_[i].task_link_[j].link_id_ == link_number)
+            {
+                std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
+                return;
+            }
+        }
+    }
+
+    ts_[heirarchy].AddTaskLink(task_mode, link_number, task_point);
+}
+
+void RobotData::AddTaskLink(int heirarchy, int task_mode, const char *link_name, Vector3d task_point, bool verbose)
 {
     int link_number = -1;
 
@@ -537,17 +611,19 @@ void RobotData::AddTaskSpace(int task_mode, const char *link_name, Vector3d task
 
     for (int i = 0; i < ts_.size(); i++)
     {
-        if (ts_[i].link_id_ == link_number)
+        for (int j = 0; j < ts_[i].link_size_; j++)
         {
-            std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
-            return;
+            if (ts_[i].task_link_[j].link_id_ == link_number)
+            {
+                std::cout << "Task Space Already Exist for Link : " << link_[link_number].name_ << std::endl;
+                return;
+            }
         }
     }
 
-    ts_.push_back(TaskSpace(task_mode, ts_.size(), link_number, task_point));
-
-    AddQP();
+    ts_[heirarchy].AddTaskLink(task_mode, link_number, task_point);
 }
+
 void RobotData::SetTaskSpace(int heirarchy, const VectorXd &f_star, const MatrixXd &J_task)
 {
     if (ts_[heirarchy].task_dof_ != f_star.size())
@@ -573,96 +649,106 @@ void RobotData::SetTaskSpace(int heirarchy, const VectorXd &f_star, const Matrix
 
 void RobotData::UpdateTaskSpace()
 {
+    // int system_dof = model_.qdot_size;
 
     for (int i = 0; i < ts_.size(); i++)
     {
-        if (ts_[i].task_mode_ != TASK_CUSTOM)
+        if (ts_[i].link_size_ > 0)
         {
-
-        if (link_[ts_[i].link_id_].name_ != "COM")
-        {
-            link_[ts_[i].link_id_].UpdateJac(model_, q_system_);
+            ts_[i].J_task_.setZero(ts_[i].task_dof_, system_dof_);
         }
 
-        switch (ts_[i].task_mode_)
+        int task_cum_dof = 0;
+        for (int j = 0; j < ts_[i].link_size_; j++)
         {
-        case TASK_LINK_6D:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_;
-
-            if (ts_[i].traj_pos_set)
+            if (link_[ts_[i].task_link_[j].link_id_].name_ != "COM")
             {
-                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xpos, link_[ts_[i].link_id_].v);
-            }
-            if (ts_[i].traj_rot_set)
-            {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
-            }
-            break;
-        case TASK_LINK_6D_COM_FRAME:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_com_;
-
-            if (ts_[i].traj_pos_set)
-            {
-                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xipos, link_[ts_[i].link_id_].vi);
+                link_[ts_[i].task_link_[j].link_id_].UpdateJac(model_, q_system_);
             }
 
-            if (ts_[i].traj_rot_set)
+            if (ts_[i].task_type_ != TASK_CUSTOM)
             {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
-            }
-            break;
-        case TASK_LINK_6D_CUSTOM_FRAME:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_);
-            if (ts_[i].traj_pos_set)
-            {
-                ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
-                                     link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
-            }
-            if (ts_[i].traj_rot_set)
-            {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
-            }
-            break;
-        case TASK_LINK_POSITION:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_.topRows(3);
-            if (ts_[i].traj_pos_set)
-            {
-                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xpos, link_[ts_[i].link_id_].v);
-            }
-            break;
-        case TASK_LINK_POSITION_COM_FRAME:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_com_.topRows(3);
-            if (ts_[i].traj_pos_set)
-            {
-                ts_[i].GetFstarPosPD(control_time_, link_[ts_[i].link_id_].xipos, link_[ts_[i].link_id_].vi);
-            }
-            break;
-        case TASK_LINK_POSITION_CUSTOM_FRAME:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_point_).topRows(3);
-            if (ts_[i].traj_pos_set)
-            {
-                ts_[i].GetFstarPosPD(control_time_,
-                                     link_[ts_[i].link_id_].xpos + link_[ts_[i].link_id_].rotm * ts_[i].task_point_,
-                                     link_[ts_[i].link_id_].v + link_[ts_[i].link_id_].w.cross(ts_[i].task_point_));
-            }
-            break;
-        case TASK_LINK_ROTATION:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_.bottomRows(3);
-            if (ts_[i].traj_rot_set)
-            {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
-            }
-            break;
-        case TASK_LINK_ROTATION_CUSTOM_FRAME:
-            ts_[i].J_task_ = link_[ts_[i].link_id_].jac_.bottomRows(3);
-            if (ts_[i].traj_rot_set)
-            {
-                ts_[i].GetFstarRotPD(control_time_, link_[ts_[i].link_id_].rotm, link_[ts_[i].link_id_].w);
-            }
-            break;
-        default:
-            break;
+                switch (ts_[i].task_link_[j].task_link_mode_)
+                {
+                case TASK_LINK_6D:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 6, system_dof_) = link_[ts_[i].task_link_[j].link_id_].jac_;
+
+                    if (ts_[i].task_link_[j].traj_pos_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarPosPD(control_time_, link_[ts_[i].task_link_[j].link_id_].xpos, link_[ts_[i].task_link_[j].link_id_].v);
+                    }
+                    if (ts_[i].task_link_[j].traj_rot_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof + 3, 3) = ts_[i].task_link_[j].GetFstarRotPD(control_time_, link_[ts_[i].task_link_[j].link_id_].rotm, link_[ts_[i].task_link_[j].link_id_].w);
+                    }
+                    break;
+                case TASK_LINK_6D_COM_FRAME:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 6, system_dof_) = link_[ts_[i].task_link_[j].link_id_].jac_com_;
+
+                    if (ts_[i].task_link_[j].traj_pos_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarPosPD(control_time_, link_[ts_[i].task_link_[j].link_id_].xipos, link_[ts_[i].task_link_[j].link_id_].vi);
+                    }
+
+                    if (ts_[i].task_link_[j].traj_rot_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof + 3, 3) = ts_[i].task_link_[j].GetFstarRotPD(control_time_, link_[ts_[i].task_link_[j].link_id_].rotm, link_[ts_[i].task_link_[j].link_id_].w);
+                    }
+                    break;
+                case TASK_LINK_6D_CUSTOM_FRAME:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 6, system_dof_) = link_[ts_[i].task_link_[j].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_link_[j].task_point_);
+                    if (ts_[i].task_link_[j].traj_pos_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarPosPD(control_time_,
+                                                                                                     link_[ts_[i].task_link_[j].link_id_].xpos + link_[ts_[i].task_link_[j].link_id_].rotm * ts_[i].task_link_[j].task_point_,
+                                                                                                     link_[ts_[i].task_link_[j].link_id_].v + link_[ts_[i].task_link_[j].link_id_].w.cross(ts_[i].task_link_[j].task_point_));
+                    }
+                    if (ts_[i].task_link_[j].traj_rot_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof + 3, 3) = ts_[i].task_link_[j].GetFstarRotPD(control_time_, link_[ts_[i].task_link_[j].link_id_].rotm, link_[ts_[i].task_link_[j].link_id_].w);
+                    }
+                    break;
+                case TASK_LINK_POSITION:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 3, system_dof_) = link_[ts_[i].task_link_[j].link_id_].jac_.topRows(3);
+                    if (ts_[i].task_link_[j].traj_pos_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarPosPD(control_time_, link_[ts_[i].task_link_[j].link_id_].xpos, link_[ts_[i].task_link_[j].link_id_].v);
+                    }
+                    break;
+                case TASK_LINK_POSITION_COM_FRAME:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 3, system_dof_) = link_[ts_[i].task_link_[j].link_id_].jac_com_.topRows(3);
+                    if (ts_[i].task_link_[j].traj_pos_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarPosPD(control_time_, link_[ts_[i].task_link_[j].link_id_].xipos, link_[ts_[i].task_link_[j].link_id_].vi);
+                    }
+                    break;
+                case TASK_LINK_POSITION_CUSTOM_FRAME:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 3, system_dof_) = link_[ts_[i].task_link_[j].link_id_].GetPointJac(model_, q_dot_system_, ts_[i].task_link_[j].task_point_).topRows(3);
+                    if (ts_[i].task_link_[j].traj_pos_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarPosPD(control_time_,
+                                                                                                     link_[ts_[i].task_link_[j].link_id_].xpos + link_[ts_[i].task_link_[j].link_id_].rotm * ts_[i].task_link_[j].task_point_,
+                                                                                                     link_[ts_[i].task_link_[j].link_id_].v + link_[ts_[i].task_link_[j].link_id_].w.cross(ts_[i].task_link_[j].task_point_));
+                    }
+                    break;
+                case TASK_LINK_ROTATION:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 3, system_dof_) = link_[ts_[i].task_link_[j].link_id_].jac_.bottomRows(3);
+                    if (ts_[i].task_link_[j].traj_rot_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarRotPD(control_time_, link_[ts_[i].task_link_[j].link_id_].rotm, link_[ts_[i].task_link_[j].link_id_].w);
+                    }
+                    break;
+                case TASK_LINK_ROTATION_CUSTOM_FRAME:
+                    ts_[i].J_task_.block(task_cum_dof, 0, 3, system_dof_) = link_[ts_[i].task_link_[j].link_id_].jac_.bottomRows(3);
+                    if (ts_[i].task_link_[j].traj_rot_set)
+                    {
+                        ts_[i].f_star_.segment(task_cum_dof, 3) = ts_[i].task_link_[j].GetFstarRotPD(control_time_, link_[ts_[i].task_link_[j].link_id_].rotm, link_[ts_[i].task_link_[j].link_id_].w);
+                    }
+                    break;
+                default:
+                    break;
+                }
+                task_cum_dof += ts_[i].task_link_[j].t_dof_;
             }
         }
     }
@@ -675,6 +761,18 @@ void RobotData::CalcTaskSpace(bool update)
     for (int i = 0; i < ts_.size(); i++)
     {
         ts_[i].CalcJKT(A_inv_, N_C, W_inv);
+
+        if (i != ts_.size() - 1)
+        {
+            if (i == 0)
+            {
+                ts_[i].CalcNullMatrix(A_inv_N_C);
+            }
+            else
+            {
+                ts_[i].CalcNullMatrix(A_inv_N_C, ts_[i - 1].Null_task_);
+            }
+        }
     }
 }
 
@@ -698,7 +796,6 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
                 if (qp_res == 0)
                     return 0;
 
-                ts_[i].CalcNullMatrix(A_inv_N_C);
                 ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                 torque_task_ = ts_[i].torque_h_;
             }
@@ -707,11 +804,6 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
                 qp_res = CalcSingleTaskTorqueWithQP(ts_[i], ts_[i - 1].Null_task_, torque_grav_ + torque_task_, NwJw, J_C_INV_T, P_C, init);
                 if (qp_res == 0)
                     return 0;
-
-                if (i != ts_.size() - 1)
-                {
-                    ts_[i].CalcNullMatrix(A_inv_N_C, ts_[i - 1].Null_task_);
-                }
 
                 ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                 torque_task_ += ts_[i - 1].Null_task_ * ts_[i].torque_h_;
@@ -727,16 +819,10 @@ int RobotData::CalcTaskControlTorque(bool init, bool hqp, bool update_task_space
             ts_[i].torque_h_ = ts_[i].J_kt_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
             if (i == 0)
             {
-                ts_[i].CalcNullMatrix(A_inv_N_C);
                 torque_task_ = ts_[i].torque_h_;
             }
             else
             {
-                if (i != (ts_.size() - 1))
-                {
-                    ts_[i].CalcNullMatrix(A_inv_N_C, ts_[i - 1].Null_task_);
-                }
-
                 torque_task_ += ts_[i - 1].Null_task_ * ts_[i].torque_h_;
             }
         }
@@ -1793,10 +1879,13 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
 
         for (int i = 0; i < ts_.size(); i++)
         {
-            if (ts_[i].link_id_ == deleted_id)
+            for (int j = 0; j < ts_[i].task_link_.size(); j++)
             {
-                deleted_task_id = i;
-                ts_.erase(ts_.begin() + i);
+                if (ts_[i].task_link_[j].link_id_ == deleted_id)
+                {
+                    deleted_task_id = i;
+                    ts_.erase(ts_.begin() + i);
+                }
             }
         }
 
@@ -1813,10 +1902,12 @@ void RobotData::InitAfterModelMod(int mode, int link_id, bool verbose)
                 {
                     ts_[i].heirarchy_--;
                 }
-
-                if (ts_[i].link_id_ > deleted_id)
+                for (int j = 0; j < ts_[i].task_link_.size(); j++)
                 {
-                    ts_[i].link_id_--;
+                    if (ts_[i].task_link_[j].link_id_ > deleted_id)
+                    {
+                        ts_[i].task_link_[j].link_id_--;
+                    }
                 }
             }
 
@@ -2389,13 +2480,13 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
         else
         {
 
-            Matrix6d I_rotation = Matrix6d::Zero(6, 6);
-            Matrix6d temp1 = Matrix6d::Identity(6, 6);
-            temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
-            temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
+            // Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+            // Matrix6d temp1 = Matrix6d::Identity(6, 6);
+            // temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
+            // temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
 
-            temp1.block(0, 3, 3, 3) = link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos).transpose();
-            SI_co_b_ += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+            // temp1.block(0, 3, 3, 3) = link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos).transpose();
+            // SI_co_b_ += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
         }
     }
 
@@ -2407,13 +2498,13 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
     SI_nc_b_ = Arot_pelv.transpose() * SI_nc_b_ * Arot_pelv; // Change IMNC to local frame !
     SI_nc_l_ = InertiaMatrix(inertia_nc_, mass_nc_);
 
-    InertiaMatrixSegment(SI_co_b_, inertia_co_, com_pos_co_, mass_co_);
+    // InertiaMatrixSegment(SI_co_b_, inertia_co_, com_pos_co_, mass_co_);
 
-    inertia_co_ = link_[0].rotm.transpose() * inertia_co_ * link_[0].rotm; // Make local inertia of non contact model
-    com_pos_co_ = link_[0].rotm.transpose() * com_pos_co_;
+    // inertia_co_ = link_[0].rotm.transpose() * inertia_co_ * link_[0].rotm; // Make local inertia of non contact model
+    // com_pos_co_ = link_[0].rotm.transpose() * com_pos_co_;
 
-    SI_co_b_ = Arot_pelv.transpose() * SI_co_b_ * Arot_pelv;
-    SI_co_l_ = InertiaMatrix(inertia_co_, mass_co_);
+    // SI_co_b_ = Arot_pelv.transpose() * SI_co_b_ * Arot_pelv;
+    // SI_co_l_ = InertiaMatrix(inertia_co_, mass_co_);
 
     A_NC.setZero(6 + nc_dof, 6 + nc_dof);
     A_NC.block(0, 0, 6, 6) = SI_nc_b_;
@@ -2438,6 +2529,8 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
     A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
 
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
+    // Vector3d com_pos_nc_test = com_pos_nc_;
+    // com_pos_nc_test(2) -= 0.1;
     cm_rot6.block(3, 0, 3, 3) = skew(com_pos_nc_).transpose(); // skew matrix of com position from pelvis
     cmm_nc_ = cm_rot6 * A_NC.topRows(6).rightCols(nc_dof);     // cmm calc, "Improved Computation of the Humanoid Centroidal Dynamics and Application for Whole-Body Control"
     // CMM matrix is from local frame (robot frame)
@@ -2463,18 +2556,23 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
 
     A_R = A_R_inv.llt().solve(Eigen::MatrixXd::Identity(reduced_system_dof_, reduced_system_dof_)); // Faster than inverse()
 
-    // // A_R.setZero(reduced_system_dof_, reduced_system_dof_);
-    // // A_R.block(0,0,vc_dof,vc_dof) = A_.block(0,0,vc_dof,vc_dof);
+    // A_R.setZero(reduced_system_dof_, reduced_system_dof_);
+    // A_R.block(0, 0, vc_dof, vc_dof) = A_.block(0, 0, vc_dof, vc_dof);
+    // A_R.block(vc_dof, vc_dof, 6, 6) = (J_I_nc_ * A_NC.block(6, 6, nc_dof, nc_dof).inverse() * J_I_nc_.transpose()).inverse();
+    // A_R.block(0, vc_dof, 3, 3) = link_[0].rotm * mass_nc_;
+    // A_R.block(0, vc_dof + 3, 3, 3) = skew(com_pos_nc_) * mass_nc_;
+    // A_R.block(3, vc_dof + 3, 3, 3) = inertia_nc_;
+    // A_R.bottomLeftCorner(6,6) = A_R.topRightCorner(6,6).transpose();
 
     J_I_nc_inv_T.setZero(6, nc_dof);
     J_I_nc_inv_T = A_R.block(vc_dof, 0, 6, vc_dof) * A_inv_.block(0, vc_dof, vc_dof, nc_dof) + A_R.block(vc_dof, vc_dof, 6, 6) * J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof);
-
     N_I_nc_ = MatrixXd::Identity(nc_dof, nc_dof) - J_I_nc_.transpose() * J_I_nc_inv_T;
+
+    A_NC_l_inv = A_NC.bottomRightCorner(nc_dof, nc_dof).inverse();
 
     // J_R_INV_T = A_R * J_R * A_inv_;
     J_R_INV_T = MatrixXd::Zero(reduced_system_dof_, system_dof_);
     J_R_INV_T.block(0, 0, vc_dof, vc_dof).setIdentity();
-
     J_R_INV_T.block(vc_dof, vc_dof, 6, nc_dof) = J_I_nc_inv_T;
 
     G_R.setZero(reduced_system_dof_);
@@ -2646,13 +2744,169 @@ void RobotData::ReducedCalcGravCompensation()
     P_CR = J_CR_INV_T * G_R;
 }
 
-int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_task_space)
+void RobotData::ReducedCalcTaskSpace(bool update_task_space)
 {
     if (update_task_space)
         UpdateTaskSpace();
+
+    // task type classification :
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        if (ts_[i].task_type_ == TASK_CUSTOM)
+        {
+            ts_[i].noncont_task = false;
+            ts_[i].reduced_task_ = false;
+            ts_[i].cmm_task = false;
+
+            if (ts_[i].J_task_.leftCols(vc_dof).norm() > 1.0E-4) // if contact task is not empty
+            {
+                ts_[i].reduced_task_ = true;
+            }
+            if (ts_[i].J_task_.rightCols(nc_dof).norm() > 1.0E-4) // if non-contact task is not empty
+            {
+                ts_[i].noncont_task = true;
+            }
+        }
+        else
+        {
+            for (int j = 0; j < ts_[i].task_link_.size(); j++)
+            {
+                if (ts_[i].task_link_[j].link_id_ == link_num_)
+                {
+                    ts_[i].noncont_task = ts_[i].noncont_task || false;
+                    ts_[i].reduced_task_ = ts_[i].reduced_task_ || false;
+                    ts_[i].cmm_task = ts_[i].cmm_task || true;
+                }
+                else
+                {
+                    if (contact_dependency_link_(ts_[i].task_link_[j].link_id_))
+                    {
+                        ts_[i].noncont_task = ts_[i].noncont_task || false;
+                        ts_[i].reduced_task_ = ts_[i].reduced_task_ || true;
+                        ts_[i].cmm_task = ts_[i].cmm_task || false;
+                    }
+                    else
+                    {
+                        ts_[i].noncont_task = ts_[i].noncont_task || true;
+                        ts_[i].reduced_task_ = ts_[i].reduced_task_ || false;
+                        ts_[i].cmm_task = ts_[i].cmm_task || false;
+                    }
+                }
+            }
+        }
+    }
+
     for (int i = 0; i < ts_.size(); i++)
     {
         ts_[i].CalcJKT_R(A_inv_, A_inv_N_C, A_R_inv_N_CR, W_R_inv, J_I_nc_inv_T);
+
+        if (i != (ts_.size() - 1))
+        {
+            if (!ts_[i].noncont_task)
+            {
+                if (i == 0)
+                {
+                    ts_[i].CalcNullMatrix_R(A_R_inv_N_CR);
+                }
+                else
+                {
+                    ts_[i].CalcNullMatrix_R(A_R_inv_N_CR, ts_[i - 1].Null_task_R_);
+                }
+            }
+            else
+            {
+                ts_[i].Null_task_R_ = ts_[i - 1].Null_task_R_;
+
+                ts_[i].Lambda_task_NC_ = (ts_[i].J_task_NC_ * A_NC_l_inv * ts_[i].J_task_NC_.transpose()).inverse();
+                ts_[i].J_task_NC_inv_T = ts_[i].Lambda_task_NC_ * ts_[i].J_task_NC_ * A_NC_l_inv;
+                ts_[i].Null_task_NC_ = MatrixXd::Identity(nc_dof, nc_dof) - ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_inv_T;
+            }
+        }
+    }
+
+    bool jac_nc_swith = false;
+
+    Resultant_force_on_nc_.setZero();
+    for (int i = 0; i < ts_.size(); i++)
+    {
+
+        int task_cum_dof = 0;
+        if (ts_[i].noncont_task)
+        {
+            jac_nc_swith = true;
+            ts_[i].force_on_nc_.setZero();
+
+            ts_[i].wr_mat.setZero(6, ts_[i].task_dof_);
+
+            for (int j = 0; j < ts_[i].link_size_; j++)
+            {
+
+                switch (ts_[i].task_link_[j].task_link_mode_)
+                {
+                case TASK_LINK_6D:
+                    ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
+                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
+                    break;
+                case TASK_LINK_6D_COM_FRAME:
+                    ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
+                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xipos - link_[0].xpos - com_pos_nc_);
+
+                    break;
+                case TASK_LINK_6D_CUSTOM_FRAME:
+                    // ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
+                    // ts_[i].wr_mat.block(3, 0, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
+
+                    break;
+                case TASK_LINK_POSITION:
+                    ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
+                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
+
+                    break;
+                case TASK_LINK_POSITION_COM_FRAME:
+                    ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
+                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
+
+                    break;
+                case TASK_LINK_POSITION_CUSTOM_FRAME:
+                    // ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
+
+                    break;
+                case TASK_LINK_ROTATION:
+                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
+
+                    break;
+                case TASK_LINK_ROTATION_CUSTOM_FRAME:
+                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
+
+                    break;
+                default:
+                    break;
+                }
+
+                task_cum_dof += ts_[i].task_link_[j].t_dof_;
+            }
+
+            ts_[i].force_on_nc_ = ts_[i].wr_mat * ts_[i].Lambda_task_ * (ts_[i].f_star_);
+
+            Resultant_force_on_nc_ += ts_[i].force_on_nc_;
+        }
+    }
+
+    if (jac_nc_swith)
+    {
+        J_nc_R_.setZero(6, reduced_system_dof_);
+        J_nc_R_.leftCols(6).setIdentity();
+        J_nc_R_.rightCols(6).setIdentity();
+        J_nc_R_.block(0, 3, 3, 3) = -skew(com_pos_nc_);
+        CalculateJKT_R(J_nc_R_, A_R_inv_N_CR, W_R_inv, J_nc_R_kt_, lambda_nc_R_);
+    }
+}
+
+int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool calc_task_space)
+{
+    if (calc_task_space)
+    {
+        ReducedCalcTaskSpace();
     }
 
     torque_task_R_.setZero(reduced_model_dof_);
@@ -2665,20 +2919,35 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
 
     bool non_contact_calc_required = false;
 
-    if (hqp)
+    int non_con_task = 0;
+
+    std::vector<int> non_con_task_idx;
+    int prev_nc_idx = 0;
+
+    MatrixXd non_con_null = MatrixXd::Identity(nc_dof, nc_dof);
+
+    int first_nc_task = 0;
+    int first_nc_idx = 0;
+
+    for (int i = 0; i < ts_.size(); i++)
     {
-        for (int i = 0; i < ts_.size(); i++)
+
+        ts_[i].torque_nc_.setZero(nc_dof);
+        ts_[i].torque_h_.setZero(model_dof_);
+        ts_[i].torque_h_R_.setZero(reduced_model_dof_);
+        ts_[i].torque_null_h_.setZero(model_dof_);
+        if (hqp)
         {
-            if (ts_[i].reduced_task_)
+            if (ts_[i].reduced_task_ || ts_[i].cmm_task)
             {
                 if (i == 0)
                 {
                     qp_res = CalcSingleTaskTorqueWithQP_R(ts_[i], MatrixXd::Identity(reduced_model_dof_, reduced_model_dof_), torque_grav_R_, NwJw_R, J_CR_INV_T, P_CR, init);
-
                     if (qp_res == 0)
+                    {
+                        std::cout << "R-HQP solve error at " << i << "th task" << std::endl;
                         return 0;
-                    ts_[i].CalcNullMatrix_R(A_R_inv_N_CR);
-
+                    }
                     ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                     torque_task_R_ = ts_[i].torque_h_R_;
                     // first_heir = false;
@@ -2687,61 +2956,239 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool update_tas
                 {
                     qp_res = CalcSingleTaskTorqueWithQP_R(ts_[i], ts_[i - 1].Null_task_R_, torque_grav_R_ + torque_task_R_, NwJw_R, J_CR_INV_T, P_CR, init);
                     if (qp_res == 0)
-                        return 0;
-
-                    if (i != (ts_.size() - 1))
                     {
-                        ts_[i].CalcNullMatrix_R(A_R_inv_N_CR, ts_[i - 1].Null_task_R_);
+                        std::cout << "R-HQP solve error at " << i << "th task" << std::endl;
+                        return 0;
                     }
-
                     ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
                     torque_task_R_ += ts_[i - 1].Null_task_R_ * (ts_[i].torque_h_R_);
                 }
             }
-            else
-            {
-                if (ts_[i].noncont_task)
-                {
-                    non_contact_calc_required = true;
-                    torque_task_NC_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_NC_ * ts_[i].f_star_));
-                }
-            }
-        }
-
-        torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof);
-        torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + torque_task_NC_;
-        return 1;
-    }
-    else
-    {
-        for (int i = 0; i < ts_.size(); i++)
-        {
-            ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
-            if (i == 0)
-            {
-                ts_[i].CalcNullMatrix_R(A_R_inv_N_CR);
-                torque_task_R_ = ts_[i].torque_h_R_;
-            }
-            else
-            {
-                if (i != (ts_.size() - 1))
-                {
-                    ts_[i].CalcNullMatrix_R(A_R_inv_N_CR, ts_[i - 1].Null_task_R_);
-                }
-
-                torque_task_R_ += ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
-            }
             if (ts_[i].noncont_task)
             {
-                non_contact_calc_required = true;
-                torque_task_NC_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+                if (ts_[i].task_dof_ > 6)
+                {
+                }
+                else
+                {
+                    if (non_con_task == 0)
+                    {
+                        ts_[i].torque_nc_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_)));
+                        torque_task_NC_ += ts_[i].torque_nc_;
+                        // ts_[i].Null_task_nc_ = MatrixXd::Identity(nc_dof, nc_dof) - ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_ * (ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_).inverse();
+                        // non_con_task_idx.push_back(i);
+                        // prev_nc_idx = i;
+                    }
+                    else
+                    {
+                        ts_[i].torque_nc_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_)));
+                        torque_task_NC_ += ts_[i].torque_nc_;
+                        // non_con_task_idx.push_back(i);
+                    }
+                }
+
+                non_con_task++;
             }
         }
+        else
+        {
+            if (ts_[i].noncont_task)
+            {
+                // if (ts_[i].task_dof_ > 6)
+                // {
+                //     VectorXd original_torque_nc = ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_);
+                //     VectorXd force_2n3 = original_torque_nc;
 
-        torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof);
-        torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + torque_task_NC_;
-        return 1;
+                //     ts_[i].torque_h_R_.segment(0, co_dof) = J_nc_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
+                //     ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+                //     ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
+
+                //     ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
+                //     ts_[i].torque_h_.segment(co_dof, nc_dof) = ts_[i].torque_nc_;
+                //     torque_task_NC_ += ts_[i].torque_nc_;
+                // }
+                // else
+                // {
+                if (first_nc_task == 0)
+                {
+                    first_nc_idx = i;
+
+                    ts_[i].torque_h_R_.segment(0, co_dof) = J_nc_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
+                    ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+                    ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
+
+                    ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
+                    ts_[i].torque_h_.segment(co_dof, nc_dof) = ts_[i].torque_nc_;
+
+                    ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
+                    ts_[i].torque_null_h_.segment(0, co_dof) = ts_[i].torque_null_h_R_.segment(0, co_dof);
+                    ts_[i].torque_null_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_null_h_R_.segment(co_dof, 6) + N_I_nc_ * ts_[i].torque_nc_;
+                }
+                else
+                {
+                    ts_[i].torque_h_R_.segment(0, co_dof) = J_nc_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
+                    ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+                    ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
+
+                    ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
+                    ts_[i].torque_h_.segment(co_dof, nc_dof) = ts_[i].torque_nc_;
+                    VectorXd null_force_ = ts_[i - 1].Lambda_task_ * ts_[i - 1].J_task_ * A_inv_N_C * ts_[i].J_task_.transpose() * ts_[i].Lambda_task_ * ts_[i].f_star_;
+
+                    // VectorXd null_torque_nc = ;
+                    // VectorXd null_torque_cc =
+
+                    VectorXd null_torque_h = VectorXd::Zero(model_dof_);
+                    VectorXd null_torque_h_r = VectorXd::Zero(reduced_model_dof_);
+
+                    null_torque_h.segment(0, 12) = ts_[i].torque_h_.segment(0, 12) - J_nc_R_kt_.topRows(co_dof) * ts_[i - 1].wr_mat * null_force_;
+                    null_torque_h.segment(co_dof, nc_dof) = ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_;
+
+                    null_torque_h_r.segment(0, co_dof) = null_torque_h.segment(0, co_dof);
+                    null_torque_h_r.segment(co_dof, 6) = J_I_nc_inv_T * null_torque_h.segment(co_dof, nc_dof);
+
+                    ts_[i].torque_null_h_R_ = ts_[first_nc_idx - 1].Null_task_R_ * null_torque_h_r;
+
+                    ts_[i].torque_null_h_.segment(0, co_dof) = ts_[i].torque_null_h_R_.segment(0, co_dof);
+                    ts_[i].torque_null_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_null_h_R_.segment(co_dof, 6) + N_I_nc_ * null_torque_h.segment(co_dof, nc_dof);
+                }
+
+                // torque_task_NC_ += ts_[i].torque_nc_;
+
+                // torque_task_R_ += ts_[i].torque_h_R_;
+                // }
+
+                first_nc_task++;
+            }
+            else
+            {
+                ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
+                ts_[i].torque_nc_.setZero(nc_dof);
+
+                ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
+                ts_[i].torque_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_h_R_.segment(co_dof, 6);
+
+                if (i == 0)
+                {
+                    ts_[i].torque_null_h_R_ = ts_[i].torque_h_R_;
+                    ts_[i].torque_null_h_ = ts_[i].torque_h_;
+                    // torque_task_R_ = ts_[i].torque_h_R_;
+                }
+                else
+                {
+                    ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
+                    ts_[i].torque_null_h_.segment(0, co_dof) = ts_[i].torque_null_h_R_.segment(0, co_dof);
+                    ts_[i].torque_null_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_null_h_R_.segment(co_dof, 6);
+                    // torque_task_R_ += ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
+                }
+            }
+            torque_task_R_ += ts_[i].torque_null_h_R_;
+            torque_task_ += ts_[i].torque_null_h_;
+        }
     }
+
+    // torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof);
+    // torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + torque_task_NC_;
+    // if (hqp)
+    // {
+    //     for (int i = 0; i < ts_.size(); i++)
+    //     {
+
+    //         if (ts_[i].reduced_task_)
+    //         {
+    //             if (i == 0)
+    //             {
+    //                 qp_res = CalcSingleTaskTorqueWithQP_R(ts_[i], MatrixXd::Identity(reduced_model_dof_, reduced_model_dof_), torque_grav_R_, NwJw_R, J_CR_INV_T, P_CR, init);
+
+    //                 if (qp_res == 0)
+    //                 {
+    //                     std::cout << "R-HQP solve error at " << i << "th task" << std::endl;
+    //                     return 0;
+    //                 }
+
+    //                 ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
+    //                 torque_task_R_ = ts_[i].torque_h_R_;
+    //                 // first_heir = false;
+    //             }
+    //             else
+    //             {
+    //                 qp_res = CalcSingleTaskTorqueWithQP_R(ts_[i], ts_[i - 1].Null_task_R_, torque_grav_R_ + torque_task_R_, NwJw_R, J_CR_INV_T, P_CR, init);
+    //                 if (qp_res == 0)
+    //                 {
+    //                     std::cout << "R-HQP solve error at " << i << "th task" << std::endl;
+    //                     return 0;
+    //                 }
+
+    //                 ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
+    //                 torque_task_R_ += ts_[i - 1].Null_task_R_ * (ts_[i].torque_h_R_);
+    //             }
+    //         }
+
+    //         if (ts_[i].noncont_task)
+    //         {
+    //             if (non_con_task == 0)
+    //             {
+    //                 // non_contact_calc_required = true;
+    //                 ts_[i].torque_nc_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_)));
+    //                 torque_task_NC_ += ts_[i].torque_nc_;
+    //                 // ts_[i].Null_task_nc_ = MatrixXd::Identity(nc_dof, nc_dof) - ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_ * (ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_).inverse();
+    //                 // non_con_task_idx.push_back(i);
+    //                 // prev_nc_idx = i;
+    //             }
+    //             else
+    //             {
+    //                 // non_contact_calc_required = true;
+
+    //                 ts_[i].torque_nc_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_)));
+    //                 torque_task_NC_ += ts_[i].torque_nc_;
+    //                 // non_con_task_idx.push_back(i);
+    //             }
+    //             non_con_task++;
+    //         }
+    //         ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
+    //         ts_[i].torque_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_h_R_.segment(co_dof, 6) + ts_[i].torque_nc_;
+    //     }
+
+    //     torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof);
+    //     torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + torque_task_NC_;
+    //     return 1;
+    // }
+    // else
+    // {
+    //     for (int i = 0; i < ts_.size(); i++)
+    //     {
+    //         ts_[i].torque_nc_.setZero(nc_dof);
+    //         ts_[i].torque_h_.setZero(model_dof_);
+    //         ts_[i].torque_h_R_.setZero(reduced_model_dof_);
+
+    //         ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
+    //         if (i == 0)
+    //         {
+    //             torque_task_R_ = ts_[i].torque_h_R_;
+    //         }
+    //         else
+    //         {
+    //             torque_task_R_ += ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
+    //         }
+    //         if (ts_[i].noncont_task)
+    //         {
+    //             non_contact_calc_required = true;
+    //             ts_[i].torque_nc_ = N_I_nc_ * (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+    //             torque_task_NC_ += ts_[i].torque_nc_;
+    //         }
+    //         else
+    //         {
+    //             ts_[i].torque_nc_.setZero(nc_dof);
+    //         }
+    //         ts_[i].torque_h_.setZero(model_dof_);
+    //         ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
+    //         ts_[i].torque_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_h_R_.segment(co_dof, 6) + ts_[i].torque_nc_;
+    //     }
+
+    //     torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof);
+    //     torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + torque_task_NC_;
+    //     return 1;
+    // }
+    return 1;
 }
 int RobotData::CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
 {
@@ -2800,7 +3247,7 @@ int RobotData::CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task
     A.setZero(total_constraint_size, variable_size);
     lbA.setZero(total_constraint_size);
     ubA.setZero(total_constraint_size);
-    Eigen::MatrixXd Ntorque_task = task_null_matrix_ * (ts_.J_kt_R_ * ts_.Lambda_task_R_);
+    Eigen::MatrixXd Ntorque_task = task_null_matrix_ * (ts_.J_kt_R_ * ts_.Lambda_task_);
 
     if (torque_limit_set_)
     {
@@ -2897,14 +3344,21 @@ int RobotData::CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task
 
 int RobotData::ReducedCalcContactRedistribute(bool init)
 {
-    return CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, init);
-}
-int RobotData::CalcContactRedistributeR(bool init)
-{
-    return CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, init);
+    int ret = CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, init);
 
     torque_contact_.setZero(model_dof_);
     torque_contact_.segment(0, contact_dof_) = torque_contact_R_.segment(0, contact_dof_);
+
+    return ret;
+}
+int RobotData::CalcContactRedistributeR(bool init)
+{
+    int ret = CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, init);
+
+    torque_contact_.setZero(model_dof_);
+    torque_contact_.segment(0, contact_dof_) = torque_contact_R_.segment(0, contact_dof_);
+
+    return ret;
 }
 
 int RobotData::CalcContactRedistributeR(VectorXd torque_input, bool init)
