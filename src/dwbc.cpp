@@ -2800,7 +2800,7 @@ void RobotData::ReducedCalcTaskSpace(bool update_task_space)
     {
         ts_[i].CalcJKT_R(A_inv_, A_inv_N_C, A_R_inv_N_CR, W_R_inv, J_I_nc_inv_T);
 
-        if (i != (ts_.size() - 1))
+        if (i != (ts_.size() - 1)) //if task is not last 
         {
             if (!ts_[i].noncont_task)
             {
@@ -2817,9 +2817,9 @@ void RobotData::ReducedCalcTaskSpace(bool update_task_space)
             {
                 ts_[i].Null_task_R_ = ts_[i - 1].Null_task_R_;
 
-                ts_[i].Lambda_task_NC_ = (ts_[i].J_task_NC_ * A_NC_l_inv * ts_[i].J_task_NC_.transpose()).inverse();
-                ts_[i].J_task_NC_inv_T = ts_[i].Lambda_task_NC_ * ts_[i].J_task_NC_ * A_NC_l_inv;
-                ts_[i].Null_task_NC_ = MatrixXd::Identity(nc_dof, nc_dof) - ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_inv_T;
+                // ts_[i].Lambda_task_NC_ = (ts_[i].J_task_NC_ * A_NC_l_inv * ts_[i].J_task_NC_.transpose()).inverse();
+                // ts_[i].J_task_NC_inv_T = ts_[i].Lambda_task_NC_ * ts_[i].J_task_NC_ * A_NC_l_inv;
+                // ts_[i].Null_task_NC_ = MatrixXd::Identity(nc_dof, nc_dof) - ts_[i].J_task_NC_.transpose() * ts_[i].J_task_NC_inv_T;
             }
         }
     }
@@ -3032,10 +3032,8 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool calc_task_
 
                     ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
                     ts_[i].torque_h_.segment(co_dof, nc_dof) = ts_[i].torque_nc_;
-                    VectorXd null_force_ = ts_[i - 1].Lambda_task_ * ts_[i - 1].J_task_ * A_inv_N_C * ts_[i].J_task_.transpose() * ts_[i].Lambda_task_ * ts_[i].f_star_;
 
-                    // VectorXd null_torque_nc = ;
-                    // VectorXd null_torque_cc =
+                    VectorXd null_force_ = ts_[i - 1].Lambda_task_ * ts_[i - 1].J_task_ * A_inv_N_C * ts_[i].J_task_.transpose() * ts_[i].Lambda_task_ * ts_[i].f_star_;
 
                     VectorXd null_torque_h = VectorXd::Zero(model_dof_);
                     VectorXd null_torque_h_r = VectorXd::Zero(reduced_model_dof_);
