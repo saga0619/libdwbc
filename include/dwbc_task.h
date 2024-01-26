@@ -113,6 +113,7 @@ namespace DWBC
         unsigned int heirarchy_;
         unsigned int link_size_; 
         unsigned int task_type_;
+        unsigned int nc_heirarchy_;
 
         std::vector<TaskLink> task_link_;
 
@@ -124,6 +125,7 @@ namespace DWBC
         VectorXd torque_h_;
         VectorXd torque_null_h_;
         VectorXd torque_null_h_R_;
+        VectorXd torque_null_h_nc_;
 
         bool reduced_task_ = false;
         bool noncont_task = false;

@@ -296,31 +296,36 @@ int main(void)
     std::cout << "Contact Torque Similarity : " << (rd2_.torque_contact_.transpose() - torque_contact_original.transpose()).norm() << std::endl;
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
-    std::cout << "task torque : \n";
-    std::cout << rd2_.torque_task_.transpose() << std::endl;
-    std::cout << "grav torque : " << std::endl;
-    std::cout << rd2_.torque_grav_.transpose() << std::endl;
-    std::cout << "contact torque : " << std::endl;
-    std::cout << rd2_.torque_contact_.transpose() << std::endl;
+    // std::cout << "task torque : \n";
+    // std::cout << rd2_.torque_task_.transpose() << std::endl;
+    // std::cout << "grav torque : " << std::endl;
+    // std::cout << rd2_.torque_grav_.transpose() << std::endl;
+    // std::cout << "contact torque : " << std::endl;
+    // std::cout << rd2_.torque_contact_.transpose() << std::endl;
 
-    std::cout << "fstar 2 :";
-    std::cout << (give_me_fstar * rd2_.torque_task_).transpose() << std::endl;
-    std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << "fstar 2 :";
+    // std::cout << (give_me_fstar * rd2_.torque_task_).transpose() << std::endl;
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
     for (int i = 0; i < rd2_.ts_.size(); i++)
     {
-        std::cout << "task " << i << " torque | Similarity : " << (rd2_.ts_[i].torque_h_ - torque_task_original_vec[i]).norm() << std::endl;
-        std::cout << (rd2_.ts_[i].torque_h_).transpose() << std::endl;
+        VectorXd h_torque = VectorXd::Zero(rd2_.model_dof_);
+        h_torque.segment(0, rd2_.co_dof) = rd2_.ts_[i].torque_h_R_.segment(0, rd2_.co_dof);
+        h_torque.segment(rd2_.co_dof, rd2_.nc_dof) = rd2_.J_I_nc_.transpose() * rd2_.ts_[i].torque_h_R_.segment(rd2_.co_dof, 6) + rd2_.N_I_nc_ * rd2_.ts_[i].torque_nc_;
+        std::cout << "task " << i << " torque | Similarity : " << (h_torque - torque_task_original_vec[i]).norm() << std::endl;
+        // std::cout << (h_torque).transpose() << std::endl;
     }
     std::cout << "-----------------------------------------------------------------" << std::endl;
     std::cout << " NULL spaced torque : " << std::endl;
     for (int i = 1; i < rd2_.ts_.size(); i++)
     {
-        std::cout << "task " << i << " torque : Similarity : " << (rd2_.ts_[i].torque_null_h_ - torque_task_null_original_vec[i - 1]).norm() << std::endl;
-        std::cout << (rd2_.ts_[i].torque_null_h_).transpose() << std::endl;
+        VectorXd null_torque = VectorXd::Zero(rd2_.model_dof_);
+        null_torque.segment(0, rd2_.co_dof) = rd2_.ts_[i].torque_null_h_R_.segment(0, rd2_.co_dof);
+        null_torque.segment(rd2_.co_dof, rd2_.nc_dof) = rd2_.J_I_nc_.transpose() * rd2_.ts_[i].torque_null_h_R_.segment(rd2_.co_dof, 6) + rd2_.N_I_nc_ * rd2_.ts_[i].torque_null_h_nc_;
+        std::cout << "task " << i << " torque : Similarity : " << (null_torque - torque_task_null_original_vec[i - 1]).norm() << std::endl;
+        // std::cout << (null_torque).transpose() << std::endl;
     }
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
-
 
     return 0;
 }

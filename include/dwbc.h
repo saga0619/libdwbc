@@ -143,6 +143,7 @@ namespace DWBC
 
         std::vector<int> l_joint_idx_conact_;
         std::vector<int> l_joint_idx_non_contact_;
+        // std::vector<int> nc_task_idx_;
 
         unsigned int nc_dof;
         unsigned int co_dof;

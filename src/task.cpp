@@ -30,6 +30,7 @@ namespace DWBC
 
     TaskSpace::TaskSpace()
     {
+        nc_heirarchy_ = 0;
         link_size_ = 0;
         task_type_ = TASK_UNDEFINED;
     }
@@ -40,6 +41,8 @@ namespace DWBC
         task_dof_ = task_dof;
         link_size_ = 0;
         heirarchy_ = heirarchy;
+        nc_heirarchy_ = 0;
+        
     }
 
     // Typical pos/rot task initialzer
@@ -48,6 +51,7 @@ namespace DWBC
     {
         task_type_ = TASK_UNDEFINED;
         heirarchy_ = heirarchy;
+        nc_heirarchy_ = 0;
         task_link_.push_back(TaskLink(task_mode, link_number, task_point));
 
         link_size_ = 1;
