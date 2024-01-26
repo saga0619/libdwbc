@@ -116,7 +116,7 @@ int main(void)
     // f_star3(3) = 1.0;
     // f_star3(9) = 1.0;
 
-    rd2_.SetTaskSpace(0, fstar_1.segment(0, 3));
+    rd2_.SetTaskSpace(0, 3 * fstar_1.segment(0, 3));
     rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
     rd2_.SetTaskSpace(2, -fstar_1.segment(3, 3));
     rd2_.SetTaskSpace(3, f_star3);
@@ -186,6 +186,17 @@ int main(void)
     MatrixXd give_me_fstar = rd2_.ts_[0].J_task_ * rd2_.A_inv_ * rd2_.N_C * s_k.transpose();
 
     std::cout << "fstar : " << (give_me_fstar * rd2_.torque_task_).transpose() << std::endl;
+
+    if (use_hqp)
+    {
+
+        std::cout << "-----------------------------------------------------------------" << std::endl;
+
+        for (int i = 0; i < rd2_.ts_.size(); i++)
+        {
+            std::cout << "task " << i << " fstar qp  : " << rd2_.ts_[i].f_star_qp_.transpose() << std::endl;
+        }
+    }
     std::vector<VectorXd> torque_task_original_vec;
     std::cout << "-----------------------------------------------------------------" << std::endl;
     for (int i = 0; i < rd2_.ts_.size(); i++)
@@ -227,7 +238,7 @@ int main(void)
     rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
 
-    rd2_.SetTaskSpace(0, fstar_1.segment(0, 3));
+    rd2_.SetTaskSpace(0, 3 * fstar_1.segment(0, 3));
     rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
     rd2_.SetTaskSpace(2, -fstar_1.segment(3, 3));
     rd2_.SetTaskSpace(3, f_star3);
@@ -326,6 +337,8 @@ int main(void)
     }
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
+
+    std::cout << rd2_.force_on_nc_R_qp_.transpose() << std::endl;
 
     return 0;
 }

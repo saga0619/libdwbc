@@ -311,7 +311,7 @@ namespace DWBC
             break;
         }
 
-        Matrix3d rot_traj;
+        // Matrix3d rot_traj;
         Vector3d w_traj, a_traj, qs_;
 
         Eigen::Quaterniond rq_init, rq_desired, rq_traj;

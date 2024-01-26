@@ -136,6 +136,8 @@ namespace DWBC
         std::vector<ContactConstraint> cc_; // contact constraint information
         std::vector<TaskSpace> ts_;         // task space information
 
+        int first_nc_TaskSpace_idx_;
+
         // 2level dynamics computation
 
         Eigen::VectorXi contact_dependency_joint_; // 1 if the joint is contact dependant, 0 if not
@@ -176,6 +178,10 @@ namespace DWBC
 
         MatrixXd J_nc_R_, J_nc_R_inv_T_, J_nc_R_kt_;
         MatrixXd lambda_nc_R_;
+
+        Vector6d force_on_nc_r_;
+        Vector6d force_on_nc_R_qp_;
+        VectorXd nc_qp_contact_;
 
         double mass_co_;
         double mass_nc_;
@@ -322,6 +328,7 @@ namespace DWBC
 
         int CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
+        int CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);

@@ -73,6 +73,7 @@ namespace DWBC
         Matrix3d rot_desired_;
         Vector3d w_desired_;
 
+        Matrix3d rot_traj;
         Vector3d rpy_traj;
 
         MatrixXd wr_mat;
