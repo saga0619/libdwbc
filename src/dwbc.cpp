@@ -2971,7 +2971,7 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool calc_task_
                         return 0;
                     }
                     ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
-                    torque_task_R_ = ts_[i].torque_h_R_;
+                    ts_[i].torque_null_h_R_ = ts_[i].torque_h_R_;
                     // first_heir = false;
                 }
                 else
@@ -2983,9 +2983,11 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool calc_task_
                         return 0;
                     }
                     ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * (ts_[i].f_star_ + ts_[i].f_star_qp_);
-                    torque_task_R_ += ts_[i - 1].Null_task_R_ * (ts_[i].torque_h_R_);
+                    ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
                 }
             }
+            torque_task_R_ += ts_[i].torque_null_h_R_;
+            torque_task_NC_ += ts_[i].torque_null_h_nc_;
         }
         else
         {
@@ -2999,12 +3001,8 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool calc_task_
                     ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
                     ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
 
-                    // ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
-                    // ts_[i].torque_h_.segment(co_dof, nc_dof) = ts_[i].torque_nc_;
-
                     ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
-                    // ts_[i].torque_null_h_.segment(0, co_dof) = ts_[i].torque_null_h_R_.segment(0, co_dof);
-                    // ts_[i].torque_null_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_null_h_R_.segment(co_dof, 6) + N_I_nc_ * ts_[i].torque_nc_;
+
                     ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_;
                 }
                 else
@@ -3013,47 +3011,31 @@ int RobotData::ReducedCalcTaskControlTorque(bool init, bool hqp, bool calc_task_
                     ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
                     ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
 
-                    // ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
-                    // ts_[i].torque_h_.segment(co_dof, nc_dof) = ts_[i].torque_nc_;
-
                     VectorXd null_force_ = ts_[i - 1].Lambda_task_ * (ts_[i - 1].J_task_ * (A_inv_N_C * (ts_[i].J_task_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_))));
 
-                    // VectorXd null_torque_h = VectorXd::Zero(model_dof_);
                     VectorXd null_torque_h_r = VectorXd::Zero(reduced_model_dof_);
 
                     ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_;
-
-                    // null_torque_h.segment(0, co_dof) = 
-                    // null_torque_h.segment(co_dof, nc_dof) = ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_;
 
                     null_torque_h_r.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof) - J_nc_R_kt_.topRows(co_dof) * ts_[i - 1].wr_mat * null_force_;
                     null_torque_h_r.segment(co_dof, 6) = J_I_nc_inv_T * (ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_);
 
                     ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * null_torque_h_r;
 
-                    // ts_[i].torque_null_h_.segment(0, co_dof) = ts_[i].torque_null_h_R_.segment(0, co_dof);
-                    // ts_[i].torque_null_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_null_h_R_.segment(co_dof, 6) + N_I_nc_ * null_torque_h.segment(co_dof, nc_dof);
                 }
             }
             else
             {
                 ts_[i].torque_h_R_ = ts_[i].J_kt_R_ * ts_[i].Lambda_task_ * ts_[i].f_star_;
 
-                // ts_[i].torque_h_.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof);
-                // ts_[i].torque_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_h_R_.segment(co_dof, 6);
 
                 if (i == 0)
                 {
                     ts_[i].torque_null_h_R_ = ts_[i].torque_h_R_;
-                    // ts_[i].torque_null_h_ = ts_[i].torque_h_;
-                    // torque_task_R_ = ts_[i].torque_h_R_;
                 }
                 else
                 {
                     ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
-                    // ts_[i].torque_null_h_.segment(0, co_dof) = ts_[i].torque_null_h_R_.segment(0, co_dof);
-                    // ts_[i].torque_null_h_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * ts_[i].torque_null_h_R_.segment(co_dof, 6);
-                    // torque_task_R_ += ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
                 }
             }
             torque_task_R_ += ts_[i].torque_null_h_R_;
