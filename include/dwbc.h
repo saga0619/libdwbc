@@ -117,7 +117,7 @@ namespace DWBC
         MatrixXd J_C_INV_T;      // contact jacobian inverse transpose   : (system_dof * contact_dof)
         MatrixXd N_C;            // null space of contact jacobian       : (system_dof * system_dof)
 
-        MatrixXd A_inv_N_C;     // A_inv * N_C
+        MatrixXd A_inv_N_C; // A_inv * N_C
 
         MatrixXd P_C; // contact projection matrix
 
@@ -170,7 +170,7 @@ namespace DWBC
         VectorXd torque_task_R_;    // task torque      : (reduced_model_dof_)
         VectorXd torque_contact_R_; // contact torque   : (reduced_model_dof_)
 
-        VectorXd torque_task_NC_;    // task torque      : (nc_dof)
+        VectorXd torque_task_NC_; // task torque      : (nc_dof)
 
         Vector6d Resultant_force_on_nc_;
 
@@ -188,6 +188,7 @@ namespace DWBC
 
         Vector3d com_pos_co_;
         Vector3d com_pos_nc_;
+        Vector3d com_pos_nc_g_; // Composition of non-contact chain from global frame. 
 
         Matrix3d inertia_co_;
         Matrix3d inertia_nc_;
@@ -272,8 +273,8 @@ namespace DWBC
         /*
         Calculate Contact Redistribution Torque
         */
-        int CalcContactRedistribute(VectorXd torque_input, bool init = true);
-        int CalcContactRedistribute(bool init = true);
+        int CalcContactRedistribute(VectorXd torque_input, bool hqp = true, bool init = true);
+        int CalcContactRedistribute(bool hqp = true, bool init = true);
 
         /*
         Calculate Contact Force with command Torque
@@ -292,7 +293,7 @@ namespace DWBC
         void AddTaskSpace(int heirarchy, int task_mode, int link_number, Vector3d task_point, bool verbose = false);
         void AddTaskSpace(int heirarchy, int task_mode, const char *link_name, Vector3d task_point, bool verbose = false); // find link with link name, ignore the case of string
         void AddTaskLink(int heirarchy, int task_mode, int link_number, Vector3d task_point, bool verbose = false);
-        void AddTaskLink(int heirarchy, int task_mode, const char *link_name,  Vector3d task_point, bool verbose = false);
+        void AddTaskLink(int heirarchy, int task_mode, const char *link_name, Vector3d task_point, bool verbose = false);
         void ClearQP();
         void AddQP();
         /*
@@ -319,7 +320,7 @@ namespace DWBC
         /*
         Calculate Heirarcical task torque.
         */
-        int CalcTaskControlTorque(bool init, bool hqp = true, bool update_task_space = true);
+        int CalcTaskControlTorque(bool hqp = true, bool init = true, bool update_task_space = true);
 
         /*
         Calculate heirarchy task torque
@@ -329,7 +330,6 @@ namespace DWBC
         int CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
         int CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
-
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 
@@ -372,12 +372,12 @@ namespace DWBC
         void ReducedDynamicsCalculate(bool verbose = false);
         int ReducedCalcContactConstraint();
         void ReducedCalcTaskSpace(bool update_task_space = true);
-        int ReducedCalcTaskControlTorque(bool init, bool hqp = true, bool calc_task_space = true);
-        int ReducedCalcContactRedistribute(bool init);
+        int ReducedCalcTaskControlTorque(bool hqp = true, bool init = true, bool calc_task_space = true);
+        int ReducedCalcContactRedistribute(bool hqp = true, bool init = true);
         void ReducedCalcGravCompensation();
 
-        int CalcContactRedistributeR(VectorXd torque_input, bool init = true);
-        int CalcContactRedistributeR(bool init = true);
+        int CalcContactRedistributeR(VectorXd torque_input, bool hqp = true, bool init = true);
+        int CalcContactRedistributeR(bool hqp = true, bool init = true);
 
         /*
         Deprecated : SLOW COMPUTATION

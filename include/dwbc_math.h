@@ -16,6 +16,7 @@ using namespace Eigen;
 
 typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
+typedef Eigen::Matrix<double, 12, 1> Vector12d;
 
 namespace DWBC
 {

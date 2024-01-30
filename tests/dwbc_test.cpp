@@ -529,7 +529,7 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
 
     BENCHMARK("task control calculation (Update task + QP calculation + matrix preperation)")
     {
-        rd_.CalcTaskControlTorque(false);
+        rd_.CalcTaskControlTorque(true, false);
     };
 
     BENCHMARK("QP Calculation Benchmark")
@@ -545,7 +545,7 @@ TEST_CASE("CONTACT SPACE CALCULATION BENCHMARK")
 
     BENCHMARK("contact control calculation")
     {
-        rd_.CalcContactRedistribute(false);
+        rd_.CalcContactRedistribute(true, false);
     };
 }
 

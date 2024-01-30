@@ -2,6 +2,7 @@
 #define WBHQP_WBDYNAMICS_H
 
 #include <Eigen/Dense>
+#include "dwbc_math.h"
 
 #define CONTACT_CONSTRAINT_ZMP 4
 #define CONTACT_CONSTRAINT_FORCE 6
@@ -93,6 +94,13 @@ namespace DWBC
      * output : ContactForce
      */
     void CalculateContactForce(const VectorXd &command_torque, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, VectorXd &ContactForce);
+
+    /*
+     * Contact redistribute
+     *
+     *
+     */
+    void ContactRedistributetwomod(double eta_cust, double footlength, double footwidth, double staticFrictionCoeff, double ratio_x, double ratio_y, Eigen::Vector3d P1, Eigen::Vector3d P2, Vector12d &F12, Vector6d &ResultantForce, Vector12d &ForceRedistribution, double &eta);
 
 }
 #endif

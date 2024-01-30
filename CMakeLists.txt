@@ -2,7 +2,7 @@ PROJECT (dwbc)
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
 
-add_compile_options(-O -std=c++17 -fPIC)
+add_compile_options(-O3 -std=c++17)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake)
 
@@ -56,7 +56,7 @@ file(GLOB dwbc_header
 "include/*.h"
 )
 
-add_library(dwbc ${dwbc_src})
+add_library(dwbc STATIC ${dwbc_src})
 
 target_link_libraries(dwbc
 PUBLIC

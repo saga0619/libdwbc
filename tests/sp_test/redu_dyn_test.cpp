@@ -12,7 +12,7 @@ using namespace std;
 
 int main(void)
 {
-    double rot_z = 0;
+    double rot_z = M_PI_2;
     int repeat = 10000;
 
     bool use_hqp = false;
@@ -22,12 +22,12 @@ int main(void)
     if (input == 'y')
     {
         use_hqp = true;
-        std::cout << "hqp enabled \n";
+        std::cout << "HQP enabled \n";
     }
     else
     {
         use_hqp = false;
-        std::cout << "hqp disabled \n";
+        std::cout << "HQP disabled \n";
     }
 
     std::string urdf2_file = std::string(URDF_DIR) + "/dyros_tocabi.urdf";
@@ -122,8 +122,8 @@ int main(void)
     rd2_.SetTaskSpace(3, f_star3);
 
     rd2_.CalcGravCompensation();
-    rd2_.CalcTaskControlTorque(true, use_hqp);
-    rd2_.CalcContactRedistribute(true);
+    rd2_.CalcTaskControlTorque(use_hqp, true);
+    rd2_.CalcContactRedistribute(use_hqp, true);
     auto t10 = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < repeat; i++)
@@ -140,12 +140,12 @@ int main(void)
     auto t12 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < repeat; i++)
     {
-        rd2_.CalcTaskControlTorque(false, use_hqp, false);
+        rd2_.CalcTaskControlTorque(use_hqp, false, false);
     }
     auto t13 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < repeat; i++)
     {
-        rd2_.CalcContactRedistribute(false);
+        rd2_.CalcContactRedistribute(use_hqp, false);
     }
     auto t14 = std::chrono::high_resolution_clock::now();
 
@@ -248,8 +248,8 @@ int main(void)
     rd2_.ReducedCalcContactConstraint();
     rd2_.ReducedCalcGravCompensation();
     rd2_.ReducedCalcTaskSpace();
-    rd2_.ReducedCalcTaskControlTorque(true, use_hqp, false);
-    rd2_.ReducedCalcContactRedistribute(true);
+    rd2_.ReducedCalcTaskControlTorque(use_hqp, true, false);
+    rd2_.ReducedCalcContactRedistribute(use_hqp, true);
     // start time
     auto t0 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < repeat; i++)
@@ -271,12 +271,12 @@ int main(void)
     auto t3 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < repeat; i++)
     {
-        rd2_.ReducedCalcTaskControlTorque(false, use_hqp, false);
+        rd2_.ReducedCalcTaskControlTorque(use_hqp, false, false);
     }
     auto t4 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < repeat; i++)
     {
-        rd2_.ReducedCalcContactRedistribute(false);
+        rd2_.ReducedCalcContactRedistribute(use_hqp, false);
     }
     auto t5 = std::chrono::high_resolution_clock::now();
 
@@ -322,8 +322,10 @@ int main(void)
         VectorXd h_torque = VectorXd::Zero(rd2_.model_dof_);
         h_torque.segment(0, rd2_.co_dof) = rd2_.ts_[i].torque_h_R_.segment(0, rd2_.co_dof);
         h_torque.segment(rd2_.co_dof, rd2_.nc_dof) = rd2_.J_I_nc_.transpose() * rd2_.ts_[i].torque_h_R_.segment(rd2_.co_dof, 6) + rd2_.N_I_nc_ * rd2_.ts_[i].torque_nc_;
-        std::cout << "task " << i << " torque | Similarity : " << (h_torque - torque_task_original_vec[i]).norm() << std::endl;
-        // std::cout << (h_torque).transpose() << std::endl;
+        double similarity = (h_torque - torque_task_original_vec[i]).norm();
+        std::cout << "task " << i << " torque | Similarity : " << similarity << std::endl;
+        if (similarity > 1.0E-4)
+            std::cout << (h_torque).transpose() << std::endl;
     }
     std::cout << "-----------------------------------------------------------------" << std::endl;
     std::cout << " NULL spaced torque : " << std::endl;
@@ -332,13 +334,54 @@ int main(void)
         VectorXd null_torque = VectorXd::Zero(rd2_.model_dof_);
         null_torque.segment(0, rd2_.co_dof) = rd2_.ts_[i].torque_null_h_R_.segment(0, rd2_.co_dof);
         null_torque.segment(rd2_.co_dof, rd2_.nc_dof) = rd2_.J_I_nc_.transpose() * rd2_.ts_[i].torque_null_h_R_.segment(rd2_.co_dof, 6) + rd2_.N_I_nc_ * rd2_.ts_[i].torque_null_h_nc_;
-        std::cout << "task " << i << " torque : Similarity : " << (null_torque - torque_task_null_original_vec[i - 1]).norm() << std::endl;
-        // std::cout << (null_torque).transpose() << std::endl;
+        double similarity = (null_torque - torque_task_null_original_vec[i - 1]).norm();
+        std::cout << "task " << i << " torque : Similarity : " << similarity << std::endl;
+        if (similarity > 1.0E-4)
+            std::cout << (null_torque).transpose() << std::endl;
     }
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
 
     std::cout << rd2_.force_on_nc_R_qp_.transpose() << std::endl;
+
+    // std::cout <<
+
+    MatrixXd J_nc_;
+    J_nc_.setZero(6, rd2_.model_dof_ + 6);
+    J_nc_.block(0, 0, 6, 6) = rd2_.J_nc_R_.block(0, 0, 6, 6);
+    J_nc_.rightCols(rd2_.nc_dof) = rd2_.J_I_nc_;
+
+    MatrixXd Lambda_nc_;
+
+    Lambda_nc_ = (J_nc_ * rd2_.A_inv_N_C * J_nc_.transpose()).inverse();
+
+    MatrixXd J_nc_inv_T = Lambda_nc_ * J_nc_ * rd2_.A_inv_N_C;
+
+    VectorXd force_nc = J_nc_inv_T * rd2_.ts_[2].J_task_.transpose() * rd2_.ts_[2].Lambda_task_ * rd2_.ts_[2].f_star_;
+
+    std::cout << (force_nc).transpose() << std::endl;
+
+    std::cout << rd2_.ts_[2].force_on_nc_.transpose() << std::endl;
+    rd2_.ts_[2].torque_h_R_;
+
+    std::cout << (rd2_.J_nc_R_kt_ * force_nc).transpose() << std::endl;
+
+    std::cout << "original jac rotm : " << std::endl;
+    std::cout << rd2_.link_[lh_id].jac_.block(0, 3, 3, 3) << std::endl;
+    std::cout << "original xpos : " << std::endl;
+    std::cout << rd2_.link_[lh_id].xpos.transpose() << std::endl;
+
+    std::cout << "rotm? : " << std::endl;
+    std::cout << skew(-rd2_.link_[lh_id].xpos) * rd2_.link_[0].rotm << std::endl;
+
+    Vector6d Force_6d_local = Vector6d::Zero();
+    Vector6d force_local = Vector6d::Zero();
+    force_local << 1, 2, 3, 4, 5, 6;
+    Force_6d_local.segment(0, 3) = rd2_.link_[0].rotm * force_local.segment(0, 3);
+    Force_6d_local.segment(3, 3) = rd2_.link_[0].rotm * force_local.segment(3, 3);
+
+    std::cout << "Force 6d local : " << Force_6d_local.transpose() << std::endl;
+    std::cout << rd2_.J_nc_R_kt_ * Force_6d_local << std::endl;
 
     return 0;
 }

@@ -149,8 +149,6 @@ namespace DWBC
     //     int rows = J_CR.rows(); // rows == contact_dof
     //     int cols = J_CR.cols(); // cols == system_dof
 
-        
-
     //     lambda_contact_R = (J_CR * A_R_inv * J_CR.transpose()).inverse();
     //     J_CR_INV_T = lambda_contact_R * J_CR * A_R_inv;
     //     N_CR = MatrixXd::Identity(cols, cols) - J_CR.transpose() * J_CR_INV_T;
@@ -220,7 +218,7 @@ namespace DWBC
      * output : J_kt, lambda_task
      */
     void CalculateJKT_R(const MatrixXd &J_task_R, const MatrixXd &A_R_inv_N_CR, const MatrixXd &W_R_inv,
-                      MatrixXd &J_kt_R, MatrixXd &lambda_task_R)
+                        MatrixXd &J_kt_R, MatrixXd &lambda_task_R)
     {
         lambda_task_R = (J_task_R * A_R_inv_N_CR * J_task_R.transpose()).inverse();
         MatrixXd Q = (lambda_task_R * J_task_R * A_R_inv_N_CR).rightCols(J_task_R.cols() - 6);
@@ -270,6 +268,139 @@ namespace DWBC
     void CalculateContactForce(const VectorXd &command_torque, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, VectorXd &ContactForce)
     {
         ContactForce = J_C_INV_T.rightCols(command_torque.size()) * command_torque - P_C;
+    }
+
+    void ContactRedistributetwomod(double eta_cust, double footlength, double footwidth, double staticFrictionCoeff, double ratio_x, double ratio_y, Eigen::Vector3d P1, Eigen::Vector3d P2, Vector12d &F12, Vector6d &ResultantForce, Vector12d &ForceRedistribution, double &eta)
+    {
+        Eigen::Matrix<double,6,12> W;
+        W.setZero();
+
+        W.block(0, 0, 6, 6).setIdentity();
+        W.block(0, 6, 6, 6).setIdentity();
+        W.block(3, 0, 3, 3) = skew(P1);
+        W.block(3, 6, 3, 3) = skew(P2);
+
+        ResultantForce = W * F12; // F1F2;
+
+        double eta_lb = 1.0 - eta_cust;
+        double eta_ub = eta_cust;
+        // printf("1 lb %f ub %f\n",eta_lb,eta_ub);
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // boundary of eta Mx, A*eta + B < 0
+        double A = (P1(2) - P2(2)) * ResultantForce(1) - (P1(1) - P2(1)) * ResultantForce(2);
+        double B = ResultantForce(3) + P2(2) * ResultantForce(1) - P2(1) * ResultantForce(2);
+        double C = ratio_y * footwidth / 2.0 * abs(ResultantForce(2));
+        double a = A * A;
+        double b = 2.0 * A * B;
+        double c = B * B - C * C;
+        double sol_eta1 = (-b + sqrt(b * b - 4.0 * a * c)) / 2.0 / a;
+        double sol_eta2 = (-b - sqrt(b * b - 4.0 * a * c)) / 2.0 / a;
+        if (sol_eta1 > sol_eta2) // sol_eta1 ÀÌ upper boundary
+        {
+            if (sol_eta1 < eta_ub)
+            {
+                eta_ub = sol_eta1;
+            }
+
+            if (sol_eta2 > eta_lb)
+            {
+                eta_lb = sol_eta2;
+            }
+        }
+        else // sol_eta2 ÀÌ upper boundary
+        {
+            if (sol_eta2 < eta_ub)
+            {
+                eta_ub = sol_eta2;
+            }
+
+            if (sol_eta1 > eta_lb)
+            {
+                eta_lb = sol_eta1;
+            }
+        }
+
+        // printf("3 lb %f ub %f A %f B %f\n",eta_lb,eta_ub, sol_eta1, sol_eta2);
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // boundary of eta My, A*eta + B < 0
+        A = -(P1(2) - P2(2)) * ResultantForce(0) + (P1(0) - P2(0)) * ResultantForce(2);
+        B = ResultantForce(4) - P2(2) * ResultantForce(0) + P2(0) * ResultantForce(2);
+        C = ratio_x * footlength / 2.0 * abs(ResultantForce(2));
+        a = A * A;
+        b = 2.0 * A * B;
+        c = B * B - C * C;
+        sol_eta1 = (-b + sqrt(b * b - 4.0 * a * c)) / 2.0 / a;
+        sol_eta2 = (-b - sqrt(b * b - 4.0 * a * c)) / 2.0 / a;
+        if (sol_eta1 > sol_eta2) // sol_eta1 ÀÌ upper boundary
+        {
+            if (sol_eta1 < eta_ub)
+                eta_ub = sol_eta1;
+
+            if (sol_eta2 > eta_lb)
+                eta_lb = sol_eta2;
+        }
+        else // sol_eta2 ÀÌ upper boundary
+        {
+            if (sol_eta2 < eta_ub)
+                eta_ub = sol_eta2;
+
+            if (sol_eta1 > eta_lb)
+                eta_lb = sol_eta1;
+        }
+
+        // printf("5 lb %f ub %f A %f B %f\n",eta_lb,eta_ub, sol_eta1, sol_eta2);
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // boundary of eta Mz, (A^2-C^2)*eta^2 + 2*A*B*eta + B^2 < 0
+        A = -(P1(0) - P2(0)) * ResultantForce(1) + (P1(1) - P2(1)) * ResultantForce(0);
+        B = ResultantForce(5) + P2(1) * ResultantForce(0) - P2(0) * ResultantForce(1);
+        C = staticFrictionCoeff * abs(ResultantForce(2));
+        a = A * A;
+        b = 2.0 * A * B;
+        c = B * B - C * C;
+        sol_eta1 = (-b + sqrt(b * b - 4.0 * a * c)) / 2.0 / a;
+        sol_eta2 = (-b - sqrt(b * b - 4.0 * a * c)) / 2.0 / a;
+        if (sol_eta1 > sol_eta2) // sol_eta1 ÀÌ upper boundary
+        {
+            if (sol_eta1 < eta_ub)
+                eta_ub = sol_eta1;
+            if (sol_eta2 > eta_lb)
+                eta_lb = sol_eta2;
+        }
+        else // sol_eta2 ÀÌ upper boundary
+        {
+            if (sol_eta2 < eta_ub)
+                eta_ub = sol_eta2;
+            if (sol_eta1 > eta_lb)
+                eta_lb = sol_eta1;
+        }
+        // printf("6 lb %f ub %f A %f B %f\n",eta_lb,eta_ub, sol_eta1, sol_eta2);
+
+        double eta_s = (-ResultantForce(3) - P2(2) * ResultantForce(1) + P2(1) * ResultantForce(2)) / ((P1(2) - P2(2)) * ResultantForce(1) - (P1(1) - P2(1)) * ResultantForce(2));
+
+        eta = eta_s;
+        if (eta_s > eta_ub)
+            eta = eta_ub;
+        else if (eta_s < eta_lb)
+            eta = eta_lb;
+
+        if ((eta > eta_cust) || (eta < 1.0 - eta_cust))
+            eta = 0.5;
+
+        ForceRedistribution(0) = eta * ResultantForce(0);
+        ForceRedistribution(1) = eta * ResultantForce(1);
+        ForceRedistribution(2) = eta * ResultantForce(2);
+        ForceRedistribution(3) = ((P1(2) - P2(2)) * ResultantForce(1) - (P1(1) - P2(1)) * ResultantForce(2)) * eta * eta + (ResultantForce(3) + P2(2) * ResultantForce(1) - P2(1) * ResultantForce(2)) * eta;
+        ForceRedistribution(4) = (-(P1(2) - P2(2)) * ResultantForce(0) + (P1(0) - P2(0)) * ResultantForce(2)) * eta * eta + (ResultantForce(4) - P2(2) * ResultantForce(0) + P2(0) * ResultantForce(2)) * eta;
+        ForceRedistribution(5) = (-(P1(0) - P2(0)) * ResultantForce(1) + (P1(1) - P2(1)) * ResultantForce(0)) * eta * eta + (ResultantForce(5) + P2(1) * ResultantForce(0) - P2(0) * ResultantForce(1)) * eta;
+        ForceRedistribution(6) = (1.0 - eta) * ResultantForce(0);
+        ForceRedistribution(7) = (1.0 - eta) * ResultantForce(1);
+        ForceRedistribution(8) = (1.0 - eta) * ResultantForce(2);
+        ForceRedistribution(9) = (1.0 - eta) * (((P1(2) - P2(2)) * ResultantForce(1) - (P1(1) - P2(1)) * ResultantForce(2)) * eta + (ResultantForce(3) + P2(2) * ResultantForce(1) - P2(1) * ResultantForce(2)));
+        ForceRedistribution(10) = (1.0 - eta) * ((-(P1(2) - P2(2)) * ResultantForce(0) + (P1(0) - P2(0)) * ResultantForce(2)) * eta + (ResultantForce(4) - P2(2) * ResultantForce(0) + P2(0) * ResultantForce(2)));
+        ForceRedistribution(11) = (1.0 - eta) * ((-(P1(0) - P2(0)) * ResultantForce(1) + (P1(1) - P2(1)) * ResultantForce(0)) * eta + (ResultantForce(5) + P2(1) * ResultantForce(0) - P2(0) * ResultantForce(1)));
+        // ForceRedistribution(9) = (1.0-eta)/eta*ForceRedistribution(3);
+        // ForceRedistribution(10) = (1.0-eta)/eta*ForceRedistribution(4);
+        // ForceRedistribution(11) = (1.0-eta)/eta*ForceRedistribution(5);
     }
 
 }
