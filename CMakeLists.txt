@@ -48,6 +48,12 @@ IF(PYBIND11)
     set (PYBIND11_PYTHON_VERSION "3.9")
     find_package(pybind11 CONFIG REQUIRED)
     set(PYBIND_LIB pybind11::module pybind11::lto pybind11::windows_extras)
+    file(GLOB pybind_src
+    "src/pybind/*.cpp"
+    )
+    file(GLOB pybind_header
+    "include/pybind/*.h"
+    )
 ENDIF()
 
 include_directories(
@@ -65,7 +71,7 @@ file(GLOB dwbc_header
 )
 
 IF (PYBIND11)
-    add_library(dwbc MODULE ${dwbc_src})
+    add_library(dwbc MODULE ${dwbc_src} ${pybind_src})
 ELSE()
     add_library(dwbc STATIC ${dwbc_src})
 ENDIF()
@@ -88,7 +94,7 @@ INSTALL (TARGETS dwbc
 	INCLUDES        DESTINATION include
     )
 
-install(FILES ${dwbc_header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdwbc)
+install(FILES ${dwbc_header} ${pybind_header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdwbc)
 
 include(CMakePackageConfigHelpers)
 

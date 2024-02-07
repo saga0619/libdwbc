@@ -2,7 +2,7 @@
 * Reinforcement Learning and Whole Body Controller Bridge
 * (C) 2022 Donghyeon Kim <kdh0429@snu.ac.kr>
 */
-#include "rl_wbc_bridge.h"
+#include "pybind/rl_wbc_bridge.h"
 
 RlWBCBridge::RlWBCBridge(int env_id)
 {
