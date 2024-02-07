@@ -15,6 +15,8 @@ OPTION (RUN_TEST "Run calculation test of libdwbc" ON)
 
 OPTION (RUN_BENCHMARK "Run benchmark of libdwbc" OFF)
 
+OPTION (PYBIND11 "Generate python library" OFF)
+
 include(GNUInstallDirs)
 
 
@@ -42,6 +44,12 @@ ELSE()
     set(QPLIB ${QPOASES_LIBRARY})
 ENDIF()
 
+IF(PYBIND11)
+    set (PYBIND11_PYTHON_VERSION "3.9")
+    find_package(pybind11 CONFIG REQUIRED)
+    set(PYBIND_LIB pybind11::module pybind11::lto pybind11::windows_extras)
+ENDIF()
+
 include_directories(
     include
     ${QPOASES_INCLUDE_DIR}
@@ -56,7 +64,11 @@ file(GLOB dwbc_header
 "include/*.h"
 )
 
-add_library(dwbc STATIC ${dwbc_src})
+IF (PYBIND11)
+    add_library(dwbc MODULE ${dwbc_src})
+ELSE()
+    add_library(dwbc STATIC ${dwbc_src})
+ENDIF()
 
 target_link_libraries(dwbc
 PUBLIC
@@ -64,6 +76,7 @@ ${RBDL_LIBRARY}
 ${RBDL_URDFREADER_LIBRARY}
 ${QPLIB}
 pthread
+${PYBIND_LIB}
 )
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/dwbc-config.cmake" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
@@ -97,8 +110,18 @@ export(
 )
 
 # compile test program
-IF(RUN_TEST)
-    add_subdirectory(tests)
+IF (NOT PYBIND11)
+    IF(RUN_TEST)
+        add_subdirectory(tests)
+    ENDIF()
+
+    add_subdirectory(tests/sp_test)
 ENDIF()
 
-add_subdirectory(tests/sp_test)
+IF (PYBIND11)
+    pybind11_extension(${PROJECT_NAME})
+    pybind11_strip(${PROJECT_NAME})
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES CXX_VISIBILITY_PRESET "hidden"
+                                         CUDA_VISIBILITY_PRESET "hidden")
+ENDIF()
