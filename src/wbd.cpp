@@ -125,12 +125,12 @@ namespace DWBC
 
             if (rows - 6 == V2.rows())
             {
-                NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+                NwJw = V2.transpose() * (J_C_INV_T.topRightCorner(6, cols - 6) * V2.transpose()).inverse();
                 return 1;
             }
             else
             {
-                NwJw = V2.transpose() * (J_C_INV_T.rightCols(cols - 6).topRows(6) * V2.transpose()).inverse();
+                NwJw = V2.transpose() * (J_C_INV_T.topRightCorner(6, cols - 6) * V2.transpose()).inverse();
                 std::cout << "Contact Space Factorization Error : Required contact null dimension : " << J_contact.rows() - 6 << " factorization rank : " << V2.rows() << std::endl;
                 return 0;
             }
@@ -272,7 +272,7 @@ namespace DWBC
 
     void ContactRedistributetwomod(double eta_cust, double footlength, double footwidth, double staticFrictionCoeff, double ratio_x, double ratio_y, Eigen::Vector3d P1, Eigen::Vector3d P2, Vector12d &F12, Vector6d &ResultantForce, Vector12d &ForceRedistribution, double &eta)
     {
-        Eigen::Matrix<double,6,12> W;
+        Eigen::Matrix<double, 6, 12> W;
         W.setZero();
 
         W.block(0, 0, 6, 6).setIdentity();
