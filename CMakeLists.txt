@@ -15,7 +15,7 @@ OPTION (RUN_TEST "Run calculation test of libdwbc" ON)
 
 OPTION (RUN_BENCHMARK "Run benchmark of libdwbc" OFF)
 
-OPTION (PYBIND11 "Generate python library" On)
+OPTION (PYBIND11 "Generate python library" OFF)
 
 include(GNUInstallDirs)
 
