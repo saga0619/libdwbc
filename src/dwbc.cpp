@@ -2983,7 +2983,7 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
     int prev_nc_idx = 0;
 
     MatrixXd non_con_null = MatrixXd::Identity(nc_dof, nc_dof);
-
+    VectorXd torque_task_R_qp = VectorXd::Zero(reduced_model_dof_);
     first_nc_TaskSpace_idx_ = -1;
     force_on_nc_r_.setZero();
     for (int i = 0; i < ts_.size(); i++)
@@ -3122,10 +3122,10 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
                 torque_task_NC_ += ts_[i].torque_null_h_nc_;
             }
         }
+
+        torque_task_R_qp = J_nc_R_kt_.topRows(co_dof) * force_on_nc_R_qp_;
     }
 
-    VectorXd torque_task_R_qp = VectorXd::Zero(reduced_model_dof_);
-    torque_task_R_qp = J_nc_R_kt_.topRows(co_dof) * force_on_nc_R_qp_;
 
     torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof) + torque_task_R_qp.segment(0, co_dof);
     torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + N_I_nc_ * torque_task_NC_;
