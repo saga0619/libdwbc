@@ -176,8 +176,11 @@ namespace DWBC
 
         MatrixXd J_R, J_R_INV_T;
 
-        MatrixXd J_nc_R_, J_nc_R_inv_T_, J_nc_R_kt_;
-        MatrixXd lambda_nc_R_;
+        // MatrixXd J_nc_R_, J_nc_R_inv_T_, J_nc_R_kt_;
+        // MatrixXd lambda_nc_R_;
+
+        MatrixXd J_base_R_, J_base_R_inv_T_, J_base_R_kt_;
+        MatrixXd lambda_base_R_;
 
         Vector6d force_on_nc_r_;
         Vector6d force_on_nc_R_qp_;
@@ -188,7 +191,7 @@ namespace DWBC
 
         Vector3d com_pos_co_;
         Vector3d com_pos_nc_;
-        Vector3d com_pos_nc_g_; // Composition of non-contact chain from global frame. 
+        Vector3d com_pos_nc_g_; // Composition of non-contact chain from global frame.
 
         Matrix3d inertia_co_;
         Matrix3d inertia_nc_;

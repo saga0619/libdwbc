@@ -12,7 +12,11 @@ using namespace std;
 
 int main(void)
 {
-    double rot_z = M_PI_2;
+    bool contact1 = true;
+    bool contact2 = true;
+    bool contact3 = false;
+
+    double rot_z = 0;
     int repeat = 10000;
 
     bool use_hqp = false;
@@ -89,15 +93,17 @@ int main(void)
     rd2_.UpdateKinematics(q2, q2dot, q2ddot);
     rd2_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
     rd2_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
+    rd2_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+    rd2_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
     rd2_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(2, TASK_LINK_ROTATION, desired_control_target3.c_str(), Vector3d::Zero(), verbose);
-    rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
+    // rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(TASK_CUSTOM, 12);
 
-    rd2_.SetContact(true, true);
+    rd2_.SetContact(contact1, contact2, contact3, false);
     rd2_.CalcContactConstraint();
 
     fstar_1.segment(0, 3) = rd2_.link_[0].rotm * fstar_1.segment(0, 3);
@@ -109,9 +115,9 @@ int main(void)
     int lh_id = rd2_.getLinkID("L_Wrist2_Link");
     int rh_id = rd2_.getLinkID("R_Wrist2_Link");
 
-    f_star3.setZero(12);
+    f_star3.setZero(6);
     f_star3.segment(0, 6) = 0.5 * fstar_1;
-    f_star3.segment(6, 6) = 0.2 * fstar_1;
+    // f_star3.segment(6, 6) = 0.2 * fstar_1;
 
     // f_star3(3) = 1.0;
     // f_star3(9) = 1.0;
@@ -128,7 +134,7 @@ int main(void)
 
     for (int i = 0; i < repeat; i++)
     {
-        rd2_.SetContact(true, true);
+        rd2_.SetContact(contact1, contact2, contact3);
         rd2_.CalcContactConstraint();
         rd2_.CalcGravCompensation();
     }
@@ -157,7 +163,7 @@ int main(void)
     double time_original3_us = std::chrono::duration_cast<std::chrono::microseconds>(t13 - t12).count();
     double time_original4_us = std::chrono::duration_cast<std::chrono::microseconds>(t14 - t13).count();
 
-    std::cout << "Original Dynamics Model  TOTAL CONSUMPTION : " << (int)(time_original_us / repeat) << " us" << std::endl;
+    std::cout << "Original Dynamics Model  TOTAL CONSUMPTION : " << (float)(time_original_us / repeat) << " us" << std::endl;
     std::cout << "Original Dynamics Model 1 - Contact Constraint Calculation : " << (int)(time_original1_us / repeat) << " us" << std::endl;
     std::cout << "Original Dynamics Model 2 - Task Space Calculation         : " << (int)(time_original2_us / repeat) << " us" << std::endl;
     std::cout << "Original Dynamics Model 3 - Task Torque Calculation        : " << (int)(time_original3_us / repeat) << " us" << std::endl;
@@ -189,7 +195,6 @@ int main(void)
 
     if (use_hqp)
     {
-
         std::cout << "-----------------------------------------------------------------" << std::endl;
 
         for (int i = 0; i < rd2_.ts_.size(); i++)
@@ -231,11 +236,13 @@ int main(void)
     rd2_.UpdateKinematics(q2, q2dot, q2ddot);
     rd2_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
     rd2_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075, verbose);
+    rd2_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+    rd2_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
     rd2_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(2, TASK_LINK_ROTATION, desired_control_target3.c_str(), Vector3d::Zero(), verbose);
-    rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
+    // rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
 
     rd2_.SetTaskSpace(0, 3 * fstar_1.segment(0, 3));
@@ -243,8 +250,10 @@ int main(void)
     rd2_.SetTaskSpace(2, -fstar_1.segment(3, 3));
     rd2_.SetTaskSpace(3, f_star3);
 
-    rd2_.SetContact(true, true);
+    rd2_.SetContact(contact1, contact2, contact3, false);
+
     rd2_.ReducedDynamicsCalculate();
+
     rd2_.ReducedCalcContactConstraint();
     rd2_.ReducedCalcGravCompensation();
     rd2_.ReducedCalcTaskSpace();
@@ -254,7 +263,7 @@ int main(void)
     auto t0 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < repeat; i++)
     {
-        rd2_.SetContact(true, true);
+        rd2_.SetContact(contact1, contact2, contact3, false);
         rd2_.ReducedDynamicsCalculate();
     }
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -289,7 +298,7 @@ int main(void)
     double time_reduced2_us = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
     double time_reduced3_us = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
     double time_reduced4_us = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count();
-    std::cout << "Reduced Dynamics Model  TOTAL CONSUMPTION : " << (int)(time_reduced_us / repeat) << " us" << std::endl;
+    std::cout << "Reduced Dynamics Model  TOTAL CONSUMPTION : " << (float)(time_reduced_us / repeat) << " us" << std::endl;
     std::cout << "Reduced Dynamics Model 1 - Reduced Dynamics Calculation   : " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / repeat << " us" << std::endl;
     std::cout << "Reduced Dynamics Model 2 - Contact Constraint Calculation : " << (int)(time_reduced1_us / repeat) << " us (" << (time_reduced1_us / time_original1_us) * 100 << "%)" << std::endl;
     std::cout << "Reduced Dynamics Model 3 - Task space Calculation         : " << (int)(time_reduced2_us / repeat) << " us (" << (time_reduced2_us / time_original2_us) * 100 << "%)" << std::endl;
@@ -342,46 +351,277 @@ int main(void)
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
 
-    std::cout << rd2_.force_on_nc_R_qp_.transpose() << std::endl;
+    // for (int i = 0; i < repeat; i++)
+    // {
 
-    // std::cout <<
+    vector<int> co_joint_idx_;
+    vector<int> nc_joint_idx_;
 
-    MatrixXd J_nc_;
-    J_nc_.setZero(6, rd2_.model_dof_ + 6);
-    J_nc_.block(0, 0, 6, 6) = rd2_.J_nc_R_.block(0, 0, 6, 6);
-    J_nc_.rightCols(rd2_.nc_dof) = rd2_.J_I_nc_;
+    vector<int> co_link_idx_;
+    vector<int> nc_link_idx_;
 
-    MatrixXd Lambda_nc_;
+    co_link_idx_.push_back(0);
 
-    Lambda_nc_ = (J_nc_ * rd2_.A_inv_N_C * J_nc_.transpose()).inverse();
+    for (int i = 0; i < rd2_.cc_.size(); i++)
+    {
+        if (rd2_.cc_[i].contact)
+        {
+            int link_idx = rd2_.cc_[i].link_number_;
 
-    MatrixXd J_nc_inv_T = Lambda_nc_ * J_nc_ * rd2_.A_inv_N_C;
+            while (link_idx != 0)
+            {
+                co_link_idx_.push_back(link_idx);
+                co_joint_idx_.push_back(rd2_.joint_[link_idx].joint_id_);
+                link_idx = rd2_.link_[link_idx].parent_id_;
+            }
+        }
+    }
+    sort(co_link_idx_.begin(), co_link_idx_.end());
 
-    VectorXd force_nc = J_nc_inv_T * rd2_.ts_[2].J_task_.transpose() * rd2_.ts_[2].Lambda_task_ * rd2_.ts_[2].f_star_;
+    for (int i = 0; i < rd2_.link_num_; i++)
+    {
+        if (std::find(co_link_idx_.begin(), co_link_idx_.end(), i) == co_link_idx_.end())
+        {
+            nc_link_idx_.push_back(i);
+        }
+    }
 
-    std::cout << (force_nc).transpose() << std::endl;
+    sort(co_joint_idx_.begin(), co_joint_idx_.end());
 
-    std::cout << rd2_.ts_[2].force_on_nc_.transpose() << std::endl;
-    rd2_.ts_[2].torque_h_R_;
+    for (int i = 0; i < nc_link_idx_.size(); i++)
+    {
+        int link_idx = nc_link_idx_[i];
+        while (link_idx != 0)
+        {
+            if (find(nc_joint_idx_.begin(), nc_joint_idx_.end(), rd2_.joint_[link_idx].joint_id_) == nc_joint_idx_.end())
+            {
+                nc_joint_idx_.push_back(rd2_.joint_[link_idx].joint_id_);
+            }
+            link_idx = rd2_.link_[link_idx].parent_id_;
 
-    std::cout << (rd2_.J_nc_R_kt_ * force_nc).transpose() << std::endl;
+            if (find(nc_link_idx_.begin(), nc_link_idx_.end(), link_idx) != nc_link_idx_.end())
+            {
+                break;
+            }
+        }
+    }
 
-    std::cout << "original jac rotm : " << std::endl;
-    std::cout << rd2_.link_[lh_id].jac_.block(0, 3, 3, 3) << std::endl;
-    std::cout << "original xpos : " << std::endl;
-    std::cout << rd2_.link_[lh_id].xpos.transpose() << std::endl;
+    sort(nc_joint_idx_.begin(), nc_joint_idx_.end());
 
-    std::cout << "rotm? : " << std::endl;
-    std::cout << skew(-rd2_.link_[lh_id].xpos) * rd2_.link_[0].rotm << std::endl;
+    MatrixXd ANC = MatrixXd::Zero(nc_joint_idx_.size(), nc_joint_idx_.size());
 
-    Vector6d Force_6d_local = Vector6d::Zero();
-    Vector6d force_local = Vector6d::Zero();
-    force_local << 1, 2, 3, 4, 5, 6;
-    Force_6d_local.segment(0, 3) = rd2_.link_[0].rotm * force_local.segment(0, 3);
-    Force_6d_local.segment(3, 3) = rd2_.link_[0].rotm * force_local.segment(3, 3);
+    for (int i = 0; i < nc_joint_idx_.size(); i++)
+    {
+        for (int j = 0; j < nc_joint_idx_.size(); j++)
+        {
+            ANC(i, j) = rd2_.A_(nc_joint_idx_[i], nc_joint_idx_[j]);
+        }
+    }
 
-    std::cout << "Force 6d local : " << Force_6d_local.transpose() << std::endl;
-    std::cout << rd2_.J_nc_R_kt_ * Force_6d_local << std::endl;
+    // }
+    // auto t32 = std::chrono::high_resolution_clock::now();
+
+    // double time_contact_us = std::chrono::duration_cast<std::chrono::microseconds>(t32 - t31).count();
+
+    // std::cout << "cd calc : " << (float)(time_contact_us / repeat) << " us" << std::endl;
+
+    // print link_idx, joint_idx
+    std::cout << "co_link_idx_ : ";
+    for (int i = 0; i < co_link_idx_.size(); i++)
+    {
+        std::cout << co_link_idx_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "nc_link_idx_ : ";
+    for (int i = 0; i < nc_link_idx_.size(); i++)
+    {
+        std::cout << nc_link_idx_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "co_joint_idx_ : ";
+    for (int i = 0; i < co_joint_idx_.size(); i++)
+    {
+        std::cout << co_joint_idx_[i] << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "nc_joint_idx_ : ";
+    for (int i = 0; i < nc_joint_idx_.size(); i++)
+    {
+        std::cout << nc_joint_idx_[i] << " ";
+    }
+    std::cout << std::endl;
+
+
+    // reorder co_link_idx_
+
+    // double f1, f2, f3;
+    // for (int j = 2; j < 20; j++)
+    // {
+    //     auto tp1 = std::chrono::high_resolution_clock::now();
+
+    //     MatrixXd A = MatrixXd::Random(10 * j, 10 * j);
+    //     MatrixXd B = MatrixXd::Random(10 * j, 10 * j);
+    //     MatrixXd C = MatrixXd::Random(10 * j, 10 * j);
+
+    //     for (int i = 0; i < repeat; i++)
+    //     {
+    //         C = A * B;
+    //     }
+
+    //     auto tp2 = std::chrono::high_resolution_clock::now();
+
+    //     for (int i = 0; i < repeat; i++)
+    //     {
+    //         C = A.inverse();
+    //     }
+
+    //     auto tp3 = std::chrono::high_resolution_clock::now();
+
+    //         Eigen::CompleteOrthogonalDecomposition<MatrixXd> cod(A.rows(), A.cols());
+    //     for (int i = 0; i < repeat; i++)
+    //     {
+    //         cod.compute(A);
+    //         C = cod.pseudoInverse();
+    //     }
+
+    //     auto tp4 = std::chrono::high_resolution_clock::now();
+
+    //     double time_matrix_us = std::chrono::duration_cast<std::chrono::nanoseconds>(tp2 - tp1).count();
+    //     double time_matrix_us1 = std::chrono::duration_cast<std::chrono::nanoseconds>(tp3 - tp2).count();
+    //     double time_matrix_us2 = std::chrono::duration_cast<std::chrono::nanoseconds>(tp4 - tp3).count();
+
+    //     double first = 2;
+
+    //     if(j==2)
+    //     {
+    //         f1 = time_matrix_us/repeat/1000.0;
+    //         f2 = time_matrix_us1/repeat/1000.0;
+    //         f3 = time_matrix_us2/repeat/1000.0;
+    //     }
+
+    //     std::cout << j*10<<" : "<<(j*j*j)/8.0 << " Matrix Mul : " << (time_matrix_us / repeat)/1000.0 << " us, "<<(time_matrix_us / repeat)/1000.0/f1 << " ratio : " << 1 << std::endl;
+    //     std::cout << j*10<<" : "<<(j*j*j)/8.0 << " Matrix Inv : " << (time_matrix_us1 / repeat)/1000.0 << " us, " <<(time_matrix_us1 / repeat)/1000.0/f2 <<" ratio : " << time_matrix_us1/time_matrix_us <<  std::endl;
+    //     std::cout << j*10<<" : "<<(j*j*j)/8.0 << " Matrix COD : " << (time_matrix_us2 / repeat)/1000.0 << " us, " <<(time_matrix_us2 / repeat)/1000.0/f3 << " ratio : " << time_matrix_us2/time_matrix_us << std::endl;
+    // }
+    // std::cout << rd2_.force_on_nc_R_qp_.transpose() << std::endl;
+
+    // // std::cout <<
+
+    // MatrixXd J_nc_;
+    // J_nc_.setZero(6, rd2_.model_dof_ + 6);
+    // J_nc_.block(0, 0, 6, 6) = rd2_.J_nc_R_.block(0, 0, 6, 6);
+    // J_nc_.rightCols(rd2_.nc_dof) = rd2_.J_I_nc_;
+
+    // MatrixXd Lambda_nc_;
+
+    // Lambda_nc_ = (J_nc_ * rd2_.A_inv_N_C * J_nc_.transpose()).inverse();
+
+    // MatrixXd J_nc_inv_T = Lambda_nc_ * J_nc_ * rd2_.A_inv_N_C;
+
+    // VectorXd force_nc = J_nc_inv_T * rd2_.ts_[2].J_task_.transpose() * rd2_.ts_[2].Lambda_task_ * rd2_.ts_[2].f_star_;
+
+    // std::cout << (force_nc).transpose() << std::endl;
+
+    // std::cout << rd2_.ts_[2].force_on_nc_.transpose() << std::endl;
+    // rd2_.ts_[2].torque_h_R_;
+
+    // std::cout << (rd2_.J_nc_R_kt_ * force_nc).transpose() << std::endl;
+
+    // std::cout << "original jac rotm : " << std::endl;
+    // std::cout << rd2_.link_[lh_id].jac_.block(0, 3, 3, 3) << std::endl;
+    // std::cout << "original xpos : " << std::endl;
+    // std::cout << rd2_.link_[lh_id].xpos.transpose() << std::endl;
+
+    // std::cout << "rotm? : " << std::endl;
+    // std::cout << skew(-rd2_.link_[lh_id].xpos) * rd2_.link_[0].rotm << std::endl;
+
+    // Vector6d Force_6d_local = Vector6d::Zero();
+    // Vector6d force_local = Vector6d::Zero();
+    // force_local << 1, 2, 3, 4, 5, 6;
+    // Force_6d_local.segment(0, 3) = rd2_.link_[0].rotm * force_local.segment(0, 3);
+    // Force_6d_local.segment(3, 3) = rd2_.link_[0].rotm * force_local.segment(3, 3);
+
+    // std::cout << "Force 6d local : " << Force_6d_local.transpose() << std::endl;
+    // std::cout << rd2_.J_nc_R_kt_ * Force_6d_local << std::endl;
+
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << rd2_.ts_[2].force_on_nc_.transpose() << std::endl;
+
+    // Vector6d force_on_b = rd2_.ts_[2].J_task_.transpose() * rd2_.ts_[2].Lambda_task_ * rd2_.ts_[2].f_star_;
+
+    // std::cout << (rd2_.ts_[2].J_task_.transpose() * rd2_.ts_[2].Lambda_task_ * rd2_.ts_[2].f_star_).transpose() << std::endl;
+
+    // MatrixXd J_task_base, J_task_kt;
+    // J_task_base = rd2_.link_[0].jac_.leftCols(rd2_.reduced_system_dof_);
+    // MatrixXd lambda_task;
+
+    // auto t10_ = std::chrono::high_resolution_clock::now();
+    // for (int i = 0; i < repeat; i++)
+    //     CalculateJKT(J_b, rd2_.A_inv_, rd2_.N_C, rd2_.W_inv, J_b_kt, lambda_b);
+
+    // auto t11_ = std::chrono::high_resolution_clock::now();
+
+    // for (int i = 0; i < repeat; i++)
+    //     CalculateJKT_R(J_task_base, rd2_.A_R_inv_N_CR, rd2_.W_R_inv, J_task_kt, lambda_task);
+
+    // auto t12_ = std::chrono::high_resolution_clock::now();
+
+    // double time_original_us_ = std::chrono::duration_cast<std::chrono::microseconds>(t11_ - t10_).count();
+    // double time_reduced_us_ = std::chrono::duration_cast<std::chrono::microseconds>(t12_ - t11_).count();
+
+    // std::cout << time_original_us_ / repeat << " us" << std::endl;
+    // std::cout << time_reduced_us_ / repeat << " us" << std::endl;
+
+    // VectorXd torque = J_task_kt * force_on_b;
+
+    // std::cout << torque.transpose() << std::endl;
+    // std::cout << rd2_.ts_[2].torque_h_R_.transpose() << std::endl;
+
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << rd2_.ts_[3].force_on_nc_.transpose() << std::endl;
+    // std::cout << (rd2_.ts_[3].J_task_.transpose() * rd2_.ts_[3].Lambda_task_ * rd2_.ts_[3].f_star_).transpose() << std::endl;
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+
+    // int task_num = 0;
+
+    // MatrixXd J_tc, J_tc_kt, lambda_tc;
+
+    // rd2_.link_[1].UpdateJac(rd2_.model_, rd2_.q_system_);
+
+    // J_tc = rd2_.link_[1].jac_.bottomRows(3);;
+
+    // rd2_.CalcContactConstraint();
+    // CalculateJKT(J_tc, rd2_.A_inv_, rd2_.N_C, rd2_.W_inv, J_tc_kt, lambda_tc);
+
+    // std::cout << "J_tc_kt : " << std::endl;
+    // std::cout << J_tc_kt << std::endl;
+
+    // VectorXd toruqe_v = J_tc.transpose() * lambda_tc * fstar_1.segment(0,3);
+
+    // VectorXd force_v = toruqe_v.segment(0, 6);
+    // std::cout << "J' * lambda * fstar :" << std::endl;
+    // std::cout << toruqe_v.transpose() << std::endl;
+
+    // VectorXd torque_l = (rd2_.J_base_R_kt_ * force_v).segment(0, 12);
+
+    // std::cout << "J_base_R_kt_ * toruqe_v.segment(0, 6);" << std::endl;
+    // std::cout << torque_l.transpose() << std::endl;
+
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << (torque_l + toruqe_v.segment(6, 12)).transpose() - (J_tc_kt * lambda_tc * fstar_1).segment(0, 12).transpose() << std::endl;
+
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << rd2_.J_base_R_ << std::endl;
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << rd2_.J_base_R_kt_ << std::endl;
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+
+    // std::cout << rd2_.lambda_base_R_ << std::endl;
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // std::cout << rd2_.J_CR_INV_T << std::endl;
 
     return 0;
 }

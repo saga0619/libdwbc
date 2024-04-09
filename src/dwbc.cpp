@@ -651,6 +651,9 @@ void RobotData::UpdateTaskSpace()
 {
     // int system_dof = model_.qdot_size;
 
+    // Calculate Base Link By default
+    link_[0].UpdateJac(model_, q_system_);
+
     for (int i = 0; i < ts_.size(); i++)
     {
         if (ts_[i].link_size_ > 0)
@@ -661,7 +664,7 @@ void RobotData::UpdateTaskSpace()
         int task_cum_dof = 0;
         for (int j = 0; j < ts_[i].link_size_; j++)
         {
-            if (link_[ts_[i].task_link_[j].link_id_].name_ != "COM")
+            if ((link_[ts_[i].task_link_[j].link_id_].name_ != "COM") && (ts_[i].task_link_[j].link_id_ != 0))
             {
                 link_[ts_[i].task_link_[j].link_id_].UpdateJac(model_, q_system_);
             }
@@ -758,6 +761,7 @@ void RobotData::CalcTaskSpace(bool update)
 {
     if (update)
         UpdateTaskSpace();
+
     for (int i = 0; i < ts_.size(); i++)
     {
         ts_[i].CalcJKT(A_inv_, N_C, W_inv);
@@ -2626,7 +2630,6 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
     J_I_nc_inv_T = A_R.block(vc_dof, 0, 6, vc_dof) * A_inv_.block(0, vc_dof, vc_dof, nc_dof) + A_R.block(vc_dof, vc_dof, 6, 6) * J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof);
     N_I_nc_ = MatrixXd::Identity(nc_dof, nc_dof) - J_I_nc_.transpose() * J_I_nc_inv_T;
 
-
     // J_R_INV_T = A_R * J_R * A_inv_;
     J_R_INV_T = MatrixXd::Zero(reduced_system_dof_, system_dof_);
     J_R_INV_T.block(0, 0, vc_dof, vc_dof).setIdentity();
@@ -2739,9 +2742,7 @@ int RobotData::ReducedCalcContactConstraint()
     P_CR.setZero(contact_dof_, reduced_system_dof_);
 
     // Original Contact Constraint Calculation.
-
     // Lambda_contact = (J_C * A_inv_ * J_C.transpose()).inverse();
-
     // J_CR = J_C.block(0, 0, contact_dof_, reduced_system_dof_);
 
     J_CR = MatrixXd::Zero(contact_dof_, reduced_system_dof_);
@@ -2750,7 +2751,7 @@ int RobotData::ReducedCalcContactConstraint()
     int rows = J_CR.rows(); // rows == contact_dof
     int cols = J_CR.cols(); // cols == system_dof
 
-    Lambda_CR = (J_CR * A_R_inv * J_CR.transpose()).inverse();
+    Lambda_CR = (J_CR.leftCols(cdof + 6) * A_R_inv.topLeftCorner(cdof + 6, cdof + 6) * J_CR.leftCols(cdof + 6).transpose()).inverse();
     J_C_INV_T = (Lambda_CR * J_C) * A_inv_;
 
     // J_CR_INV_T = J_C_INV_T * J_R.transpose();
@@ -2770,12 +2771,12 @@ int RobotData::ReducedCalcContactConstraint()
 
         if (rows - 6 == V2_R.rows())
         {
-            NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(6) * V2_R.transpose()).inverse();
+            NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(contact_dof_ - 6) * V2_R.transpose()).inverse();
             result = 1;
         }
         else
         {
-            NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(6) * V2_R.transpose()).inverse();
+            NwJw_R = V2_R.transpose() * (J_CR_INV_T.rightCols(cols - 6).topRows(contact_dof_ - 6) * V2_R.transpose()).inverse();
             std::cout << "Contact Space Factorization Error : Required contact null dimension : " << J_CR.rows() - 6 << " factorization rank : " << V2_R.rows() << std::endl;
             result = 0;
         }
@@ -2787,8 +2788,6 @@ int RobotData::ReducedCalcContactConstraint()
     }
 
     // int result = CalculateContactConstraint(J_CR, A_R_inv, Lambda_CR, J_CR_INV_T, N_CR, A_R_inv_N_CR, W_R, NwJw_R, W_R_inv, V2_R);
-
-    A_inv_N_C = A_inv_ * N_C;
 
     return result;
 }
@@ -2803,8 +2802,16 @@ void RobotData::ReducedCalcGravCompensation()
 
 void RobotData::ReducedCalcTaskSpace(bool update_task_space)
 {
+    A_inv_N_C = A_inv_ * N_C;
+
     if (update_task_space)
         UpdateTaskSpace();
+
+    J_base_R_ = link_[0].jac_.leftCols(reduced_system_dof_);
+    CalculateJKT_R(J_base_R_, A_R_inv_N_CR, W_R_inv, J_base_R_kt_, lambda_base_R_);
+
+    // Calc BaseLink Jkt
+    //  J_base_R_
 
     int nc_heirarchy_ = 0;
 
@@ -2877,88 +2884,87 @@ void RobotData::ReducedCalcTaskSpace(bool update_task_space)
             else
             {
                 ts_[i].Null_task_R_ = ts_[i - 1].Null_task_R_;
-
             }
         }
     }
 
-    bool jac_nc_swith = false;
+    // bool jac_nc_swith = false;
 
-    Resultant_force_on_nc_.setZero();
-    for (int i = 0; i < ts_.size(); i++)
-    {
+    // Resultant_force_on_nc_.setZero();
+    // for (int i = 0; i < ts_.size(); i++)
+    // {
 
-        int task_cum_dof = 0;
-        if (ts_[i].noncont_task)
-        {
-            jac_nc_swith = true;
-            ts_[i].force_on_nc_.setZero();
+    // int task_cum_dof = 0;
+    // if (ts_[i].noncont_task)
+    // {
+    //     jac_nc_swith = true;
+    //     ts_[i].force_on_nc_.setZero();
 
-            ts_[i].wr_mat.setZero(6, ts_[i].task_dof_);
+    //     ts_[i].wr_mat.setZero(6, ts_[i].task_dof_);
 
-            for (int j = 0; j < ts_[i].link_size_; j++)
-            {
+    //     for (int j = 0; j < ts_[i].link_size_; j++)
+    //     {
 
-                switch (ts_[i].task_link_[j].task_link_mode_)
-                {
-                case TASK_LINK_6D:
-                    ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
-                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
-                    break;
-                case TASK_LINK_6D_COM_FRAME:
-                    ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
-                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xipos - link_[0].xpos - com_pos_nc_g_);
+    //         switch (ts_[i].task_link_[j].task_link_mode_)
+    //         {
+    //         case TASK_LINK_6D:
+    //             ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
+    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
+    //             break;
+    //         case TASK_LINK_6D_COM_FRAME:
+    //             ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
+    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xipos - link_[0].xpos - com_pos_nc_g_);
 
-                    break;
-                case TASK_LINK_6D_CUSTOM_FRAME:
-                    // ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
-                    // ts_[i].wr_mat.block(3, 0, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
+    //             break;
+    //         case TASK_LINK_6D_CUSTOM_FRAME:
+    //             // ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
+    //             // ts_[i].wr_mat.block(3, 0, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
 
-                    break;
-                case TASK_LINK_POSITION:
-                    ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
-                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
+    //             break;
+    //         case TASK_LINK_POSITION:
+    //             ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
+    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
 
-                    break;
-                case TASK_LINK_POSITION_COM_FRAME:
-                    ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
-                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
+    //             break;
+    //         case TASK_LINK_POSITION_COM_FRAME:
+    //             ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
+    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
 
-                    break;
-                case TASK_LINK_POSITION_CUSTOM_FRAME:
-                    // ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
+    //             break;
+    //         case TASK_LINK_POSITION_CUSTOM_FRAME:
+    //             // ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
 
-                    break;
-                case TASK_LINK_ROTATION:
-                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
+    //             break;
+    //         case TASK_LINK_ROTATION:
+    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
 
-                    break;
-                case TASK_LINK_ROTATION_CUSTOM_FRAME:
-                    ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
+    //             break;
+    //         case TASK_LINK_ROTATION_CUSTOM_FRAME:
+    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
 
-                    break;
-                default:
-                    break;
-                }
+    //             break;
+    //         default:
+    //             break;
+    //         }
 
-                task_cum_dof += ts_[i].task_link_[j].t_dof_;
-            }
+    //         task_cum_dof += ts_[i].task_link_[j].t_dof_;
+    //     }
 
-            ts_[i].force_on_nc_ = ts_[i].wr_mat * ts_[i].Lambda_task_ * (ts_[i].f_star_);
+    //     // ts_[i].force_on_nc_ = ts_[i].wr_mat * ts_[i].Lambda_task_ * (ts_[i].f_star_);
+    //     // Resultant_force_on_nc_ += ts_[i].force_on_nc_;
+    // }
+    // }
 
-            Resultant_force_on_nc_ += ts_[i].force_on_nc_;
-        }
-    }
-
-    if (jac_nc_swith)
-    {
-        J_nc_R_.setZero(6, reduced_system_dof_);
-        J_nc_R_.leftCols(6).setIdentity();
-        J_nc_R_.rightCols(6).setIdentity();
-        J_nc_R_.block(0, 3, 3, 3) = skew(-com_pos_nc_g_) * link_[0].rotm;
-        J_nc_R_.block(3, 3, 3, 3) = link_[0].rotm;
-        CalculateJKT_R(J_nc_R_, A_R_inv_N_CR, W_R_inv, J_nc_R_kt_, lambda_nc_R_);
-    }
+    // if (jac_nc_swith)
+    // {
+    // J_nc_R_.setZero(6, reduced_system_dof_);
+    // J_nc_R_.leftCols(6).setIdentity();
+    // J_nc_R_.rightCols(6).setIdentity();
+    // J_nc_R_.block(0, 3, 3, 3) = skew(-com_pos_nc_g_) * link_[0].rotm;
+    // J_nc_R_.block(3, 3, 3, 3) = link_[0].rotm;
+    // J_nc_R_ = link_[0].jac_.leftCols(vc_dof);
+    // CalculateJKT_R(J_nc_R_, A_R_inv_N_CR, W_R_inv, J_nc_R_kt_, lambda_nc_R_);
+    // }
 }
 
 int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_space)
@@ -2981,7 +2987,7 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
     int non_con_task = 0;
     std::vector<int> non_con_task_idx;
     int prev_nc_idx = 0;
-
+    VectorXd temp_torque_ = VectorXd::Zero(system_dof_);
     MatrixXd non_con_null = MatrixXd::Identity(nc_dof, nc_dof);
     VectorXd torque_task_R_qp = VectorXd::Zero(reduced_model_dof_);
     first_nc_TaskSpace_idx_ = -1;
@@ -3000,9 +3006,15 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
         {
             if (ts_[i].noncont_task)
             {
+
+                temp_torque_ = ts_[i].J_task_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_);
+                ts_[i].torque_nc_ = temp_torque_.segment(vc_dof, nc_dof);
+                ts_[i].force_on_nc_.segment(0, 3) = temp_torque_.segment(0, 3);
+                ts_[i].force_on_nc_.segment(3, 3) = link_[0].rotm * temp_torque_.segment(3, 3);
+
                 force_on_nc_r_ += ts_[i].force_on_nc_;
-                ts_[i].torque_h_R_.segment(0, co_dof) = J_nc_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
-                ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
+                ts_[i].torque_h_R_.segment(0, co_dof) = J_base_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
+                // ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
                 ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
 
                 if (ts_[i].nc_heirarchy_ == 0)
@@ -3015,11 +3027,25 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
                 {
                     VectorXd null_force_ = ts_[i - 1].Lambda_task_ * (ts_[i - 1].J_task_ * (A_inv_N_C * (ts_[i].J_task_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_))));
                     VectorXd null_torque_h_r = VectorXd::Zero(reduced_model_dof_);
-                    ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_;
-                    null_torque_h_r.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof) - J_nc_R_kt_.topRows(co_dof) * ts_[i - 1].wr_mat * null_force_;
+
+                    temp_torque_ = ts_[i - 1].J_task_.transpose() * null_force_;
+                    ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_ - temp_torque_.segment(vc_dof, nc_dof);
+                    temp_torque_.segment(3, 3) = link_[0].rotm * temp_torque_.segment(3, 3);
+
+                    null_torque_h_r.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof) - J_base_R_kt_.topRows(co_dof) * temp_torque_.segment(0, 6);
                     null_torque_h_r.segment(co_dof, 6) = J_I_nc_inv_T * (ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_);
+
                     ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * null_torque_h_r;
-                    force_on_nc_r_ -= ts_[i - 1].wr_mat * null_force_;
+                    force_on_nc_r_ -= temp_torque_.segment(0, 6);
+
+                    // VectorXd null_force_ = ts_[i - 1].Lambda_task_ * (ts_[i - 1].J_task_ * (A_inv_N_C * (ts_[i].J_task_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_))));
+                    // VectorXd null_torque_h_r = VectorXd::Zero(reduced_model_dof_);
+                    // ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_;
+                    // null_torque_h_r.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof) - J_nc_R_kt_.topRows(co_dof) * ts_[i - 1].wr_mat * null_force_;
+                    // null_torque_h_r.segment(co_dof, 6) = J_I_nc_inv_T * (ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_);
+
+                    // ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * null_torque_h_r;
+                    // force_on_nc_r_ -= ts_[i - 1].wr_mat * null_force_;
                 }
             }
             else
@@ -3056,31 +3082,32 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
         {
             if (ts_[i].noncont_task)
             {
+                temp_torque_ = ts_[i].J_task_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_);
+                ts_[i].torque_nc_ = temp_torque_.segment(vc_dof, nc_dof);
+
+                ts_[i].force_on_nc_.segment(0, 3) = temp_torque_.segment(0, 3);
+                ts_[i].force_on_nc_.segment(3, 3) = link_[0].rotm * temp_torque_.segment(3, 3);
+
+                ts_[i].torque_h_R_.segment(0, co_dof) = J_base_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
+                ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
+
                 if (ts_[i].nc_heirarchy_ == 0)
                 {
                     first_nc_TaskSpace_idx_ = i;
 
-                    ts_[i].torque_h_R_.segment(0, co_dof) = J_nc_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
-                    ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
-                    ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
-
                     ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * ts_[i].torque_h_R_;
-
                     ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_;
                 }
                 else
                 {
-                    ts_[i].torque_h_R_.segment(0, co_dof) = J_nc_R_kt_.topRows(co_dof) * ts_[i].force_on_nc_;
-                    ts_[i].torque_nc_ = (ts_[i].J_task_NC_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_));
-                    ts_[i].torque_h_R_.segment(co_dof, 6) = J_I_nc_inv_T * ts_[i].torque_nc_;
-
                     VectorXd null_force_ = ts_[i - 1].Lambda_task_ * (ts_[i - 1].J_task_ * (A_inv_N_C * (ts_[i].J_task_.transpose() * (ts_[i].Lambda_task_ * ts_[i].f_star_))));
-
                     VectorXd null_torque_h_r = VectorXd::Zero(reduced_model_dof_);
 
-                    ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_;
+                    temp_torque_ = ts_[i - 1].J_task_.transpose() * null_force_;
+                    ts_[i].torque_null_h_nc_ = ts_[i].torque_nc_ - temp_torque_.segment(vc_dof, nc_dof);
+                    temp_torque_.segment(3, 3) = link_[0].rotm * temp_torque_.segment(3, 3);
 
-                    null_torque_h_r.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof) - J_nc_R_kt_.topRows(co_dof) * ts_[i - 1].wr_mat * null_force_;
+                    null_torque_h_r.segment(0, co_dof) = ts_[i].torque_h_R_.segment(0, co_dof) - J_base_R_kt_.topRows(co_dof) * temp_torque_.segment(0, 6);
                     null_torque_h_r.segment(co_dof, 6) = J_I_nc_inv_T * (ts_[i].torque_nc_ - ts_[i - 1].J_task_NC_.transpose() * null_force_);
 
                     ts_[i].torque_null_h_R_ = ts_[i - 1].Null_task_R_ * null_torque_h_r;
@@ -3106,7 +3133,8 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
 
     if (hqp && (first_nc_TaskSpace_idx_ >= 0))
     {
-        int qp_res = CalcSingleTaskTorqueWithQP_R_NC(ts_[first_nc_TaskSpace_idx_].Null_task_R_, torque_grav_R_ + torque_task_R_, NwJw_R, J_CR_INV_T, P_CR, init);
+
+        int qp_res = CalcSingleTaskTorqueWithQP_R_NC(ts_[first_nc_TaskSpace_idx_ - 1].Null_task_R_, torque_grav_R_ + torque_task_R_, NwJw_R, J_CR_INV_T, P_CR, init);
 
         if (qp_res == 0)
         {
@@ -3123,9 +3151,8 @@ int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_
             }
         }
 
-        torque_task_R_qp = J_nc_R_kt_.topRows(co_dof) * force_on_nc_R_qp_;
+        torque_task_R_qp = J_base_R_kt_.topRows(co_dof) * force_on_nc_R_qp_;
     }
-
 
     torque_task_.segment(0, co_dof) = torque_task_R_.segment(0, co_dof) + torque_task_R_qp.segment(0, co_dof);
     torque_task_.segment(co_dof, nc_dof) = J_I_nc_.transpose() * torque_task_R_.segment(co_dof, 6) + N_I_nc_ * torque_task_NC_;
@@ -3347,7 +3374,7 @@ int RobotData::CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_
     A.setZero(total_constraint_size, variable_size);
     lbA.setZero(total_constraint_size);
     ubA.setZero(total_constraint_size);
-    Eigen::MatrixXd Ntorque_task = task_null_matrix_ * (J_nc_R_kt_);
+    Eigen::MatrixXd Ntorque_task = task_null_matrix_ * (J_base_R_kt_);
 
     if (torque_limit_set_)
     {
@@ -3444,19 +3471,27 @@ int RobotData::CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_
 
 int RobotData::ReducedCalcContactRedistribute(bool hqp, bool init)
 {
-    int ret = CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, hqp, init);
+    int ret = 0;
+    if (contact_dof_ > 6)
+    {
+        ret = CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, hqp, init);
 
-    torque_contact_.setZero(model_dof_);
-    torque_contact_.segment(0, contact_dof_) = torque_contact_R_.segment(0, contact_dof_);
+        torque_contact_.setZero(model_dof_);
+        torque_contact_.segment(0, contact_dof_) = torque_contact_R_.segment(0, contact_dof_);
+    }
 
     return ret;
 }
 int RobotData::CalcContactRedistributeR(bool hqp, bool init)
 {
-    int ret = CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, hqp, init);
+    int ret = 0;
+    if (contact_dof_ > 6)
+    {
+        ret = CalcContactRedistributeR(torque_grav_R_ + torque_task_R_, hqp, init);
 
-    torque_contact_.setZero(model_dof_);
-    torque_contact_.segment(0, contact_dof_) = torque_contact_R_.segment(0, contact_dof_);
+        torque_contact_.setZero(model_dof_);
+        torque_contact_.segment(0, contact_dof_) = torque_contact_R_.segment(0, contact_dof_);
+    }
 
     return ret;
 }
@@ -3672,7 +3707,7 @@ int RobotData::CalcContactRedistributeR(VectorXd torque_input, bool hqp, bool in
         }
         else
         {
-            torque_contact_R_.setZero();
+            torque_contact_R_.setZero(reduced_model_dof_);
 
             return 0;
         }
