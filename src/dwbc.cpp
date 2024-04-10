@@ -2466,99 +2466,191 @@ void RobotData::ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, 
 
 void RobotData::ReducedDynamicsCalculate(bool verbose)
 {
-    contact_dependency_joint_.setZero(system_dof_);
-    contact_dependency_link_.setZero(link_num_);
 
-    for (int j = 0; j < cc_.size(); j++)
+    co_joint_idx_.clear();
+    nc_joint_idx_.clear();
+
+    co_link_idx_.clear();
+    nc_link_idx_.clear();
+
+    nc_rbdl_idx_.clear();
+
+    co_link_idx_.push_back(0);
+
+    for (int i = 0; i < cc_.size(); i++)
     {
-        if (cc_[j].contact)
+        if (cc_[i].contact)
         {
-            int link_idx = cc_[j].link_number_;
-            int joint_idx = joint_[link_idx].joint_id_;
+            int link_idx = cc_[i].link_number_;
 
             while (link_idx != 0)
             {
-                contact_dependency_joint_[joint_idx] = 1;
-                contact_dependency_link_[link_idx] = 1;
-
+                co_link_idx_.push_back(link_idx);
+                co_joint_idx_.push_back(joint_[link_idx].joint_id_);
                 link_idx = link_[link_idx].parent_id_;
-                joint_idx = joint_[link_idx].joint_id_;
             }
-
-            contact_dependency_link_[0] = 1;
         }
     }
-
-    if (cc_.size() == 0)
-    {
-        std::cout << "WARN : no contact point list" << std::endl;
-    }
-
-    l_joint_idx_conact_.clear();
-    l_joint_idx_non_contact_.clear();
-
-    for (int i = 6; i < contact_dependency_joint_.size(); i++)
-    {
-        if (contact_dependency_joint_[i] == 1)
-        {
-            l_joint_idx_conact_.push_back(i);
-        }
-        else
-        {
-            l_joint_idx_non_contact_.push_back(i);
-        }
-    }
-
-    nc_dof = l_joint_idx_non_contact_.size(); // nc_dof + co_dof + 6 = system_dof_
-    co_dof = l_joint_idx_conact_.size();
-    vc_dof = co_dof + 6;
-
-    reduced_model_dof_ = model_dof_ - nc_dof + 6;
-    reduced_system_dof_ = reduced_model_dof_ + 6;
-
-    Matrix6d Arot_pelv = Matrix6d::Identity(6, 6);
-    Arot_pelv.block(0, 0, 3, 3) = link_[0].rotm;
-    Arot_pelv.block(3, 3, 3, 3) = link_[0].rotm;
-
-    SI_co_b_.setZero(6, 6);
-    SI_nc_b_.setZero(6, 6);
+    sort(co_link_idx_.begin(), co_link_idx_.end());
 
     for (int i = 0; i < link_num_; i++)
     {
-        if (contact_dependency_link_[i] == 0) // Calculate Inertia Matrix of Non Contact Link from global frame
+        if (std::find(co_link_idx_.begin(), co_link_idx_.end(), i) == co_link_idx_.end())
         {
-            Matrix6d I_rotation = Matrix6d::Zero(6, 6);
-            Matrix6d temp1 = Matrix6d::Identity(6, 6);
-            temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
-            temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
-
-            temp1.block(0, 3, 3, 3) = link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos).transpose();
-            SI_nc_b_ += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
-        }
-        else
-        {
-
-            // Matrix6d I_rotation = Matrix6d::Zero(6, 6);
-            // Matrix6d temp1 = Matrix6d::Identity(6, 6);
-            // temp1.block(0, 0, 3, 3) = link_[i].rotm.transpose();
-            // temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
-
-            // temp1.block(0, 3, 3, 3) = link_[i].rotm.transpose() * skew(link_[i].xpos - link_[0].xpos).transpose();
-            // SI_co_b_ += temp1.transpose() * link_[i].GetSpatialInertiaMatrix(false) * temp1;
+            nc_link_idx_.push_back(i);
+            nc_rbdl_idx_.push_back(link_[i].body_id_);
         }
     }
 
+    sort(co_joint_idx_.begin(), co_joint_idx_.end());
+    vc_joint_idx_.clear();
+    for (int i = 0; i < 6; i++)
+    {
+        vc_joint_idx_.push_back(i);
+    }
+    vc_joint_idx_.insert(vc_joint_idx_.end(), co_joint_idx_.begin(), co_joint_idx_.end());
+
+    for (int i = 0; i < nc_link_idx_.size(); i++)
+    {
+        int link_idx = nc_link_idx_[i];
+        while (link_idx != 0)
+        {
+            if (find(nc_joint_idx_.begin(), nc_joint_idx_.end(), joint_[link_idx].joint_id_) == nc_joint_idx_.end())
+            {
+                nc_joint_idx_.push_back(joint_[link_idx].joint_id_);
+            }
+            link_idx = link_[link_idx].parent_id_;
+
+            if (find(nc_link_idx_.begin(), nc_link_idx_.end(), link_idx) != nc_link_idx_.end())
+            {
+                break;
+            }
+        }
+    }
+
+    sort(nc_joint_idx_.begin(), nc_joint_idx_.end());
+
+    nc_dof = nc_joint_idx_.size(); // nc_dof + co_dof + 6 = system_dof_
+    co_dof = co_joint_idx_.size();
+    vc_dof = co_dof + 6;
+
+    reduced_model_dof_ = co_dof + 6;
+    reduced_system_dof_ = reduced_model_dof_ + 6;
+
+    A_NC_O.setZero(system_dof_, system_dof_);
+
+    A_NC.setZero(nc_dof + 6, nc_dof + 6);
+
+    for (unsigned int i = 1; i < model_.mBodies.size(); i++)
+    {
+        if (std::find(nc_rbdl_idx_.begin(), nc_rbdl_idx_.end(), i) != nc_rbdl_idx_.end())
+        {
+            model_.Ic[i] = model_.I[i];
+        }
+        else
+        {
+            model_.Ic[i] = RigidBodyDynamics::Math::SpatialRigidBodyInertia();
+        }
+    }
+
+    for (unsigned int i = model_.mBodies.size() - 1; i > 0; i--)
+    {
+        if (std::find(nc_rbdl_idx_.begin(), nc_rbdl_idx_.end(), i) != nc_rbdl_idx_.end())
+        {
+            if (model_.lambda[i] != 0)
+            {
+                model_.Ic[model_.lambda[i]] = model_.Ic[model_.lambda[i]] + model_.X_lambda[i].applyTranspose(model_.Ic[i]);
+            }
+
+            unsigned int dof_index_i = model_.mJoints[i].q_index;
+
+            if (model_.mJoints[i].mDoFCount == 1)
+            {
+                RigidBodyDynamics::Math::SpatialVector F = model_.Ic[i] * model_.S[i];
+                A_NC_O(dof_index_i, dof_index_i) = model_.S[i].dot(F);
+
+                unsigned int j = i;
+                unsigned int dof_index_j = dof_index_i;
+
+                while (model_.lambda[j] != 0)
+                {
+                    F = model_.X_lambda[j].applyTranspose(F);
+                    j = model_.lambda[j];
+                    dof_index_j = model_.mJoints[j].q_index;
+                    if (model_.mJoints[j].mDoFCount == 1)
+                    {
+                        A_NC_O(dof_index_i, dof_index_j) = F.dot(model_.S[j]);
+                        A_NC_O(dof_index_j, dof_index_i) = A_NC_O(dof_index_i, dof_index_j);
+                    }
+                    else if (model_.mJoints[j].mDoFCount == 3)
+                    {
+                        Vector3d H_temp2 = (F.transpose() * model_.multdof3_S[j]).transpose();
+                        A_NC_O.block<1, 3>(dof_index_i, dof_index_j) = H_temp2.transpose();
+                        A_NC_O.block<3, 1>(dof_index_j, dof_index_i) = H_temp2;
+                    }
+                }
+            }
+        }
+    }
+
+    SI_nc_b_.setZero(6, 6);
+
+    SI_nc_b_.block(0, 0, 3, 3) = model_.Ic[2].m * Matrix3d::Identity();
+    SI_nc_b_.block(3, 3, 3, 3) = model_.Ic[2].toMatrix().block(0, 0, 3, 3);
+    SI_nc_b_.block(3, 0, 3, 3) = model_.Ic[2].toMatrix().block(0, 3, 3, 3);
+    SI_nc_b_.block(0, 3, 3, 3) = SI_nc_b_.block(3, 0, 3, 3).transpose();
+
     InertiaMatrixSegment(SI_nc_b_, inertia_nc_, com_pos_nc_, mass_nc_);
+    SI_nc_l_ = InertiaMatrix(inertia_nc_, mass_nc_);
 
-    inertia_nc_ = link_[0].rotm.transpose() * inertia_nc_ * link_[0].rotm; // Make local inertia of non contact model
+    A_NC.topLeftCorner(6, 6) = SI_nc_b_;
 
-    com_pos_nc_g_ = com_pos_nc_;
-    com_pos_nc_ = link_[0].rotm.transpose() * com_pos_nc_;
+    for (int i = 0; i < nc_dof; i++)
+    {
+        for (int j = 0; j < 6; j++)
+        {
+            A_NC(6 + i, j) = A_NC_O(nc_joint_idx_[i], j);
+            A_NC(j, 6 + i) = A_NC_O(j, nc_joint_idx_[i]);
+        }
+
+        for (int j = 0; j < nc_dof; j++)
+        {
+            A_NC(6 + i, 6 + j) = A_NC_O(nc_joint_idx_[i], nc_joint_idx_[j]);
+        }
+    }
+
+    A_NC.topRightCorner(3, nc_dof) = link_[0].rotm.transpose() * A_NC.topRightCorner(3, nc_dof);
+    A_NC.bottomLeftCorner(nc_dof, 3) = A_NC.topRightCorner(3, nc_dof).transpose();
+
+    // Matrix6d Arot_pelv = Matrix6d::Identity(6, 6);
+    // Arot_pelv.block(0, 0, 3, 3) = link_[0].rotm;
+    // Arot_pelv.block(3, 3, 3, 3) = link_[0].rotm;
+
+    // SI_co_b_.setZero(6, 6);
+    // SI_nc_b_.setZero(6, 6);
+
+    // for (int i = 0; i < nc_link_idx_.size(); i++)
+    // {
+    //     Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+    //     Matrix6d temp1 = Matrix6d::Identity(6, 6);
+    //     temp1.block(0, 0, 3, 3) = link_[nc_link_idx_[i]].rotm.transpose();
+    //     temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
+
+    //     temp1.block(0, 3, 3, 3) = link_[nc_link_idx_[i]].rotm.transpose() * skew(link_[nc_link_idx_[i]].xpos - link_[0].xpos).transpose();
+    //     SI_nc_b_ += temp1.transpose() * link_[nc_link_idx_[i]].GetSpatialInertiaMatrix(false) * temp1;
+    // }
+
+    // InertiaMatrixSegment(SI_nc_b_, inertia_nc_, com_pos_nc_, mass_nc_);
+
+    // inertia_nc_ = link_[0].rotm.transpose() * inertia_nc_ * link_[0].rotm; // Make local inertia of non contact model
+
+    // // com_pos_nc_g_ = com_pos_nc_;
+    // com_pos_nc_ = link_[0].rotm.transpose() * com_pos_nc_;
 
     // com_pos_nc_l_
 
-    SI_nc_b_ = Arot_pelv.transpose() * SI_nc_b_ * Arot_pelv; // Change IMNC to local frame !
-    SI_nc_l_ = InertiaMatrix(inertia_nc_, mass_nc_);
+    // SI_nc_b_ = Arot_pelv.transpose() * SI_nc_b_ * Arot_pelv; // Change IMNC to local frame !
+    // SI_nc_l_ = InertiaMatrix(inertia_nc_, mass_nc_);
 
     // InertiaMatrixSegment(SI_co_b_, inertia_co_, com_pos_co_, mass_co_);
 
@@ -2568,27 +2660,27 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
     // SI_co_b_ = Arot_pelv.transpose() * SI_co_b_ * Arot_pelv;
     // SI_co_l_ = InertiaMatrix(inertia_co_, mass_co_);
 
-    A_NC.setZero(6 + nc_dof, 6 + nc_dof);
-    A_NC.block(0, 0, 6, 6) = SI_nc_b_;
+    // A_NC.setZero(6 + nc_dof, 6 + nc_dof);
+    // A_NC.block(0, 0, 6, 6) = SI_nc_b_;
 
-    for (int i = 0; i < nc_dof; i++)
-    {
-        for (int j = 0; j < nc_dof; j++)
-        {
-            A_NC(6 + i, 6 + j) = A_(l_joint_idx_non_contact_[i], l_joint_idx_non_contact_[j]);
-        }
-    }
+    // for (int i = 0; i < nc_dof; i++)
+    // {
+    //     for (int j = 0; j < nc_dof; j++)
+    //     {
+    //         A_NC(6 + i, 6 + j) = A_(nc_joint_idx_[i], nc_joint_idx_[j]);
+    //     }
+    // }
 
-    for (int i = 0; i < 6; i++)
-    {
-        for (int j = 0; j < nc_dof; j++)
-        {
-            A_NC(i, 6 + j) = A_(i, l_joint_idx_non_contact_[j]);
-        }
-    }
+    // for (int i = 0; i < 6; i++)
+    // {
+    //     for (int j = 0; j < nc_dof; j++)
+    //     {
+    //         A_NC(i, 6 + j) = A_(i, nc_joint_idx_[j]);
+    //     }
+    // }
 
-    A_NC.block(0, 6, 3, nc_dof) = link_[0].rotm.transpose() * A_NC.block(0, 6, 3, nc_dof); // A matrix of NC from local frame of pelvis!
-    A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
+    // A_NC.block(0, 6, 3, nc_dof) = link_[0].rotm.transpose() * A_NC.block(0, 6, 3, nc_dof); // A matrix of NC from local frame of pelvis!
+    // A_NC.block(6, 0, nc_dof, 6) = A_NC.block(0, 6, 6, nc_dof).transpose();
 
     Matrix6d cm_rot6 = Matrix6d::Identity(6, 6);
     // Vector3d com_pos_nc_test = com_pos_nc_;
@@ -2599,20 +2691,68 @@ void RobotData::ReducedDynamicsCalculate(bool verbose)
     J_I_nc_.setZero(6, nc_dof);
     J_I_nc_ = SI_nc_l_.inverse() * cmm_nc_;
 
-    J_R = MatrixXd::Zero(reduced_system_dof_, system_dof_);
-    J_R.block(0, 0, vc_dof, vc_dof) = MatrixXd::Identity(vc_dof, vc_dof);
-    J_R.block(vc_dof, vc_dof, 6, nc_dof) = J_I_nc_;
+    // J_R = MatrixXd::Zero(reduced_system_dof_, system_dof_);
+
+    J_R.setZero(reduced_system_dof_, system_dof_);
+
+    J_R.topLeftCorner(6, 6).setIdentity();
+    for (int i = 0; i < vc_joint_idx_.size(); i++)
+    {
+        J_R(i, vc_joint_idx_[i]) = 1;
+    }
+    J_R.bottomRightCorner(6, nc_dof) = J_I_nc_;
+
+    // J_R.block(0, 0, vc_dof, vc_dof) = MatrixXd::Identity(vc_dof, vc_dof);
+    // J_R.block(vc_dof, vc_dof, 6, nc_dof) = J_I_nc_;
 
     /*
     Simplified Calculation of
     A_R_inv = J_R * A_inv_ * J_R.transpose();
 
     */
+    // A_R_inv = J_R * A_inv_ * J_R.transpose();
+
     A_R_inv.setZero(reduced_system_dof_, reduced_system_dof_);
-    A_R_inv.block(0, 0, vc_dof, vc_dof) = A_inv_.block(0, 0, vc_dof, vc_dof);
-    A_R_inv.block(vc_dof, 0, 6, vc_dof) = J_I_nc_ * A_inv_.block(vc_dof, 0, nc_dof, vc_dof);
-    A_R_inv.block(vc_dof, vc_dof, 6, 6) = J_I_nc_ * A_inv_.block(vc_dof, vc_dof, nc_dof, nc_dof) * J_I_nc_.transpose();
-    A_R_inv.block(0, vc_dof, vc_dof, 6) = A_R_inv.block(vc_dof, 0, 6, vc_dof).transpose();
+
+    for (int i = 0; i < vc_dof; i++)
+    {
+        for (int j = 0; j < vc_dof; j++)
+        {
+            A_R_inv(i, j) = A_inv_(vc_joint_idx_[i], vc_joint_idx_[j]);
+        }
+    }
+    MatrixXd A_tr_temp = MatrixXd::Zero(vc_dof, system_dof_);
+    for (int i = 0; i < vc_dof; i++)
+    {
+        for (int j = 0; j < system_dof_; j++)
+        {
+            A_tr_temp(i, j) = A_inv_(vc_joint_idx_[i], j);
+        }
+    }
+
+    A_R_inv.topRightCorner(vc_dof, 6) = A_tr_temp.rightCols(nc_dof) * J_I_nc_.transpose();
+    A_R_inv.bottomLeftCorner(6, vc_dof) = A_R_inv.topRightCorner(vc_dof, 6).transpose();
+    A_R_inv.bottomRightCorner(6, 6) = J_R.bottomRows(6) * A_inv_ * J_R.bottomRows(6).transpose();
+
+    // A_R_inv.topLeftCorner(6, 6) = A_inv_.topLeftCorner(6, 6);
+
+    // for (int i = 0; i < co_dof; i++)
+    // {
+    //     for (int j = 0; j < co_dof; j++)
+    //     {
+    //         A_R_inv(6 + i, 6 + j) = A_inv_(co_joint_idx_[i], co_joint_idx_[j]);
+    //     }
+    // }
+
+    // A_R_inv.block(vc_dof, vc_dof, 6, 6) = J_I_nc_ * A_inv_.bottomRightCorner(nc_dof, nc_dof) * J_I_nc_.transpose();
+
+    // J_I_nc_ * A_inv_
+    // A_R_inv.block(vc_dof, 0, 6, vc_dof) = J_I_nc_ * A_inv_.block(vc_dof, 0, nc_dof, vc_dof);
+
+    // A_R_inv.block(0, 0, vc_dof, vc_dof) = A_inv_.block(0, 0, vc_dof, vc_dof);
+    // A_R_inv.block(vc_dof, 0, 6, vc_dof) = J_I_nc_ * A_inv_.block(vc_dof, 0, nc_dof, vc_dof);
+    // A_R_inv.block(vc_dof, vc_dof, 6, 6) = J_I_nc_ * A_inv_.bottomRightCorner(nc_dof, nc_dof) * J_I_nc_.transpose();
+    // A_R_inv.block(0, vc_dof, vc_dof, 6) = A_R_inv.block(vc_dof, 0, 6, vc_dof).transpose();
 
     // A_R = A_R_inv.inverse(); //5us
 
@@ -2846,7 +2986,7 @@ void RobotData::ReducedCalcTaskSpace(bool update_task_space)
                 }
                 else
                 {
-                    if (contact_dependency_link_(ts_[i].task_link_[j].link_id_))
+                    if (find(co_link_idx_.begin(), co_link_idx_.end(), ts_[i].task_link_[j].link_id_) != co_link_idx_.end())
                     {
                         ts_[i].noncont_task = ts_[i].noncont_task || false;
                         ts_[i].reduced_task_ = ts_[i].reduced_task_ || true;
@@ -2859,6 +2999,20 @@ void RobotData::ReducedCalcTaskSpace(bool update_task_space)
                         ts_[i].cmm_task = ts_[i].cmm_task || false;
                         ts_[i].nc_heirarchy_ = nc_heirarchy_++;
                     }
+
+                    // if (contact_dependency_link_(ts_[i].task_link_[j].link_id_))
+                    // {
+                    //     ts_[i].noncont_task = ts_[i].noncont_task || false;
+                    //     ts_[i].reduced_task_ = ts_[i].reduced_task_ || true;
+                    //     ts_[i].cmm_task = ts_[i].cmm_task || false;
+                    // }
+                    // else
+                    // {
+                    //     ts_[i].noncont_task = ts_[i].noncont_task || true;
+                    //     ts_[i].reduced_task_ = ts_[i].reduced_task_ || false;
+                    //     ts_[i].cmm_task = ts_[i].cmm_task || false;
+                    //     ts_[i].nc_heirarchy_ = nc_heirarchy_++;
+                    // }
                 }
             }
         }
@@ -2887,84 +3041,6 @@ void RobotData::ReducedCalcTaskSpace(bool update_task_space)
             }
         }
     }
-
-    // bool jac_nc_swith = false;
-
-    // Resultant_force_on_nc_.setZero();
-    // for (int i = 0; i < ts_.size(); i++)
-    // {
-
-    // int task_cum_dof = 0;
-    // if (ts_[i].noncont_task)
-    // {
-    //     jac_nc_swith = true;
-    //     ts_[i].force_on_nc_.setZero();
-
-    //     ts_[i].wr_mat.setZero(6, ts_[i].task_dof_);
-
-    //     for (int j = 0; j < ts_[i].link_size_; j++)
-    //     {
-
-    //         switch (ts_[i].task_link_[j].task_link_mode_)
-    //         {
-    //         case TASK_LINK_6D:
-    //             ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
-    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
-    //             break;
-    //         case TASK_LINK_6D_COM_FRAME:
-    //             ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
-    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xipos - link_[0].xpos - com_pos_nc_g_);
-
-    //             break;
-    //         case TASK_LINK_6D_CUSTOM_FRAME:
-    //             // ts_[i].wr_mat.block(0, task_cum_dof, 6, 6).setIdentity();
-    //             // ts_[i].wr_mat.block(3, 0, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_);
-
-    //             break;
-    //         case TASK_LINK_POSITION:
-    //             ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
-    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
-
-    //             break;
-    //         case TASK_LINK_POSITION_COM_FRAME:
-    //             ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
-    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3) = skew(link_[ts_[i].task_link_[j].link_id_].xpos - link_[0].xpos - com_pos_nc_g_);
-
-    //             break;
-    //         case TASK_LINK_POSITION_CUSTOM_FRAME:
-    //             // ts_[i].wr_mat.block(0, task_cum_dof, 3, 3).setIdentity();
-
-    //             break;
-    //         case TASK_LINK_ROTATION:
-    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
-
-    //             break;
-    //         case TASK_LINK_ROTATION_CUSTOM_FRAME:
-    //             ts_[i].wr_mat.block(3, task_cum_dof, 3, 3).setIdentity();
-
-    //             break;
-    //         default:
-    //             break;
-    //         }
-
-    //         task_cum_dof += ts_[i].task_link_[j].t_dof_;
-    //     }
-
-    //     // ts_[i].force_on_nc_ = ts_[i].wr_mat * ts_[i].Lambda_task_ * (ts_[i].f_star_);
-    //     // Resultant_force_on_nc_ += ts_[i].force_on_nc_;
-    // }
-    // }
-
-    // if (jac_nc_swith)
-    // {
-    // J_nc_R_.setZero(6, reduced_system_dof_);
-    // J_nc_R_.leftCols(6).setIdentity();
-    // J_nc_R_.rightCols(6).setIdentity();
-    // J_nc_R_.block(0, 3, 3, 3) = skew(-com_pos_nc_g_) * link_[0].rotm;
-    // J_nc_R_.block(3, 3, 3, 3) = link_[0].rotm;
-    // J_nc_R_ = link_[0].jac_.leftCols(vc_dof);
-    // CalculateJKT_R(J_nc_R_, A_R_inv_N_CR, W_R_inv, J_nc_R_kt_, lambda_nc_R_);
-    // }
 }
 
 int RobotData::ReducedCalcTaskControlTorque(bool hqp, bool init, bool calc_task_space)

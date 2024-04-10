@@ -140,11 +140,15 @@ namespace DWBC
 
         // 2level dynamics computation
 
-        Eigen::VectorXi contact_dependency_joint_; // 1 if the joint is contact dependant, 0 if not
-        Eigen::VectorXi contact_dependency_link_;  // 1 if the link is contact dependant, 0 if not
 
-        std::vector<int> l_joint_idx_conact_;
-        std::vector<int> l_joint_idx_non_contact_;
+        vector<int> co_joint_idx_;
+        vector<int> vc_joint_idx_;
+        vector<int> nc_joint_idx_;
+
+        vector<int> co_link_idx_;
+        vector<int> nc_link_idx_;
+
+        vector<int> nc_rbdl_idx_;
         // std::vector<int> nc_task_idx_;
 
         unsigned int nc_dof;
@@ -162,7 +166,7 @@ namespace DWBC
         Matrix6d SI_nc_l_; // Spatial inertia matrix from non-contact model from non-contact model com frame;
 
         MatrixXd A_R, A_R_inv;
-        MatrixXd A_NC, A_NC_l_inv;
+        MatrixXd A_NC_O, A_NC, A_NC_l_inv;
 
         VectorXd G_R;
 
@@ -191,7 +195,6 @@ namespace DWBC
 
         Vector3d com_pos_co_;
         Vector3d com_pos_nc_;
-        Vector3d com_pos_nc_g_; // Composition of non-contact chain from global frame.
 
         Matrix3d inertia_co_;
         Matrix3d inertia_nc_;
