@@ -1116,6 +1116,7 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
     int contact_constraint_size = 0; // size of constraint by contact
     int model_size = model_dof_;     // size of joints
     int torque_limit_constraint_size = 2 * model_size;
+    int fz_limit_const_size = 2;
 
     if (init)
     {
@@ -1133,7 +1134,15 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
             if (cc_[i].contact)
             {
                 total_contact_dof += cc_[i].contact_dof_;
-                contact_constraint_size += cc_[i].constraint_number_;
+
+                if (cc_[i].fz_limiter_switch_)
+                {
+                    contact_constraint_size += cc_[i].constraint_number_ + fz_limit_const_size;
+                }
+                else
+                {
+                    contact_constraint_size += cc_[i].constraint_number_;
+                }
             }
         }
         contact_dof += total_contact_dof;
@@ -1176,7 +1185,7 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
                     }
                 }
             }
-            J_C_INV_T.rightCols(model_size) * NwJw;
+            // J_C_INV_T.rightCols(model_size) * NwJw;
             H_temp = RotW * crot_matrix * J_C_INV_T.rightCols(model_size) * NwJw;
             H = H_temp.transpose() * H_temp;
             g = (RotW * crot_matrix * (J_C_INV_T.rightCols(model_size) * torque_input - P_C)).transpose() * H_temp;
@@ -1218,7 +1227,16 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
                     A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
                     A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
 
-                    const_idx += cc_[i].constraint_number_;
+                    if (cc_[i].fz_limiter_switch_)
+                    {
+                        A_const_a(const_idx + CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE, contact_idx + 2) = 1.0;
+                        A_const_a(const_idx + CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE + 1, contact_idx + 2) = -1.0;
+                        const_idx += cc_[i].constraint_number_ + fz_limit_const_size;
+                    }
+                    else
+                    {
+                        const_idx += cc_[i].constraint_number_;
+                    }
                     contact_idx += cc_[i].contact_dof_;
                 }
 
@@ -1235,6 +1253,20 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
 
             lbA.segment(torque_limit_constraint_size, contact_constraint_size).setConstant(-INFTY);
             ubA.segment(torque_limit_constraint_size, contact_constraint_size) = -bA;
+
+            const_idx = 0;
+            contact_idx = 0;
+            for (int i = 0; i < contact_index; i++)
+            {
+                if (cc_[i].contact && cc_[i].fz_limiter_switch_)
+                {
+                    ubA(torque_limit_constraint_size + const_idx + CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE) += 0;                    // Fz of each contact is less than 0N
+                    ubA(torque_limit_constraint_size + const_idx + CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE + 1) += cc_[i].fz_limit_; // Fz of each contact is larger than fz_limi_
+
+                    const_idx += cc_[i].constraint_number_ + fz_limit_const_size;
+                    contact_idx += cc_[i].contact_dof_;
+                }
+            }
 
             Eigen::VectorXd qpres;
 

@@ -40,6 +40,8 @@ namespace DWBC
         j_contact.setZero(6, md_.qdot_size);
 
         SetFrictionRatio(0.2, 0.2);
+
+        fz_limiter_switch_ = false;
     }
 
     ContactConstraint::~ContactConstraint()

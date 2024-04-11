@@ -53,6 +53,10 @@ namespace DWBC
         double friction_ratio_;
         double friction_ratio_z_;
 
+        bool fz_limiter_switch_;
+        // int fz_limiter_size_;
+        double fz_limit_;
+
         ContactConstraint();
         ContactConstraint(RigidBodyDynamics::Model &md_, int link_number, int link_id, int contact_type, Vector3d contact_point, Vector3d contact_vector, double contact_plate_size_x, double contact_plate_size_y);
 
