@@ -2,6 +2,8 @@
 #include "dwbc.h"
 #include <unistd.h>
 #include <iomanip>
+#include <iostream>
+#include <fstream>
 
 #ifndef URDF_DIR
 #define URDF_DIR ""
@@ -10,15 +12,25 @@
 using namespace DWBC;
 using namespace std;
 
-int main(void)
+// int main(void)
+
+int main(int argc, char **argv)
 {
+    // retreive int arguments
+    int option = 0;
+    if (argc > 1)
+    {
+        option = std::stoi(argv[1]);
+    }
+    // std::cout << "option : " << option << std::endl;
+
     bool contact1 = true;
     bool contact2 = true;
     bool contact3 = false;
 
     double rot_z = 0;
     // double rot_z = M_PI_2;
-    int repeat = 1000;
+    int repeat = 10000;
 
     bool use_hqp = true;
 
@@ -26,9 +38,9 @@ int main(void)
 
     std::string desired_control_target = "COM";
     std::string desired_control_target2 = "pelvis_link";
-    std::string desired_control_target3 = "upperbody_link";
-    std::string desired_control_target4 = "L_Wrist2_Link";
-    std::string desired_control_target5 = "R_Wrist2_Link";
+    // std::string desired_control_target3 = "upperbody_link";
+    // std::string desired_control_target4 = "L_Wrist2_Link";
+    std::string desired_control_target5 = "EE";
 
     // VectorXd fstar_1;
     // fstar_1.setZero(6);
@@ -69,8 +81,6 @@ int main(void)
         0, 0,
         -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, qu.w();
 
-    // Add noise to joint coordinate
-
     // q2 << 0, 0, 0.92983, 0, 0, 0,
     //     0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
     //     0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
@@ -83,23 +93,23 @@ int main(void)
     rd2_.UpdateKinematics(q2, q2dot, q2ddot);
     rd2_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
     rd2_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-    rd2_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-    rd2_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+    // rd2_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+    // rd2_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
-    rd2_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
+    rd2_.AddTaskSpace(0, TASK_LINK_6D, desired_control_target.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(2, TASK_LINK_ROTATION, desired_control_target3.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
-    // rd2_.AddTaskSpace(1, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
+    // rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(TASK_CUSTOM, 12);
 
-    rd2_.SetContact(contact1, contact2, contact3, false);
+    rd2_.SetContact(contact1, contact2);
     rd2_.CalcContactConstraint();
 
     // fstar_1.segment(0, 3) = rd2_.link_[0].rotm * fstar_1.segment(0, 3);
     // fstar_1.segment(3, 3) = rd2_.link_[0].rotm * fstar_1.segment(3, 3);
 
-    MatrixXd J_task3;
+    // MatrixXd J_task3;
     // VectorXd f_star3;
 
     int lh_id = rd2_.getLinkID("L_Wrist2_Link");
@@ -108,6 +118,12 @@ int main(void)
     // f_star3.setZero(12);
     // f_star3.segment(0, 6) = 0.5 * fstar_1;
     // f_star3.segment(6, 6) = 0.2 * fstar_1;
+
+    // f_star3(3) = 1.0;
+    // f_star3(9) = 1.0;
+
+    // Vector6d f_star0;
+    // f_star0 << 0.4, 2, 0.2, 0, 0, 0;
 
     Vector3d fstar_0;
     fstar_0 << 0.4, 2, 0.2;
@@ -118,12 +134,12 @@ int main(void)
     Vector6d fstar_2;
     fstar_2 << 0.4, 0.3, -0.4, 1, 0.3, 0.2;
 
-    rd2_.SetTaskSpace(0, fstar_0);
+    // rd2_.SetTaskSpace(0, f_star0);
     // rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
     // rd2_.SetTaskSpace(2, -fstar_1.segment(3, 3));
-    // rd2_.SetTaskSpace(1, f_star3);
+    // rd2_.SetTaskSpace(3, f_star3);
 
-    rd2_.CalcGravCompensation();
+    // rd2_.CalcGravCompensation();
     // rd2_.CalcTaskControlTorque(use_hqp, true);
     // rd2_.CalcContactRedistribute(use_hqp, true);
     // auto t10 = std::chrono::high_resolution_clock::now();
@@ -155,7 +171,7 @@ int main(void)
     // }
     // auto t14 = std::chrono::high_resolution_clock::now();
 
-    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    // // std::cout << "-----------------------------------------------------------------" << std::endl;
 
     // double time_original_us = std::chrono::duration_cast<std::chrono::microseconds>(t14 - t10).count();
     // double time_original1_us = std::chrono::duration_cast<std::chrono::microseconds>(t11 - t10).count();
@@ -169,7 +185,7 @@ int main(void)
     // std::cout << "Original Dynamics Model 3 - Task Torque Calculation        : " << (int)(time_original3_us / repeat) << " us" << std::endl;
     // std::cout << "Original Dynamics Model 4 - Contact Redistribution Calcula : " << (int)(time_original4_us / repeat) << " us" << std::endl;
 
-    // std::cout << "-----------------------------------------------------------------" << std::endl;
+    std::cout << "-----------------------------------------------------------------" << std::endl;
 
     // for (int i = 0; i < rd2_.ts_.size(); i++)
     // {
@@ -178,185 +194,104 @@ int main(void)
     // }
     // std::cout << "contact qp final : " << rd2_.cf_redis_qp_.transpose() << std::endl;
 
-    std::cout << "ORIGINAL :: -----------------------------------------------------------------" << std::endl;
+    // std::cout << "-----------------------------------------------------------------" << std::endl;
 
+    int q_dof = rd2_.model_.q_size;
+    int qdot_dof = rd2_.model_.qdot_size;
+    int qddot_dof = qdot_dof;
+
+    // for (int k = 0; k < 10; k++)
+    // {
     MatrixXd give_me_fstar;
 
+    VectorXd q3 = q2;
+    VectorXd q3dot = q2dot;
+    VectorXd q3ddot = q2ddot;
+
+    // if (k > 0)
+    // {
+
+    int k = option;
+
+    if (k > 0)
+    {
+        q_dof -= k;
+        qdot_dof -= k;
+        qddot_dof -= k;
+
+        q3.setZero(q_dof);
+        q3 = q2.segment(0, q_dof);
+        q3(q_dof - 1) = q2(q_dof - 1);
+
+        q3dot.setZero(qdot_dof);
+        q3dot = q2dot.segment(0, qdot_dof);
+
+        q3ddot.setZero(qddot_dof);
+        q3ddot = q2ddot.segment(0, qddot_dof);
+    }
+    else if (k == 0)
+    {
+        q3 = q2;
+        q3dot = q2dot;
+        q3ddot = q2ddot;
+    }
+    else if (k < 0)
+    {
+        q_dof -= k;
+        qdot_dof -= k;
+        qddot_dof -= k;
+
+        q3.setZero(q_dof);
+        q3.segment(0, q_dof + k) = q2.segment(0, q_dof + k);
+
+        q3.segment(q_dof + k, -k) = q2.segment(q_dof + k - 8, -k);
+
+        // q3.segment(q_dof - 1, 1) = q2.segment(q_dof - 1, 1);
+
+        q3(q_dof - 1) = q2(q_dof + k - 1);
+
+        q3dot.setZero(qdot_dof);
+        q3ddot.setZero(qddot_dof);
+    }
+    // }
+    int dof = 33 - option;
+
+    std::string urdf3_file = std::string(URDF_DIR) + "/dof_test/dyros_tocabi_dof" + std::to_string(33 - option) + ".urdf";
+
+    std::cout << "URDF : " << urdf3_file << std::endl;
+
+    urdf2_file = std::string(URDF_DIR) + "/dyros_tocabi_dof31.urdf";
+    bool t1_success = true;
+    bool t2_success = true;
+
+    double t1_time = 0;
+    double t2_time = 0;
+    double t2_dynamics_calc = 0;
+    double t2_task_calc = 0;
+    double t2_nctask_calc = 0;
+
     {
         RobotData rd_;
-        rd_.LoadModelData(urdf2_file, true, false);
+        rd_.LoadModelData(urdf3_file, true, false);
 
-        rd_.UpdateKinematics(q2, q2dot, q2ddot);
+        rd_.UpdateKinematics(q3, q3dot, q3ddot);
         rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
         rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-        rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-        rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
         rd_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
         rd_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
-        rd_.AddTaskSpace(2, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
+        rd_.AddTaskSpace(2, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
+        rd_.SetContact(contact1, contact2);
+        // rd_.CalcContactConstraint();
 
-        rd_.SetContact(contact1, contact2, contact3, false);
-        rd_.CalcContactConstraint();
-
-        rd_.ReducedDynamicsCalculate();
+        // rd_.ReducedDynamicsCalculate();
 
         rd_.SetTaskSpace(0, fstar_0);
         rd_.SetTaskSpace(1, fstar_1);
         rd_.SetTaskSpace(2, fstar_2);
-
-        auto t2_0 = std::chrono::high_resolution_clock::now();
-        bool init_qp = true;
-        for (int i = 0; i < repeat; i++)
-        {
-            rd_.SetContact(contact1, contact2, contact3, false);
-
-            rd_.UpdateTaskSpace();
-
-            for (int j = 0; j < rd_.ts_.size(); j++)
-            {
-                rd_.CalcSingleTaskTorqueWithJACC_QP(rd_.ts_[j], init_qp);
-            }
-
-            init_qp = false;
-        }
-        auto t2_1 = std::chrono::high_resolution_clock::now();
-
-        double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-
-        std::cout << "Original Dynamics Model JACC TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
-
-        for (int i = 0; i < rd_.ts_.size(); i++)
-        {
-            std::cout << "task " << i << " fstar qp  : " << rd_.ts_[i].f_star_qp_.transpose() << std::endl;
-            std::cout << "contact qp : " << rd_.ts_[i].contact_qp_.transpose() << std::endl;
-            std::cout << "torque qp : " << rd_.ts_[i].torque_qp_.transpose() << std::endl;
-            std::cout << "acc qp : " << rd_.ts_[i].acc_qp_.transpose() << std::endl;
-        }
-    }
-
-    std::cout << "REDUCED :: -----------------------------------------------------------------" << std::endl;
-    {
-
-        RobotData rd_;
-        rd_.LoadModelData(urdf2_file, true, false);
-
-        rd_.UpdateKinematics(q2, q2dot, q2ddot);
-        rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-        rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-        rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-        rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-
-        rd_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
-        rd_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
-        rd_.AddTaskSpace(2, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
-
-        rd_.SetContact(contact1, contact2, contact3, false);
-        rd_.CalcContactConstraint();
-
-        rd_.ReducedDynamicsCalculate();
-
-        rd_.SetTaskSpace(0, fstar_0);
-        rd_.SetTaskSpace(1, fstar_1);
-
-        rd_.SetTaskSpace(2, fstar_2);
-
-        auto t2_0 = std::chrono::high_resolution_clock::now();
-        bool init_qp = true;
-        for (int i = 0; i < repeat; i++)
-        {
-            rd_.SetContact(contact1, contact2, contact3, false);
-
-            rd_.ReducedDynamicsCalculate();
-        }
-        auto t2_1 = std::chrono::high_resolution_clock::now();
-
-        for (int i = 0; i < repeat; i++)
-        {
-            rd_.UpdateTaskSpace();
-
-            rd_.CalcSingleTaskTorqueWithJACC_QP_R(rd_.ts_[0], init_qp);
-            rd_.CalcSingleTaskTorqueWithJACC_QP_R(rd_.ts_[1], init_qp);
-            rd_.CalcSingleTaskTorqueWithJACC_QP_R_NC(rd_.ts_.back(), rd_.ts_[1].acc_qp_, init_qp);
-
-            init_qp = false;
-        }
-        auto t2_2 = std::chrono::high_resolution_clock::now();
-
-        double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_2 - t2_0).count();
-        double time_original_us21 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-        double time_original_us22 = std::chrono::duration_cast<std::chrono::microseconds>(t2_2 - t2_1).count();
-
-        std::cout << "Reduced Dynamics Model COMP 2 TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model 1 - Reduced Dynamics calculation : " << (int)(time_original_us21 / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model 2 - Task Space Calculation         : " << (int)(time_original_us22 / repeat) << " us" << std::endl;
-
-        for (int i = 0; i < rd_.ts_.size(); i++)
-        {
-            std::cout << "task " << i << " fstar qp  : " << rd_.ts_[i].f_star_qp_.transpose() << std::endl;
-            std::cout << "contact qp : " << rd_.ts_[i].contact_qp_.transpose() << std::endl;
-            std::cout << "torque qp : " << rd_.ts_[i].torque_qp_.transpose() << std::endl;
-            std::cout << "acc qp : " << rd_.ts_[i].acc_qp_.transpose() << std::endl;
-            std::cout << "fstar qp : " << rd_.ts_[i].f_star_qp_.transpose() << std::endl;
-        }
-
-        std::cout << "facc qp : " << rd_.ts_[2].gacc_qp_.transpose() << std::endl;
-    }
-    std::cout << "HERZOG :: ------------------------------------------------------------------" << std::endl;
-    {
-        RobotData rd_;
-        rd_.LoadModelData(urdf2_file, true, false);
-
-        rd_.UpdateKinematics(q2, q2dot, q2ddot);
-        rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-        rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-        rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-        rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-
-        rd_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
-        rd_.AddTaskSpace(0, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
-        rd_.AddTaskSpace(1, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
-
-        rd_.SetContact(contact1, contact2, contact3, false);
-        rd_.CalcContactConstraint();
-
-        rd_.ReducedDynamicsCalculate();
-
-        Vector6d fstar_01;
-        fstar_01.topRows(3) = fstar_0;
-        fstar_01.bottomRows(3) = fstar_1;
-
-        rd_.SetTaskSpace(0, fstar_01);
-        rd_.SetTaskSpace(1, fstar_2);
-
-        // rd_.SetContact(contact1, contact2, contact3, false);
 
         rd_.UpdateTaskSpace();
 
-        bool init_qp = true;
-
-        // Vector6d f_star0;
-        // f_star0 << -2, -2.2, 0.2, 0.5, 0.4, -0.6;
-        /**
-         * hqp settings
-         * priority 1 //
-         *      inequality constraint : torque limit (2(n-6) dof)
-         *
-         *      equality constraint   : wbd (n dof)
-         * Priority 2 //
-         *      inequality constraint :
-         *                              joint acceleration limit (2n dof)
-         *                              CoP & ZMP limit (8 * c dof)
-         *      equality constraint :
-         *                              contact constraint (6 * c dof)
-         *
-         * priority 3 //
-         *      equality constraint   : com space (3 dof)
-         *                              pelv rotation (3 dof)
-         *
-         * priority 4 //
-         *      equality constraint   : right arm (6 dof)
-         */
         DWBC::HQP hqp_;
         int acc_size = rd_.system_dof_;
         int torque_size = rd_.model_dof_;
@@ -446,17 +381,17 @@ int main(void)
         B.setZero(eq_constraint_size, variable_size);
         b.setZero(eq_constraint_size);
 
-        // MatrixXd J_task = MatrixXd::Zero(6, acc_size);
-        // VectorXd f_star = VectorXd::Zero(6);
+        MatrixXd J_task = MatrixXd::Zero(6, acc_size);
+        VectorXd f_star = VectorXd::Zero(6);
 
-        // J_task.topRows(3) = rd_.ts_[0].J_task_;
-        // J_task.bottomRows(3) = rd_.ts_[1].J_task_;
+        J_task.topRows(3) = rd_.ts_[0].J_task_;
+        J_task.bottomRows(3) = rd_.ts_[1].J_task_;
 
-        // f_star.head(3) = rd_.ts_[0].f_star_;
-        // f_star.tail(3) = rd_.ts_[1].f_star_;
+        f_star.head(3) = rd_.ts_[0].f_star_;
+        f_star.tail(3) = rd_.ts_[1].f_star_;
 
-        B.block(0, 0, 6, acc_size) = rd_.ts_[0].J_task_;
-        b.head(6) = -rd_.ts_[0].f_star_;
+        B.block(0, 0, 6, acc_size) = J_task;
+        b.head(6) = -f_star;
 
         // std::cout << "J task for h2 : \n"
         //           << J_task << std::endl;
@@ -475,8 +410,8 @@ int main(void)
         B.setZero(eq_constraint_size, variable_size);
         b.setZero(eq_constraint_size);
 
-        B.block(0, 0, 6, acc_size) = rd_.ts_[1].J_task_;
-        b.head(6) = -rd_.ts_[1].f_star_;
+        B.block(0, 0, 6, acc_size) = rd_.ts_[2].J_task_;
+        b.head(6) = -rd_.ts_[2].f_star_;
         // B.block(6, 0, acc_size, acc_size) = rd_.A_;
 
         // std::cout << "test3" << std::endl;
@@ -489,14 +424,11 @@ int main(void)
         // ineq_constraint_size = 0;
 
         hqp_.prepare();
-        auto t2_0 = std::chrono::high_resolution_clock::now();
 
+        auto t2_0 = std::chrono::high_resolution_clock::now();
+        bool init_qp = true;
         for (int i = 0; i < repeat; i++)
         {
-            // rd_.SetContact(contact1, contact2, contact3, false);
-
-            // rd_.UpdateTaskSpace();
-
             hqp_.solveSequential(init_qp);
 
             init_qp = false;
@@ -505,78 +437,32 @@ int main(void)
 
         double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
 
-        std::cout << "Original Dynamics Model HERZOG TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
+        t1_time = time_original_us2 / repeat;
 
-        for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
-        {
-            std::cout << "task " << i << std::endl;
-            VectorXd jacc = hqp_.hqp_hs_[i].y_ans_.head(acc_size);
-            VectorXd conf = hqp_.hqp_hs_[i].y_ans_.tail(contact_size);
-            VectorXd torque = rd_.A_.bottomRows(torque_size) * jacc + rd_.J_C.transpose().bottomRows(torque_size) * conf + rd_.B_.tail(torque_size);
-            std::cout << "jacc qp : " << jacc.transpose() << std::endl;
-            std::cout << "torque qp : " << torque.transpose() << std::endl;
-            std::cout << "contact qp : " << conf.transpose() << std::endl;
-            std::cout << "v ans : " << hqp_.hqp_hs_[i].v_ans_.transpose() << std::endl;
-            std::cout << "w ans : " << hqp_.hqp_hs_[i].w_ans_.transpose() << std::endl;
-        }
-
-        VectorXd jacc = hqp_.hqp_hs_[2].y_ans_.head(acc_size);
-        // std::cout << "h2 task fstar : " << (J_task * hqp_.hqp_hs_[2].y_ans_.head(acc_size)).transpose() << " original : " << f_star.transpose() << std::endl;
-        // std::cout << "h3 task fstar : " << (rd_.ts_[2].J_task_ * hqp_.hqp_hs_[3].y_ans_.head(acc_size)).transpose() << " original : " << rd_.ts_[2].f_star_.transpose() << std::endl;
+        std::cout << "HERZOG Dynamics Model COMP 2 TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
     }
 
-    std::cout << "REDUCED HERZOG :: ------------------------------------------------------------------" << std::endl;
+    std::cout << "-----------------------------------------------------------------" << std::endl;
     {
         RobotData rd_;
-        rd_.LoadModelData(urdf2_file, true, false);
+        rd_.LoadModelData(urdf3_file, true, false);
 
-        rd_.UpdateKinematics(q2, q2dot, q2ddot);
+        rd_.UpdateKinematics(q3, q3dot, q3ddot);
         rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
         rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.13, 0.06, verbose);
-        rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-        rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
         rd_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
         rd_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
-        rd_.AddTaskSpace(2, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
-
-        rd_.SetContact(contact1, contact2, contact3, false);
-        rd_.CalcContactConstraint();
+        rd_.AddTaskSpace(2, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
+        rd_.SetContact(contact1, contact2);
+        // rd_.CalcContactConstraint();
 
         rd_.ReducedDynamicsCalculate();
 
         rd_.SetTaskSpace(0, fstar_0);
         rd_.SetTaskSpace(1, fstar_1);
         rd_.SetTaskSpace(2, fstar_2);
-
-        // rd_.SetContact(contact1, contact2, contact3, false);
-
         rd_.UpdateTaskSpace();
-
-        bool init_qp = true;
-
-        Vector6d f_star0;
-        f_star0 << -2, -2.2, 0.2, 0.5, 0.4, -0.6;
-        /**
-         * hqp settings
-         * priority 1 //
-         *      inequality constraint : torque limit (2(n-6) dof)
-         *
-         *      equality constraint   : wbd (n dof)
-         * Priority 2 //
-         *      inequality constraint :
-         *                              joint acceleration limit (2n dof)
-         *                              CoP & ZMP limit (8 * c dof)
-         *      equality constraint :
-         *                              contact constraint (6 * c dof)
-         *
-         * priority 3 //
-         *      equality constraint   : com space (3 dof)
-         *                              pelv rotation (3 dof)
-         *
-         * priority 4 //
-         *      equality constraint   : right arm (3 dof)
-         */
         DWBC::HQP hqp_;
         int acc_size = rd_.reduced_system_dof_;
         int torque_size = rd_.reduced_model_dof_;
@@ -611,7 +497,8 @@ int main(void)
         b.head(eq_constraint_size) = rd_.G_R.head(eq_constraint_size);
 
         VectorXd tlim = VectorXd::Constant(torque_size, 200);
-        tlim.tail(6).setConstant(500);
+        tlim.tail(6).setConstant(1000);
+        // tlim(torque_size - 1 - 3) = ;
 
         A.block(0, 0, torque_size, acc_size) = rd_.A_R.bottomRows(torque_size);
         A.block(0, acc_size, torque_size, contact_size) = rd_.J_CR.transpose().bottomRows(torque_size);
@@ -708,23 +595,26 @@ int main(void)
         // ineq_constraint_size = 0;
         hqp_.prepare();
 
-        rd_.SetContact(contact1, contact2, contact3, false);
+        rd_.SetContact(contact1, contact2);
 
         rd_.UpdateTaskSpace();
-        auto t2_00 = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < repeat; i++)
-        {
-            rd_.ReducedDynamicsCalculate();
-        }
 
         auto t2_0 = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < repeat; i++)
+        {
+
+            rd_.ReducedDynamicsCalculate();
+        }
+        auto t2_1 = std::chrono::high_resolution_clock::now();
+
+        bool init_qp = true;
         for (int i = 0; i < repeat; i++)
         {
             hqp_.solveSequential(init_qp);
 
             init_qp = false;
         }
-        auto t2_1 = std::chrono::high_resolution_clock::now();
+        auto t2_2 = std::chrono::high_resolution_clock::now();
 
         VectorXd fstar_gnc = VectorXd::Zero(6);
         fstar_gnc = hqp_.hqp_hs_[2].y_ans_.segment(acc_size - 6, 6);
@@ -802,67 +692,54 @@ int main(void)
 
         hqp_nc_.hqp_hs_[1].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
         hqp_nc_.hqp_hs_[1].updateCostMatrix(cost_h_nc, cost_g_nc);
-        std::cout << "Noncontact chain " << std::endl;
+
         hqp_nc_.prepare();
 
-        init_qp = true;
+        // auto t2_3 = std::chrono::high_resolution_clock::now();
 
-        auto t2_2 = std::chrono::high_resolution_clock::now();
+        init_qp = true;
         for (int i = 0; i < repeat; i++)
         {
             hqp_nc_.solvefirst(init_qp);
-            init_qp = false;
-        }
-
-        auto t2_3 = std::chrono::high_resolution_clock::now();
-
-        init_qp = true;
-        for (int i = 0; i < repeat; i++)
-        {
             hqp_nc_.solveSequential(init_qp);
 
             init_qp = false;
         }
 
-        auto t2_4 = std::chrono::high_resolution_clock::now();
-        double time_original_us1 = std::chrono::duration_cast<std::chrono::microseconds>(t2_0 - t2_00).count();
-        double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-        double time_original_us3 = std::chrono::duration_cast<std::chrono::microseconds>(t2_3 - t2_2).count();
-        double time_original_us4 = std::chrono::duration_cast<std::chrono::microseconds>(t2_4 - t2_3).count();
+        auto t2_3 = std::chrono::high_resolution_clock::now();
 
-        std::cout << "Reduced Dynamics Model HERZOG 2 TOTAL CONSUMPTION : " << (float)((time_original_us1 + time_original_us2 + time_original_us3 + time_original_us4) / repeat) << " us" << std::endl;
+        double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_3 - t2_0).count();
+        double time_original_us21 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
+        double time_original_us22 = std::chrono::duration_cast<std::chrono::microseconds>(t2_2 - t2_1).count();
+        double time_original_us23 = std::chrono::duration_cast<std::chrono::microseconds>(t2_3 - t2_2).count();
 
-        std::cout << "Reduced Dynamics Model Reduced calc : " << (float)((time_original_us1) / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model HERZOG 2 R : " << (float)((time_original_us2) / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model HERZOG 2 NC : " << (float)((time_original_us3) / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model HERZOG 2 NC : " << (float)((time_original_us4) / repeat) << " us" << std::endl;
+        t2_time = time_original_us2 / repeat;
+        t2_dynamics_calc = time_original_us21 / repeat;
+        t2_task_calc = time_original_us22 / repeat;
+        t2_nctask_calc = time_original_us23 / repeat;
 
-        for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
-        {
-            std::cout << "task " << i << std::endl;
-            VectorXd jacc = hqp_.hqp_hs_[i].y_ans_.head(acc_size);
-            VectorXd conf = hqp_.hqp_hs_[i].y_ans_.tail(contact_size);
-            VectorXd torque = rd_.A_R.bottomRows(torque_size) * jacc + rd_.J_CR.transpose().bottomRows(torque_size) * conf + rd_.G_R.tail(torque_size);
-            std::cout << "jacc qp : " << jacc.transpose() << std::endl;
-            std::cout << "torque qp : " << torque.transpose() << std::endl;
-            std::cout << "contact qp : " << conf.transpose() << std::endl;
-            std::cout << "v ans : " << hqp_.hqp_hs_[i].v_ans_.transpose() << std::endl;
-            std::cout << "w ans : " << hqp_.hqp_hs_[i].w_ans_.transpose() << std::endl;
-        }
+        std::cout << "Reduced Dynamics Model COMP 2 TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
+        std::cout << "Reduced Dynamics Model 1 - Reduced Dynamics calculation : " << (float)(time_original_us21 / repeat) << " us" << std::endl;
+        std::cout << "Reduced Dynamics Model 2 - Task Space Calculation         : " << (float)(time_original_us22 / repeat) << " us" << std::endl;
+        std::cout << "Reduced Dynamics Model 2 - NC Space Calculation         : " << (float)(time_original_us23 / repeat) << " us" << std::endl;
 
-        for (int i = 0; i < hqp_nc_.hqp_hs_.size(); i++)
-        {
-            std::cout << "NC task " << i << std::endl;
-            VectorXd jacc = hqp_nc_.hqp_hs_[i].y_ans_.head(acc_size_nc);
-            VectorXd torque = rd_.A_NC.bottomRightCorner(acc_size_nc, acc_size_nc) * jacc + rd_.G_NC;
-            std::cout << "jacc qp : " << jacc.transpose() << std::endl;
-            std::cout << "torque qp : " << torque.transpose() << std::endl;
-            std::cout << "v ans : " << hqp_nc_.hqp_hs_[i].v_ans_.transpose() << std::endl;
-            std::cout << "w ans : " << hqp_nc_.hqp_hs_[i].w_ans_.transpose() << std::endl;
-        }
-        // VectorXd jacc = hqp_.hqp_hs_[2].y_ans_.head(acc_size);
-        // std::cout << "h2 task fstar : " << (J_task * hqp_.hqp_hs_[2].y_ans_.head(acc_size)).transpose() << " original : " << f_star.transpose() << std::endl;
-        // std::cout << "h3 task fstar : " << (rd_.ts_[2].J_task_ * hqp_.hqp_hs_[3].y_ans_.head(acc_size)).transpose() << " original : " << rd_.ts_[2].f_star_.transpose() << std::endl;
+        std::cout << "-----------------------------------------------------------------" << std::endl;
+
+        std::cout << rd_.model_dof_ << "DOF : total comparison : " << t2_time / t1_time * 100 << " %" << std::endl;
     }
+    // }
+
+    if (t1_success && t2_success)
+    {
+        std::ofstream outputFile("/home/dyros/saga_ws/libdwbc/tests/sp_test/output.txt", std::ios::app);
+        outputFile << std::fixed << std::setprecision(4);
+        outputFile << dof << " " << t1_time << " " << t2_time << " " << t2_dynamics_calc << " " << t2_task_calc << " " << t2_nctask_calc << " " << t2_time / t1_time << std::endl;
+        outputFile.close();
+    }
+    else
+    {
+        std::cout << "Fail" << std::endl;
+    }
+
     return 0;
 }

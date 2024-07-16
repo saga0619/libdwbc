@@ -10,6 +10,7 @@
 #include "dwbc_contact_constraint.h"
 #include "dwbc_task.h"
 #include "dwbc_wbd.h"
+#include "dwbc_hqp.h"
 // #include "dwbc_util.h"
 
 using namespace Eigen;
@@ -361,6 +362,7 @@ namespace DWBC
         int CalcSingleTaskTorqueWithJACC_QP_R(TaskSpace &ts_, bool init);
         int CalcSingleTaskTorqueWithJACC_QP_R_NC(TaskSpace &lts, VectorXd &desired_com_acc, bool init);
 
+        int CalcControlTorqueLQP(bool init = true);
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 

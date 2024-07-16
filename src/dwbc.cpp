@@ -4301,6 +4301,10 @@ int RobotData::CalcSingleTaskTorqueWithJACC_QP_R_NC(TaskSpace &lts, VectorXd &pr
     return 1;
 }
 
+int RobotData::CalcControlTorqueLQP(bool init)
+{
+}
+
 int RobotData::CalcContactRedistributeR(bool hqp, bool init)
 {
     int ret = 0;
