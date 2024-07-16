@@ -60,6 +60,17 @@ namespace DWBC
 
     void InertiaMatrixSegment(const Matrix6d &inertia_matrix, Matrix3d &inertia, Vector3d &mass_center, double &mass);
     Matrix6d InertiaMatrix(const Matrix3d &inertia, const double &mass);
+    double secondOrderLowPassFilter(
+        double x_k,   ///< input x[k]
+        double x_k_1, ///< x[k-1]
+        double x_k_2, ///< x[k-2]
+        double y_k_1, ///< y[k-1]
+        double y_k_2, ///< y[k-2]
+        double fc,    ///< cut off frequency
+        double d,     ///< damping ratio
+        double hz);    ///< sampling freqeuncy
+
+    void getNullSpace(const MatrixXd &A, MatrixXd &Nullspace);
 
 }
 

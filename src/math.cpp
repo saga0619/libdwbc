@@ -319,7 +319,7 @@ namespace DWBC
         return inertia_matrix;
     }
 
-    //Rotationmatrix to quaternion using Eigen
+    // Rotationmatrix to quaternion using Eigen
     Eigen::Quaterniond Rot2Quat(const Eigen::Matrix3d &Rot)
     {
         Eigen::Quaterniond quat;
@@ -327,6 +327,36 @@ namespace DWBC
         return quat;
     }
 
+    double secondOrderLowPassFilter(
+        double x_k,   ///< input x[k]
+        double x_k_1, ///< x[k-1]
+        double x_k_2, ///< x[k-2]
+        double y_k_1, ///< y[k-1]
+        double y_k_2, ///< y[k-2]
+        double fc,    ///< cut off frequency
+        double d,     ///< damping ratio
+        double hz)    ///< sampling freqeuncy
+    {
+        double y_k;
+        double omega = 2 * M_PI * fc / hz;
+        double D = 4 + 4 * d * omega + omega * omega;
 
+        y_k = (8 - 2 * omega * omega) / D * y_k_1 - (4 - 4 * d * omega + omega * omega) / D * y_k_2 + omega * omega / D * (x_k + 2 * x_k_1 + x_k_2);
+
+        return y_k;
+    }
+
+    void getNullSpace(const MatrixXd &A, MatrixXd &Nullspace)
+    {
+        CompleteOrthogonalDecomposition<MatrixXd> cod;
+        cod.compute(A);
+        // rank = (int)cod.rank();
+
+        // Find URV^T
+        MatrixXd V = cod.matrixZ().transpose();
+        MatrixXd Null_space = V.block(0, cod.rank(), V.rows(), V.cols() - cod.rank());
+        MatrixXd P = cod.colsPermutation();
+        Nullspace = P * Null_space; // Unpermute the columns
+    }
 
 }
