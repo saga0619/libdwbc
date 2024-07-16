@@ -36,6 +36,8 @@ namespace DWBC
         int link_number_;
         Matrix3d rotm;
 
+        Vector3d zmp_pos;
+
         unsigned int contact_type_; // 0 : 6dof contact, 1 : point Contact
         unsigned int contact_dof_;
         unsigned int constraint_number_;
