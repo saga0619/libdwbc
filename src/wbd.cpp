@@ -121,16 +121,16 @@ namespace DWBC
 
         if (rows > 6)
         {
-            PinvCODWB(W, Winv, V2, cols - (rows));
+            PinvCODWB(W, Winv, V2, -1);
 
             if (rows - 6 == V2.rows())
             {
-                NwJw = V2.transpose() * (J_C_INV_T.topRightCorner(6, cols - 6) * V2.transpose()).inverse();
+                NwJw = V2.transpose() * (J_C_INV_T.topRightCorner(rows - 6, cols - 6) * V2.transpose()).inverse();
                 return 1;
             }
             else
             {
-                NwJw = V2.transpose() * (J_C_INV_T.topRightCorner(6, cols - 6) * V2.transpose()).inverse();
+                NwJw = V2.transpose() * (J_C_INV_T.topRightCorner(rows - 6, cols - 6) * V2.transpose()).inverse();
                 std::cout << "Contact Space Factorization Error : Required contact null dimension : " << J_contact.rows() - 6 << " factorization rank : " << V2.rows() << std::endl;
                 return 0;
             }

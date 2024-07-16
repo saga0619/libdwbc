@@ -42,7 +42,6 @@ namespace DWBC
         link_size_ = 0;
         heirarchy_ = heirarchy;
         nc_heirarchy_ = 0;
-        
     }
 
     // Typical pos/rot task initialzer
@@ -123,9 +122,7 @@ namespace DWBC
             {
                 Lambda_task_ = (J_task_ * A_inv_N_C * J_task_.transpose()).inverse();
 
-
                 J_task_NC_ = J_task_.block(0, vc_dof, task_dof_, nc_dof);
-
 
                 J_task_R_.block(0, 0, task_dof_, vc_dof) = J_task_.block(0, 0, task_dof_, vc_dof);
                 J_task_R_.block(0, vc_dof, task_dof_, 6) = J_task_.block(0, vc_dof, task_dof_, nc_dof) * J_I_NC_INV_T.transpose();
@@ -285,7 +282,9 @@ namespace DWBC
 
                 // f_star_(j) = pos_a_gain_(j) * acc_traj_(j) + pos_p_gain_(j) * (pos_traj_(j) - current_pos(j)) + pos_d_gain_(j) * (vel_traj_(j) - current_vel(j));
             }
-            return pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(pos_traj_ - current_pos) + pos_d_gain_.cwiseProduct(vel_traj_ - current_vel);
+            p_error_.segment(0,3) = pos_traj_ - current_pos;
+            d_error_.segment(0,3) = vel_traj_ - current_vel;
+            return pos_a_gain_.cwiseProduct(acc_traj_) + pos_p_gain_.cwiseProduct(p_error_.segment(0,3)) + pos_d_gain_.cwiseProduct(d_error_.segment(0,3));
         default:
             return Vector3d::Zero();
         }
@@ -330,8 +329,19 @@ namespace DWBC
         w_traj = axd.angle() * qs_(1) * axd.axis();
         a_traj = axd.angle() * qs_(2) * axd.axis();
 
-        return rot_p_gain_.cwiseProduct(GetPhi(current_rot, rot_traj)) + rot_d_gain_.cwiseProduct(w_traj - current_w);
+        p_error_.segment(3,3) = GetPhi(current_rot, rot_traj);
+        d_error_.segment(3,3) = w_traj - current_w;
+
+        return rot_p_gain_.cwiseProduct(p_error_.segment(3,3)) + rot_d_gain_.cwiseProduct(d_error_.segment(3,3));
     }
+
+    void TaskLink::SetPDerrorRegulation(const VectorXd &max_p_error, const VectorXd &max_d_error)
+    {
+        pd_error_regulation_ = true;
+        max_p_error_ = max_p_error;
+        max_d_error_ = max_d_error;
+    }
+
     // void TaskSpace::GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel)
     // {
     //     for (int i = 0; i < link_size_; i++)

@@ -94,6 +94,13 @@ namespace DWBC
         Vector3d vel_traj_;
         Vector3d acc_traj_;
 
+        Vector6d p_error_;
+        Vector6d d_error_;
+        
+        bool pd_error_regulation_ = false;
+        Vector6d max_p_error_;
+        Vector6d max_d_error_;
+
         void SetTrajectoryQuintic(double start_time, double end_time, Eigen::Vector3d pos_init, Eigen::Vector3d vel_init, Eigen::Vector3d pos_desired, Eigen::Vector3d vel_desired);
 
         void SetTrajectoryRotation(double start_time, double end_time, Eigen::Matrix3d rot_init, Eigen::Vector3d twist_init, Eigen::Matrix3d rot_desired, Eigen::Vector3d twist_desired);
@@ -103,6 +110,8 @@ namespace DWBC
         Vector3d GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel);
 
         Vector3d GetFstarRotPD(double current_time, Matrix3d current_vel, Vector3d current_twsit);
+
+        void SetPDerrorRegulation(const VectorXd &max_p_error, const VectorXd &max_d_error);
     };
 
     class TaskSpace
@@ -154,7 +163,13 @@ namespace DWBC
         MatrixXd Q_t_inv;
 
         VectorXd f_star_qp_;
+        VectorXd gacc_qp_;
         VectorXd contact_qp_;
+        VectorXd torque_qp_;
+        VectorXd acc_qp_;
+
+        int qp_error = 0;
+
 
         TaskSpace();
 
@@ -184,6 +199,7 @@ namespace DWBC
         void GetFstarPosPD(double current_time, Vector3d current_pos, Vector3d current_vel);
 
         void GetFstarRotPD(double current_time, Matrix3d current_vel, Vector3d current_twsit);
+
 
         // void GetFstarPositionalPDF(double current_time, Link);
 
