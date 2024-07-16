@@ -230,31 +230,31 @@ TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 2", "[LIBDWBC]")
     f_name = "/torque_task_";
     REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_task_), "Task torque is not correct");
 
-    std::cout << "task cf : " << rd_.ts_.back().contact_qp_.transpose() << std::endl;
+    // std::cout << "task cf : " << rd_.ts_.back().contact_qp_.transpose() << std::endl;
 
-    VectorXd contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_);
-    std::cout << "Contact Force 1 : " << contact_force.transpose() << std::endl;
-    contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_contact_);
-    std::cout << "Contact Force 2 : " << contact_force.transpose() << std::endl;
-    contact_force = rd_.getContactForce(rd_.torque_contact_);
-    std::cout << "Contact Force 3 : " << contact_force.transpose() << std::endl;
+    // VectorXd contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_);
+    // std::cout << "Contact Force 1 : " << contact_force.transpose() << std::endl;
+    // contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_contact_);
+    // std::cout << "Contact Force 2 : " << contact_force.transpose() << std::endl;
+    // contact_force = rd_.getContactForce(rd_.torque_contact_);
+    // std::cout << "Contact Force 3 : " << contact_force.transpose() << std::endl;
 
-    rd_.getZMP(contact_force);
+    // rd_.getZMP(contact_force);
 
-    std::cout << "lf zmp : " << rd_.cc_[0].xc_pos.transpose() - rd_.cc_[0].zmp_pos.transpose() << std::endl;
-    std::cout << "rf zmp : " << rd_.cc_[1].xc_pos.transpose() - rd_.cc_[1].zmp_pos.transpose() << std::endl;
+    // std::cout << "lf zmp : " << rd_.cc_[0].xc_pos.transpose() - rd_.cc_[0].zmp_pos.transpose() << std::endl;
+    // std::cout << "rf zmp : " << rd_.cc_[1].xc_pos.transpose() - rd_.cc_[1].zmp_pos.transpose() << std::endl;
 
     CHECK(rd_.CalcContactRedistribute(true));
 
-    std::cout << "contact qp : " << rd_.cf_redis_qp_.transpose() << std::endl;
-    std::cout << "torque_contact_ : " << rd_.torque_contact_.transpose() << std::endl;
-    contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_);
-    std::cout << "Contact Force : " << contact_force.transpose() << std::endl;
+    // std::cout << "contact qp : " << rd_.cf_redis_qp_.transpose() << std::endl;
+    // std::cout << "torque_contact_ : " << rd_.torque_contact_.transpose() << std::endl;
+    // contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_);
+    // std::cout << "Contact Force : " << contact_force.transpose() << std::endl;
 
-    rd_.getZMP(contact_force);
+    // rd_.getZMP(contact_force);
 
-    std::cout << "lf zmp : " << rd_.cc_[0].xc_pos.transpose() - rd_.cc_[0].zmp_pos.transpose() << std::endl;
-    std::cout << "rf zmp : " << rd_.cc_[1].xc_pos.transpose() - rd_.cc_[1].zmp_pos.transpose() << std::endl;
+    // std::cout << "lf zmp : " << rd_.cc_[0].xc_pos.transpose() - rd_.cc_[0].zmp_pos.transpose() << std::endl;
+    // std::cout << "rf zmp : " << rd_.cc_[1].xc_pos.transpose() - rd_.cc_[1].zmp_pos.transpose() << std::endl;
     f_name = "/torque_contact_";
     REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_contact_), "Contact torque is not correct");
 }
