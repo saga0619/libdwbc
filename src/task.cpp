@@ -9,6 +9,9 @@ namespace DWBC
         link_id_ = link_id;
         task_point_ = task_point;
 
+        p_error_.setZero();
+        d_error_.setZero();
+
         switch (task_link_mode_)
         {
         case TASK_LINK_6D:
