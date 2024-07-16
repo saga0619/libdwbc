@@ -357,6 +357,11 @@ namespace DWBC
 
         int CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger = true);
 
+        int CalcSingleTaskTorqueWithJACC_QP(TaskSpace &ts_, bool init);
+        int CalcSingleTaskTorqueWithJACC_QP_R(TaskSpace &ts_, bool init);
+        int CalcSingleTaskTorqueWithJACC_QP_R_NC(TaskSpace &lts, VectorXd &desired_com_acc, bool init);
+
+
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 
         void CopyKinematicsData(RobotData &target_rd);

@@ -3768,6 +3768,539 @@ int RobotData::ReducedCalcContactRedistribute(bool hqp, bool init)
 
     return ret;
 }
+
+int RobotData::CalcSingleTaskTorqueWithJACC_QP(TaskSpace &lts, bool init)
+{
+    int _task_dof = lts.task_dof_;
+    int _acc_dof = system_dof_;
+    int _contact_dof = contact_dof_;
+    int _torque_dof = model_dof_;
+
+    // optimization variable : system dof + active joint dof + contact dof + task dof
+    int variable_size = _acc_dof + _torque_dof + _contact_dof + _task_dof;
+    int act_idx_ = _acc_dof;
+    int contact_idx_ = act_idx_ + _torque_dof;
+    int task_idx_ = contact_idx_ + _contact_dof;
+
+    int current_hierarchy = lts.heirarchy_;
+
+    int contact_constraint_size = 0;
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            contact_constraint_size += cc_[i].constraint_number_;
+        }
+    }
+
+    int prev_task_constraint_size_ = 0;
+    for (int i = 0; i < lts.heirarchy_; i++)
+    {
+        prev_task_constraint_size_ += ts_[i].task_dof_;
+    }
+
+    int equality_constraint_size = _acc_dof + _contact_dof + prev_task_constraint_size_ + _task_dof;
+
+    // variable for variable optimization problem
+    MatrixXd H;
+    VectorXd g;
+    H.setZero(variable_size, variable_size);
+    g.setZero(variable_size);
+    H.block(0, 0, _acc_dof, _acc_dof) = A_;
+    H.block(task_idx_, task_idx_, _task_dof, _task_dof) = 100 * MatrixXd::Identity(_task_dof, _task_dof);
+
+    VectorXd acc_lim = VectorXd::Constant(_acc_dof, 10.0);
+    // torque limit
+    if (torque_limit_set_)
+    {
+    }
+
+    // constraint matrix
+    MatrixXd A;
+    MatrixXd Aeq, Aieq;
+    VectorXd ubAeq, lbAeq, ubAieq, lbAieq;
+    // equality constraint : rigid body dynamics, contact constraint, task constraint
+
+    Aeq.setZero(equality_constraint_size, variable_size);
+    lbAeq.setZero(equality_constraint_size);
+    ubAeq.setZero(equality_constraint_size);
+
+    MatrixXd ST_ = MatrixXd::Zero(_acc_dof, _torque_dof);
+    ST_.block(6, 0, _torque_dof, _torque_dof).setIdentity();
+
+    Aeq.block(0, 0, _acc_dof, _acc_dof) = A_;
+    Aeq.block(0, act_idx_, _acc_dof, _torque_dof) = -ST_;
+    Aeq.block(0, contact_idx_, _acc_dof, _contact_dof) = J_C.transpose();
+    lbAeq.segment(0, _acc_dof) = ubAeq.segment(0, _acc_dof) = -G_;
+
+    Aeq.block(_acc_dof, 0, _contact_dof, _acc_dof) = J_C;
+
+    int prev_task_idx = _acc_dof + _contact_dof;
+    // handle previous task constraint.
+    for (int i = 0; i < lts.heirarchy_; i++)
+    {
+        int p_task_dof = ts_[i].task_dof_;
+        Aeq.block(prev_task_idx, 0, p_task_dof, _acc_dof) = ts_[i].J_task_;
+        lbAeq.segment(prev_task_idx, p_task_dof) = ubAeq.segment(prev_task_idx, p_task_dof) = ts_[i].f_star_ + ts_[i].f_star_qp_;
+
+        prev_task_idx += p_task_dof;
+    }
+
+    // handle current task constraint
+
+    Aeq.block(prev_task_idx, 0, _task_dof, _acc_dof) = lts.J_task_;
+    Aeq.block(prev_task_idx, task_idx_, _task_dof, _task_dof) = -MatrixXd::Identity(_task_dof, _task_dof);
+    lbAeq.segment(prev_task_idx, _task_dof) = ubAeq.segment(prev_task_idx, _task_dof) = lts.f_star_;
+
+    // inequality constraint : contact force limit
+
+    Eigen::MatrixXd A_const_a;
+    A_const_a.setZero(contact_constraint_size, _contact_dof);
+
+    Eigen::MatrixXd A_rot;
+    A_rot.setZero(_contact_dof, _contact_dof);
+
+    int const_idx = 0;
+    int contact_idx = 0;
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose();
+            A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
+
+            A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
+            A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+
+            const_idx += cc_[i].constraint_number_;
+            contact_idx += cc_[i].contact_dof_;
+        }
+    }
+
+    Aieq.setZero(contact_constraint_size, variable_size);
+    Aieq.block(0, contact_idx_, contact_constraint_size, _contact_dof) = getContactConstraintMatrix();
+    ubAieq.setZero(contact_constraint_size);
+    lbAieq.setZero(contact_constraint_size);
+    lbAieq.setConstant(-INFTY);
+
+    A.setZero(equality_constraint_size + contact_constraint_size, variable_size);
+    A.block(0, 0, equality_constraint_size, variable_size) = Aeq;
+    A.block(equality_constraint_size, 0, contact_constraint_size, variable_size) = Aieq;
+
+    VectorXd lbA, ubA;
+    lbA.setZero(equality_constraint_size + contact_constraint_size);
+    ubA.setZero(equality_constraint_size + contact_constraint_size);
+    lbA.segment(0, equality_constraint_size) = ubA.segment(0, equality_constraint_size) = lbAeq;
+    lbA.segment(equality_constraint_size, contact_constraint_size) = lbAieq;
+    ubA.segment(equality_constraint_size, contact_constraint_size) = ubAieq;
+
+    int total_constraint_size = equality_constraint_size + contact_constraint_size;
+
+    VectorXd lb, ub;
+
+    lb.setConstant(variable_size, -INFTY);
+    ub.setConstant(variable_size, INFTY);
+
+    // lb.segment(0,6).setCons
+    lb.segment(6, _torque_dof).setConstant(-10);
+    ub.segment(6, _torque_dof).setConstant(10);
+    lb.segment(_acc_dof, _torque_dof).setConstant(-200);
+    ub.segment(_acc_dof, _torque_dof).setConstant(200);
+
+    VectorXd qpres;
+
+    qpres.setZero(variable_size);
+
+    if (qp_task_[lts.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
+    {
+        if (init)
+        {
+            qp_task_[lts.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+        }
+    }
+    else
+    {
+        qp_task_[lts.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    }
+
+    qp_task_[lts.heirarchy_].UpdateMinProblem(H, g);
+    qp_task_[lts.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
+    qp_task_[lts.heirarchy_].UpdateSubjectToX(lb, ub);
+    // qp_task_[lts.heirarchy_].DeleteSubjectToX();
+    qp_task_[lts.heirarchy_].EnableEqualityCondition(0.0001);
+    if (!qp_task_[lts.heirarchy_].SolveQPoases(300, qpres))
+        return 0;
+    lts.f_star_qp_.setZero(_task_dof);
+    lts.acc_qp_.setZero(_acc_dof);
+    lts.torque_qp_.setZero(_torque_dof);
+    lts.contact_qp_.setZero(_contact_dof);
+    // lts.torque_h_ = qpres.segment(_acc_dof, _torque_dof);
+    lts.f_star_qp_ = qpres.segment(task_idx_, _task_dof);
+    lts.acc_qp_ = qpres.segment(0, _acc_dof);
+    lts.torque_qp_ = qpres.segment(_acc_dof, _torque_dof);
+    lts.contact_qp_ = qpres.segment(contact_idx_, _contact_dof);
+
+    return 1;
+}
+
+int RobotData::CalcSingleTaskTorqueWithJACC_QP_R(TaskSpace &lts, bool init)
+{
+    int _task_dof = lts.task_dof_;
+    int _acc_dof = reduced_system_dof_;
+    int _contact_dof = contact_dof_;
+    int _torque_dof = reduced_model_dof_;
+
+    // optimization variable : system dof + active joint dof + contact dof + task dof
+    int variable_size = _acc_dof + _torque_dof + _contact_dof + _task_dof;
+    int act_idx_ = _acc_dof;
+    int contact_idx_ = act_idx_ + _torque_dof;
+    int task_idx_ = contact_idx_ + _contact_dof;
+
+    int current_hierarchy = lts.heirarchy_;
+
+    int contact_constraint_size = 0;
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            contact_constraint_size += cc_[i].constraint_number_;
+        }
+    }
+
+    int prev_task_constraint_size_ = 0;
+    for (int i = 0; i < lts.heirarchy_; i++)
+    {
+        prev_task_constraint_size_ += ts_[i].task_dof_;
+    }
+
+    int equality_constraint_size = _acc_dof + _contact_dof + prev_task_constraint_size_ + _task_dof;
+
+    // variable for variable optimization problem
+    MatrixXd H;
+    VectorXd g;
+    H.setZero(variable_size, variable_size);
+    g.setZero(variable_size);
+    H.block(0, 0, _acc_dof, _acc_dof) = A_R;
+    H.block(task_idx_, task_idx_, _task_dof, _task_dof) = 100 * MatrixXd::Identity(_task_dof, _task_dof);
+
+    VectorXd acc_lim = VectorXd::Constant(_acc_dof, 10.0);
+    // torque limit
+    if (torque_limit_set_)
+    {
+    }
+
+    // constraint matrix
+    MatrixXd A;
+    MatrixXd Aeq, Aieq;
+    VectorXd ubAeq, lbAeq, ubAieq, lbAieq;
+    // equality constraint : rigid body dynamics, contact constraint, task constraint
+
+    Aeq.setZero(equality_constraint_size, variable_size);
+    lbAeq.setZero(equality_constraint_size);
+    ubAeq.setZero(equality_constraint_size);
+
+    MatrixXd ST_ = MatrixXd::Zero(_acc_dof, _torque_dof);
+    ST_.block(6, 0, _torque_dof, _torque_dof).setIdentity();
+
+    Aeq.block(0, 0, _acc_dof, _acc_dof) = A_R;
+    Aeq.block(0, act_idx_, _acc_dof, _torque_dof) = -ST_;
+    Aeq.block(0, contact_idx_, _acc_dof, _contact_dof) = J_CR.transpose();
+    lbAeq.segment(0, _acc_dof) = ubAeq.segment(0, _acc_dof) = -G_R;
+
+    Aeq.block(_acc_dof, 0, _contact_dof, _acc_dof) = J_CR;
+
+    int prev_task_idx = _acc_dof + _contact_dof;
+    // handle previous task constraint.
+    for (int i = 0; i < lts.heirarchy_; i++)
+    {
+        int p_task_dof = ts_[i].task_dof_;
+        Aeq.block(prev_task_idx, 0, p_task_dof, _acc_dof) = ts_[i].J_task_ * J_R_INV_T.transpose();
+        lbAeq.segment(prev_task_idx, p_task_dof) = ubAeq.segment(prev_task_idx, p_task_dof) = ts_[i].f_star_ + ts_[i].f_star_qp_;
+
+        prev_task_idx += p_task_dof;
+    }
+
+    // handle current task constraint
+
+    Aeq.block(prev_task_idx, 0, _task_dof, _acc_dof) = lts.J_task_ * J_R_INV_T.transpose();
+    Aeq.block(prev_task_idx, task_idx_, _task_dof, _task_dof) = -MatrixXd::Identity(_task_dof, _task_dof);
+    lbAeq.segment(prev_task_idx, _task_dof) = ubAeq.segment(prev_task_idx, _task_dof) = lts.f_star_;
+
+    // inequality constraint : contact force limit
+
+    Eigen::MatrixXd A_const_a;
+    A_const_a.setZero(contact_constraint_size, _contact_dof);
+
+    Eigen::MatrixXd A_rot;
+    A_rot.setZero(_contact_dof, _contact_dof);
+
+    int const_idx = 0;
+    int contact_idx = 0;
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose();
+            A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
+
+            A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
+            A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+
+            const_idx += cc_[i].constraint_number_;
+            contact_idx += cc_[i].contact_dof_;
+        }
+    }
+
+    Aieq.setZero(contact_constraint_size, variable_size);
+    Aieq.block(0, contact_idx_, contact_constraint_size, _contact_dof) = -A_const_a * A_rot;
+    ubAieq.setZero(contact_constraint_size);
+    lbAieq.setZero(contact_constraint_size);
+    lbAieq.setConstant(-INFTY);
+
+    A.setZero(equality_constraint_size + contact_constraint_size, variable_size);
+    A.block(0, 0, equality_constraint_size, variable_size) = Aeq;
+    A.block(equality_constraint_size, 0, contact_constraint_size, variable_size) = Aieq;
+
+    VectorXd lbA, ubA;
+    lbA.setZero(equality_constraint_size + contact_constraint_size);
+    ubA.setZero(equality_constraint_size + contact_constraint_size);
+    lbA.segment(0, equality_constraint_size) = ubA.segment(0, equality_constraint_size) = lbAeq;
+    lbA.segment(equality_constraint_size, contact_constraint_size) = lbAieq;
+    ubA.segment(equality_constraint_size, contact_constraint_size) = ubAieq;
+
+    int total_constraint_size = equality_constraint_size + contact_constraint_size;
+
+    VectorXd lb, ub;
+
+    lb.setConstant(variable_size, -INFTY);
+    ub.setConstant(variable_size, INFTY);
+
+    // lb.segment(0,6).setCons
+    lb.segment(6, _torque_dof).setConstant(-10);
+    ub.segment(6, _torque_dof).setConstant(10);
+    lb.segment(_acc_dof, _torque_dof - 6).setConstant(-200);
+    ub.segment(_acc_dof, _torque_dof - 6).setConstant(200);
+
+    VectorXd qpres;
+
+    qpres.setZero(variable_size);
+
+    if (qp_task_[lts.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
+    {
+        if (init)
+        {
+            qp_task_[lts.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+        }
+    }
+    else
+    {
+        qp_task_[lts.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    }
+
+    qp_task_[lts.heirarchy_].UpdateMinProblem(H, g);
+    qp_task_[lts.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
+    qp_task_[lts.heirarchy_].UpdateSubjectToX(lb, ub);
+    // qp_task_[lts.heirarchy_].DeleteSubjectToX();
+    qp_task_[lts.heirarchy_].EnableEqualityCondition(0.0001);
+    if (!qp_task_[lts.heirarchy_].SolveQPoases(300, qpres))
+        return 0;
+    // lts.torque_h_R_ = qpres.segment(_acc_dof, _torque_dof);
+    // lts.f_star_qp_ = qpres.segment(task_idx_, _task_dof);
+    // lts.contact_qp_ = qpres.segment(contact_idx_, _contact_dof);
+
+    lts.f_star_qp_.setZero(_task_dof);
+    lts.acc_qp_.setZero(_acc_dof);
+    lts.torque_qp_.setZero(_torque_dof);
+    lts.contact_qp_.setZero(_contact_dof);
+
+    lts.f_star_qp_ = qpres.segment(task_idx_, _task_dof);
+    lts.acc_qp_ = qpres.segment(0, _acc_dof);
+    lts.torque_qp_ = qpres.segment(_acc_dof, _torque_dof);
+    lts.contact_qp_ = qpres.segment(contact_idx_, _contact_dof);
+
+    return 1;
+}
+
+int RobotData::CalcSingleTaskTorqueWithJACC_QP_R_NC(TaskSpace &lts, VectorXd &prev_acc, bool init)
+{
+    // int task_dof = lts.task_dof_;
+    // int task_dof = 0;
+    int _acc_dof = nc_dof;
+    int _torque_dof = nc_dof;
+    int _gacc_dof = 6;
+    int _task_dof = lts.task_dof_;
+
+    // optimization variable : nc jacc + nc c torque + com_acc_dof + task dof
+    int variable_size = _acc_dof + _torque_dof + _gacc_dof + _task_dof;
+
+    int acc_idx = 0;
+    int torque_idx = _acc_dof;
+    int gacc_idx_ = torque_idx + _torque_dof;
+    int task_idx_ = gacc_idx_ + _gacc_dof;
+
+    int current_hierarchy = lts.heirarchy_;
+    if (prev_acc.size() != reduced_system_dof_)
+    {
+        cout << "Error : prev_acc size is not matched with nc_dof" << endl;
+        return 0;
+    }
+
+    Vector6d prev_hier_gacc = prev_acc.tail(6);
+    Vector6d prev_hier_pelv_acc = prev_acc.head(6);
+
+    MatrixXd Ja = MatrixXd::Identity(6, 6);
+    Ja.block(0, 3, 3, 3) = skew(link_[lts.task_link_[0].link_id_].xpos - link_[0].xpos);
+
+    Vector6d fstar_local = Ja * (lts.f_star_ - prev_hier_pelv_acc);
+
+    // int prev_task_constraint_size_ = 0;
+    // for (int i = 0; i < lts.heirarchy_; i++)
+    // {
+    //     prev_task_constraint_size_ += ts_[i].task_dof_;
+    // }
+
+    int equality_constraint_size = _acc_dof + _gacc_dof + _task_dof;
+
+    // variable for variable optimization problem
+    MatrixXd H;
+    VectorXd g;
+    H.setZero(variable_size, variable_size);
+    g.setZero(variable_size);
+    // H.block(task_idx_, task_idx_, task_dof, task_dof).setIdentity();
+    H.block(gacc_idx_, gacc_idx_, 6, 6).setIdentity();                                                  // min W_G;
+    H.block(task_idx_, task_idx_, _task_dof, _task_dof) = 5 * MatrixXd::Identity(_task_dof, _task_dof); // min W_task;
+
+    // constraint matrix
+    MatrixXd A;
+    MatrixXd Aeq, Aieq;
+    VectorXd ubAeq, lbAeq, ubAieq, lbAieq;
+    // equality constraint : rigid body dynamics, contact constraint, task constraint
+
+    Aeq.setZero(equality_constraint_size, variable_size);
+    lbAeq.setZero(equality_constraint_size);
+    ubAeq.setZero(equality_constraint_size);
+
+    // Equality Constraint 1 : Equation of Motion
+    Aeq.block(0, 0, _acc_dof, _acc_dof) = A_NC.bottomRightCorner(nc_dof, nc_dof);
+    Aeq.block(0, torque_idx, _torque_dof, _torque_dof) = -MatrixXd::Identity(nc_dof, nc_dof);
+    lbAeq.segment(0, nc_dof) = ubAeq.segment(0, nc_dof) = -G_.segment(vc_dof, nc_dof);
+
+    // Equality Constraint 2 : COM acceleration
+    Aeq.block(_acc_dof, 0, 6, nc_dof) = J_I_nc_;
+    Aeq.block(_acc_dof, gacc_idx_, 6, 6) = -MatrixXd::Identity(6, 6);
+    lbAeq.segment(_acc_dof, 6) = ubAeq.segment(_acc_dof, 6) = prev_hier_gacc;
+
+    // Equality Constraint 3 : Task Constraint
+    Aeq.block(_acc_dof + _gacc_dof, 0, _task_dof, nc_dof) = lts.J_task_.rightCols(nc_dof);
+    Aeq.block(_acc_dof + _gacc_dof, task_idx_, _task_dof, _task_dof) = -MatrixXd::Identity(_task_dof, _task_dof);
+    lbAeq.segment(_acc_dof + _gacc_dof, _task_dof) = ubAeq.segment(_acc_dof + _gacc_dof, _task_dof) = fstar_local;
+
+    // int prev_task_idx = reduced_system_dof_ + contact_dof_;
+    // // handle previous task constraint.
+    // for (int i = 0; i < lts.heirarchy_; i++)
+    // {
+    //     int p_task_dof = ts_[i].task_dof_;
+    //     Aeq.block(prev_task_idx, 0, p_task_dof, reduced_system_dof_) = ts_[i].J_task_ * J_R_INV_T.transpose();
+    //     lbAeq.segment(prev_task_idx, p_task_dof) = ubAeq.segment(prev_task_idx, p_task_dof) = ts_[i].f_star_ + ts_[i].f_star_qp_;
+
+    //     prev_task_idx += p_task_dof;
+    // }
+
+    // handle current task constraint
+
+    // Aeq.block(prev_task_idx, 0, task_dof, reduced_system_dof_) = lts.J_task_ * J_R_INV_T.transpose();
+    // Aeq.block(prev_task_idx, task_idx_, task_dof, task_dof) = -MatrixXd::Identity(task_dof, task_dof);
+    // lbAeq.segment(prev_task_idx, task_dof) = ubAeq.segment(prev_task_idx, task_dof) = lts.f_star_;
+
+    // inequality constraint : contact force limit
+
+    // Eigen::MatrixXd A_const_a;
+    // A_const_a.setZero(contact_constraint_size, contact_dof_);
+
+    // Eigen::MatrixXd A_rot;
+    // A_rot.setZero(contact_dof_, contact_dof_);
+
+    // int const_idx = 0;
+    // int contact_idx = 0;
+    // for (int i = 0; i < cc_.size(); i++)
+    // {
+    //     if (cc_[i].contact)
+    //     {
+    //         A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose();
+    //         A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
+
+    //         A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
+    //         A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+
+    //         const_idx += cc_[i].constraint_number_;
+    //         contact_idx += cc_[i].contact_dof_;
+    //     }
+    // }
+
+    // Aieq.setZero(contact_constraint_size, variable_size);
+    // Aieq.block(0, contact_idx_, contact_constraint_size, contact_dof_) = -A_const_a * A_rot;
+    // ubAieq.setZero(contact_constraint_size);
+    // lbAieq.setZero(contact_constraint_size);
+    // lbAieq.setConstant(-INFTY);
+
+    A.setZero(equality_constraint_size, variable_size);
+    A.block(0, 0, equality_constraint_size, variable_size) = Aeq;
+    // A.block(equality_constraint_size, 0, 0, variable_size) = Aieq;
+
+    VectorXd lbA, ubA;
+    lbA.setZero(equality_constraint_size + 0);
+    ubA.setZero(equality_constraint_size + 0);
+    lbA.segment(0, equality_constraint_size) = ubA.segment(0, equality_constraint_size) = lbAeq;
+
+    VectorXd lb, ub;
+
+    lb.setConstant(variable_size, -INFTY);
+    ub.setConstant(variable_size, INFTY);
+
+    lb.segment(0, nc_dof).setConstant(-10.0);
+    ub.segment(0, nc_dof).setConstant(10.0);
+
+    lb.segment(nc_dof, nc_dof).setConstant(-100.0);
+    ub.segment(nc_dof, nc_dof).setConstant(100.0);
+
+    int total_constraint_size = equality_constraint_size;
+
+    VectorXd qpres;
+
+    qpres.setZero(variable_size);
+
+    if (qp_task_[lts.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
+    {
+        if (init)
+        {
+            qp_task_[lts.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+        }
+    }
+    else
+    {
+        qp_task_[lts.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    }
+
+    qp_task_[lts.heirarchy_].UpdateMinProblem(H, g);
+    qp_task_[lts.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
+    // qp_task_[lts.heirarchy_].UpdateSubjectToX(lb, ub);
+    qp_task_[lts.heirarchy_].DeleteSubjectToX();
+
+    qp_task_[lts.heirarchy_].EnableEqualityCondition(0.0001);
+    int solve_res = qp_task_[lts.heirarchy_].SolveQPoases(300, qpres);
+
+    if (solve_res == 0)
+        return 0;
+
+    lts.acc_qp_ = qpres.segment(0, nc_dof);
+    lts.torque_qp_ = qpres.segment(nc_dof, nc_dof);
+    lts.gacc_qp_ = qpres.segment(gacc_idx_, 6);
+    lts.f_star_qp_ = qpres.segment(task_idx_, _task_dof);
+    // lts.f_sar_qp_ = qpres.segment(task_idx_, task_dof);
+
+    return 1;
+}
+
 int RobotData::CalcContactRedistributeR(bool hqp, bool init)
 {
     int ret = 0;
