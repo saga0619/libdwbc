@@ -25,194 +25,6 @@ using namespace DWBC;
         INFO(msg);               \
         CHECK(cond);             \
     } while ((void)0, 0)
-// TEST_CASE("MODEL MODIFICATION TEST")
-// {
-//     RobotData rd_;
-//     std::string resource_path = URDF_DIR;
-//     std::string urdf_name = "/dyros_tocabi.urdf";
-//     std::string urdf_path = resource_path + urdf_name;
-//     rd_.LoadModelData(urdf_path, true, false);
-//     VectorXd q;
-//     VectorXd qdot;
-//     VectorXd qddot;
-//     q.setZero(rd_.model_.q_size);
-//     qdot.setZero(rd_.model_.qdot_size);
-//     qddot.setZero(rd_.model_.qdot_size);
-
-//     q << 0, 0, 0.92983, 0, 0, 0,
-//         0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-//         0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-//         0, 0, 0,
-//         0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
-//         0, 0,
-//         -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
-
-//     rd_.UpdateKinematics(q, qdot, qddot);
-
-//     int left_foot_id = 6;
-//     int right_foot_id = 12;
-
-//     rd_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-//     rd_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-//     rd_.AddContactConstraint("l_wrist2_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-//     rd_.AddContactConstraint("r_wrist2_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-
-//     rd_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero());
-//     rd_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero());
-
-//     // delete head
-
-//     VectorXd fstar_1;
-//     fstar_1.setZero(6);
-//     fstar_1(0) = 0.1;
-//     fstar_1(1) = 4.0;
-//     fstar_1(2) = 0.1;
-
-//     fstar_1(3) = 0.1;
-//     fstar_1(4) = -0.1;
-//     fstar_1(5) = 0.1;
-
-//     bool init = true;
-
-//     VectorXd tlim;
-//     tlim.setConstant(rd_.model_dof_, 300);
-
-//     rd_.SetTorqueLimit(tlim);
-
-//     RobotData rd2_;
-//     rd2_.LoadModelData(urdf_path, true, false);
-
-//     rd_.UpdateKinematics(q, qdot, qddot);
-
-//     rd_.CopyKinematicsData(rd2_);
-//     // rd_.save_mat_file_ = true;
-
-//     rd2_.SetContact(true, true);
-
-//     rd2_.SetTaskSpace(0, fstar_1);
-
-//     rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
-
-//     rd2_.CalcGravCompensation();
-
-//     CHECK(rd2_.CalcTaskControlTorque(true));
-
-//     CHECK(rd2_.CalcContactRedistribute(true));
-
-//     std::cout << "before modification " << std::endl;
-
-//     std::cout << "grav torque : " << std::endl;
-//     std::cout << rd2_.torque_grav_.transpose() << std::endl;
-//     std::cout << "task torque : " << std::endl;
-//     std::cout << rd2_.torque_task_.transpose() << std::endl;
-//     std::cout << "contact torque : " << std::endl;
-//     std::cout << rd2_.torque_contact_.transpose() << std::endl;
-
-//     MatrixXd w_temp, w_inv_temp;
-
-//     w_temp = rd2_.W;
-//     w_inv_temp = rd2_.W_inv;
-
-//     rd2_.printLinkInfo();
-
-//     int head_id = rd2_.getLinkID("head_link");
-
-//     int neck_id = rd2_.getLinkID("neck_link");
-
-//     std::cout << "mjoint size : " << rd2_.model_.mJoints.size() << std::endl;
-//     std::cout << "mbody size : " << rd2_.model_.mBodies.size() << std::endl;
-
-//     // rd2_.link_[head_id].
-
-//     // Vector3d joint_trans = rd2_.link_[head_id].;
-
-//     rd2_.DeleteLink("head_link");
-
-//     // rd2_.AddBody("neck_link","head_link",Eigen::Matrix3d::Identity(),)
-
-//     VectorXd q2;
-//     VectorXd qdot2;
-//     VectorXd qddot2;
-//     q2.setZero(rd2_.model_.q_size);
-//     qdot2.setZero(rd2_.model_.qdot_size);
-//     qddot2.setZero(rd2_.model_.qdot_size);
-
-//     q2 << 0, 0, 0.92983, 0, 0, 0,
-//         0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-//         0.0, 0.0, -0.24, 0.6, -0.36, 0.0,
-//         0, 0, 0,
-//         0.3, 0.3, 1.5, -1.27, -1, 0, -1, 0,
-//         0,
-//         -0.3, -0.3, -1.5, 1.27, 1, 0, 1, 0, 1;
-
-//     rd2_.UpdateKinematics(q2, qdot2, qddot2);
-
-//     std::cout << "update complete" << std::endl;
-
-//     rd2_.printLinkInfo();
-//     rd2_.AddContactConstraint("l_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-//     std::cout << "add modification 1" << std::endl;
-//     rd2_.AddContactConstraint("r_ankleroll_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
-//     std::cout << "add modification 2" << std::endl;
-//     rd2_.AddContactConstraint("l_wrist2_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-//     std::cout << "add modification 3" << std::endl;
-//     rd2_.AddContactConstraint("r_wrist2_link", CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
-//     std::cout << "add modification 4" << std::endl;
-
-//     rd2_.AddTaskSpace(TASK_LINK_6D, "pelvis_link", Vector3d::Zero());
-//     std::cout << "add modification 5" << std::endl;
-//     rd2_.AddTaskSpace(TASK_LINK_ROTATION, "upperbody_link", Vector3d::Zero());
-//     std::cout << "add" << std::endl;
-
-//     std::cout << "after modification 1" << std::endl;
-
-//     rd2_.SetContact(true, true);
-//     std::cout << "after modification 2" << std::endl;
-
-//     // //w, winv compare
-//     // std::cout << "w compare" << std::endl;
-//     // std::cout << "w before" << std::endl;
-//     // std::cout << w_temp << std::endl;
-//     // std::cout << "w after" << std::endl;
-//     // std::cout << rd2_.W << std::endl;
-
-//     // //diff
-//     // std::cout << "w diff" << std::endl;
-//     // std::cout << rd2_.W - w_temp << std::endl;
-
-//     // std::cout << "w_inv compare" << std::endl;
-//     // std::cout << "w_inv before" << std::endl;
-//     // std::cout << w_inv_temp << std::endl;
-//     // std::cout << "w_inv after" << std::endl;
-//     // std::cout << rd2_.W_inv << std::endl;
-
-//     // //diff
-//     // std::cout << "w_inv diff" << std::endl;
-//     // std::cout << rd2_.W_inv - w_inv_temp << std::endl;
-
-//     rd2_.SetTaskSpace(0, fstar_1);
-//     std::cout << "after modification 3" << std::endl;
-
-//     rd2_.SetTaskSpace(1, fstar_1.segment(3, 3));
-//     std::cout << "after modification 4" << std::endl;
-
-//     rd2_.CalcGravCompensation();
-//     std::cout << "after modification 5" << std::endl;
-
-//     CHECK(rd2_.CalcTaskControlTorque(true));
-
-//     std::cout << "after modification 6" << std::endl;
-//     CHECK(rd2_.CalcContactRedistribute(true));
-
-//     std::cout << "after modification 7" << std::endl;
-
-//     std::cout << "grav torque : " << std::endl;
-//     std::cout << rd2_.torque_grav_.transpose() << std::endl;
-//     std::cout << "task torque : " << std::endl;
-//     std::cout << rd2_.torque_task_.transpose() << std::endl;
-//     std::cout << "contact torque : " << std::endl;
-//     std::cout << rd2_.torque_contact_.transpose() << std::endl;
-// }
 
 TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 1", "[LIBDWBC]")
 {
@@ -408,16 +220,142 @@ TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 2", "[LIBDWBC]")
 
     rd_.SetTaskSpace(1, fstar_2);
 
+    rd_.CalcGravCompensation();
+
     f_name = "/torque_grav_";
-    REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.CalcGravCompensation()), "Gravity torque is not correct");
+    REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_grav_), "Gravity torque is not correct");
 
     CHECK(rd_.CalcTaskControlTorque(true));
 
     f_name = "/torque_task_";
     REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_task_), "Task torque is not correct");
 
+    std::cout << "task cf : " << rd_.ts_.back().contact_qp_.transpose() << std::endl;
+
+    VectorXd contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_);
+    std::cout << "Contact Force 1 : " << contact_force.transpose() << std::endl;
+    contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_contact_);
+    std::cout << "Contact Force 2 : " << contact_force.transpose() << std::endl;
+    contact_force = rd_.getContactForce(rd_.torque_contact_);
+    std::cout << "Contact Force 3 : " << contact_force.transpose() << std::endl;
+
+    rd_.getZMP(contact_force);
+
+    std::cout << "lf zmp : " << rd_.cc_[0].xc_pos.transpose() - rd_.cc_[0].zmp_pos.transpose() << std::endl;
+    std::cout << "rf zmp : " << rd_.cc_[1].xc_pos.transpose() - rd_.cc_[1].zmp_pos.transpose() << std::endl;
+
     CHECK(rd_.CalcContactRedistribute(true));
 
+    std::cout << "contact qp : " << rd_.cf_redis_qp_.transpose() << std::endl;
+    std::cout << "torque_contact_ : " << rd_.torque_contact_.transpose() << std::endl;
+    contact_force = rd_.getContactForce(rd_.torque_grav_ + rd_.torque_task_ + rd_.torque_contact_);
+    std::cout << "Contact Force : " << contact_force.transpose() << std::endl;
+
+    rd_.getZMP(contact_force);
+
+    std::cout << "lf zmp : " << rd_.cc_[0].xc_pos.transpose() - rd_.cc_[0].zmp_pos.transpose() << std::endl;
+    std::cout << "rf zmp : " << rd_.cc_[1].xc_pos.transpose() - rd_.cc_[1].zmp_pos.transpose() << std::endl;
+    f_name = "/torque_contact_";
+    REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_contact_), "Contact torque is not correct");
+}
+
+TEST_CASE("LIBDWBC CALCULATION VERIFICATION : CASE 3", "[LIBDWBC]")
+{
+    double rot_z = M_PI_2;
+
+    Vector3d euler_rotation(0, 0, rot_z);
+
+    // get quaternion from euler angle in radian, euler_rotation
+    Eigen::Quaterniond qu = Eigen::AngleAxisd(euler_rotation[0], Eigen::Vector3d::UnitX()) *
+                            Eigen::AngleAxisd(euler_rotation[1], Eigen::Vector3d::UnitY()) *
+                            Eigen::AngleAxisd(euler_rotation[2], Eigen::Vector3d::UnitZ());
+
+    RobotData rd_;
+    std::string resource_path = URDF_DIR;
+    std::string urdf_name = "/dyros_tocabi.urdf";
+    std::string urdf_path = resource_path + urdf_name;
+
+    rd_.LoadModelData(urdf_path, true, false);
+    VectorXd q = VectorXd::Zero(rd_.system_dof_ + 1);
+    VectorXd qdot = VectorXd::Zero(rd_.system_dof_);
+    VectorXd qddot = VectorXd::Zero(rd_.system_dof_);
+
+    VectorXd fstar_1;
+    fstar_1.setZero(6);
+
+    VectorXd fstar_2;
+    fstar_2.setZero(3);
+    std::string case_set = "";
+
+    q << 0, 0, 0.92983, qu.x(), qu.y(), qu.z(),
+        0.1, 0.0, -0.24, 0.5, -0.6, 0.0,
+        0.05, 0.0, -0.21, 0.7, -0.31, 0.0,
+        0, 0, 0,
+        0.2, 0.5, 1.5, -1.27, -1.2, 0, -1, 0,
+        0, 0,
+        -0.3, -0.3, -1.5, 1.27, 1.3, 0.1, 1.3, 0, qu.w();
+
+    fstar_1 << 0.4, 2.0, 0.1, 0.3, -0.1, 0.1;
+    fstar_2 << 0.1, 0.1, 0.1;
+
+    case_set = "/2";
+
+    rd_.UpdateKinematics(q, qdot, qddot);
+
+    fstar_1.segment(0, 3) = rd_.link_[0].rotm * fstar_1.segment(0, 3);
+    fstar_1.segment(3, 3) = rd_.link_[0].rotm * fstar_1.segment(3, 3);
+
+    fstar_2 = rd_.link_[0].rotm * fstar_2;
+
+    int left_foot_id = 6;
+    int right_foot_id = 12;
+
+    rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    rd_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+    rd_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
+
+    rd_.AddTaskSpace(0, TASK_LINK_6D, 0, Vector3d::Zero());
+    rd_.AddTaskSpace(1, TASK_LINK_ROTATION, 15, Vector3d::Zero());
+
+    VectorXd tlim;
+    tlim.setConstant(rd_.model_dof_, 300);
+
+    rd_.SetTorqueLimit(tlim);
+
+    rd_.UpdateKinematics(q, qdot, qddot);
+
+    // rd_.AddContactConstraint(left_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+    // rd_.AddContactConstraint(right_foot_id, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.15, 0.075);
+
+    // rd_.AddTaskSpace(TASK_LINK_6D, 0, Vector3d::Zero());
+    // rd_.AddTaskSpace(TASK_LINK_ROTATION, 15, Vector3d::Zero());
+
+    rd_.SetContact(true, true);
+    rd_.CalcContactConstraint();
+
+    std::string f_name = "/J_C";
+
+    rd_.SetTaskSpace(0, fstar_1);
+    rd_.SetTaskSpace(1, fstar_2);
+
+    f_name = "/torque_grav_";
+    REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.CalcGravCompensation()), "Gravity torque is not correct");
+
+    CHECK(rd_.CalcTaskControlTorque(true));
+    f_name = "/torque_task_";
+    REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_task_), "Task torque is not correct");
+
+    CHECK(rd_.CalcContactRedistribute(true));
+
+    std::cout << rd_.link_[0].rotm.inverse() << std::endl;
+
+    VectorXd con_qp = rd_.ts_.back().contact_qp_;
+    con_qp.segment(0, 3) = rd_.link_[0].rotm.inverse() * con_qp.segment(0, 3);
+    con_qp.segment(3, 3) = rd_.link_[0].rotm.inverse() * con_qp.segment(3, 3);
+    std::cout << "task cf : " << con_qp.transpose() << std::endl;
+    std::cout << "contact qp : " << rd_.cf_redis_qp_.transpose() << std::endl;
+    // std::cout << "torque_contact_ : " << rd_.torque_contact_.transpose() << std::endl;
     f_name = "/torque_contact_";
     REQUIRE_MESSAGE(check_binary((case_set + f_name).c_str(), rd_.torque_contact_), "Contact torque is not correct");
 }

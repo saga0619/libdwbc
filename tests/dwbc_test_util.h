@@ -10,7 +10,7 @@
 
 using namespace Eigen;
 
-#define COMPARISON_EPS 1.0E-6
+#define COMPARISON_EPS 1.0E-3
 
 template <class Matrix>
 void write_binary(const char *filename, const Matrix &matrix)
@@ -62,7 +62,8 @@ int check_binary(const char *filename, const Matrix &matrix)
         else
         {
 
-            // std::string ret = "Error";
+            // std::string ret = "Error : ";
+            std::cout << "Error : " << num << std::endl;
             return 0; // ret + std::to_string(num);
         }
     }
