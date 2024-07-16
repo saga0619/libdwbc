@@ -130,6 +130,18 @@ namespace DWBC
 
         // Print Link Data
         void Print();
+
+        
+        double cutoff_freq_;
+        double damping_;
+        double sampling_frequency_;
+
+        std::vector<Vector3d> vp_;
+        std::vector<Vector3d> vlpf_;
+
+        // velocity lpf
+        void initialize2lpf(double cutoff_freq, double damping, double dt);
+        void calc2lpf();
     };
 }
 

@@ -268,4 +268,36 @@ namespace DWBC
         inertia = new_inertia;
     }
 
+    void Link::initialize2lpf(double cutoff_freq, double damping, double hz)
+    {
+        cutoff_freq_ = cutoff_freq;
+        damping_ = damping;
+        sampling_frequency_ = hz;
+
+        vp_.resize(3);
+        vlpf_.resize(3);
+        
+        for (int i = 0; i < 3; i++)
+        {
+            vp_[i] = v;
+            vlpf_[i] = v;
+        }
+    }
+
+    void Link::calc2lpf()
+    {
+        vp_[2] = vp_[1];
+        vp_[1] = vp_[0];
+        vp_[0] = v;
+
+        vlpf_[2] = vlpf_[1];
+        vlpf_[1] = vlpf_[0];
+
+        for (int i = 0; i < 3; i++)
+        {
+            vlpf_[0](i) = secondOrderLowPassFilter(vp_[0](i), vp_[1](i), vlpf_[2](i), vlpf_[1](i), vlpf_[2](i), cutoff_freq_, damping_, sampling_frequency_);
+        }
+        v = vlpf_[0];
+    }
+
 }
