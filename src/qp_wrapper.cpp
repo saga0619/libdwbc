@@ -194,8 +194,14 @@ int CQuadraticProgram::SolveQPoases(const int &num_max_iter, VectorXd &solv, boo
     }
     int_t nWSR = num_max_iter;
 
-    // if (MPC)
+    if (MPC)
+    {
     _options.setToMPC();
+    }
+    else
+    {
+        _options.setToReliable();
+    }
 
     //_options.boundTolerance = 1E-6;
     //_options.boundRelaxation = 1E-4;
@@ -297,7 +303,7 @@ int CQuadraticProgram::SolveQPoases(const int &num_max_iter, VectorXd &solv, boo
 
     if (scs != SUCCESSFUL_RETURN)
     {
-        std::cout << "QP SOLVE FAILED : " << scs << std::endl;
+        std::cout << "QPOASES : SOLVE FAILED : " << scs << std::endl;
         // PrintMinProb();
 
         int size_H_ = _H.cols();
@@ -307,11 +313,11 @@ int CQuadraticProgram::SolveQPoases(const int &num_max_iter, VectorXd &solv, boo
         {
             if (_H_eigen(i).real() < 0)
             {
-                std::cout << "eigenvalue is negative " << std::endl;
+                std::cout << "QPOASES : eigenvalue is negative " << std::endl;
             }
             if (_H_eigen(i).imag() != 0)
             {
-                std::cout << "imaginary exist" << std::endl;
+                std::cout << "QPOASES : imaginary exist" << std::endl;
             }
         }
     }
@@ -452,7 +458,7 @@ VectorXd CQuadraticProgram::SolveQPoases(const int &num_max_iter, bool MPC)
 
     if (m_status != SUCCESSFUL_RETURN)
     {
-        std::cout << "QP solve error from hotstart" << std::endl;
+        std::cout << "QPOASES : solve error from hotstart" << std::endl;
     }
 
     real_t Xopt_realt[_num_var];
@@ -470,11 +476,11 @@ VectorXd CQuadraticProgram::SolveQPoases(const int &num_max_iter, bool MPC)
         {
             if (_H_eigen(i).real() < 0)
             {
-                std::cout << "eigenvalue is negative " << std::endl;
+                std::cout << "QPOASES : eigenvalue is negative " << std::endl;
             }
             if (_H_eigen(i).imag() != 0)
             {
-                std::cout << "imaginary exist" << std::endl;
+                std::cout << "QPOASES : imaginary exist" << std::endl;
             }
         }
     }
