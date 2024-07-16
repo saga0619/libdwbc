@@ -477,6 +477,41 @@ int RobotData::CalcContactConstraint()
     return CalculateContactConstraint(J_C, A_inv_, Lambda_contact, J_C_INV_T, N_C, A_inv_N_C, W, NwJw, W_inv, V2);
 }
 
+MatrixXd RobotData::getContactConstraintMatrix()
+{
+    MatrixXd _C(contact_link_num_ * 10, contact_dof_);
+    getContactConstraintMatrix(_C);
+    return _C;
+}
+void RobotData::getContactConstraintMatrix(MatrixXd &C_)
+{
+
+    Eigen::MatrixXd A_const_a;
+    A_const_a.setZero((CONTACT_CONSTRAINT_ZMP + CONTACT_CONSTRAINT_FORCE) * contact_link_num_, contact_dof_);
+
+    Eigen::MatrixXd A_rot;
+    A_rot.setZero(contact_dof_, contact_dof_);
+    int const_idx = 0;
+    int contact_idx = 0;
+
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            A_rot.block(contact_idx, contact_idx, 3, 3) = cc_[i].rotm.transpose();
+            A_rot.block(contact_idx + 3, contact_idx + 3, 3, 3) = cc_[i].rotm.transpose();
+
+            A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
+            A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+
+            const_idx += cc_[i].constraint_number_;
+            contact_idx += cc_[i].contact_dof_;
+        }
+    }
+
+    C_ = -A_const_a * A_rot;
+}
+
 void RobotData::ClearTaskSpace()
 {
     ts_.clear();
@@ -852,6 +887,49 @@ VectorXd RobotData::getContactForce(const VectorXd &command_torque)
     VectorXd cf;
     CalculateContactForce(command_torque, J_C_INV_T, P_C, cf);
     return cf;
+}
+
+Vector3d RobotData::getZMP(const VectorXd &contact_force)
+{
+
+    Vector3d zmp_pos;
+    zmp_pos.setZero();
+
+    double total_fz = 0;
+
+    int contact_number = 0;
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            contact_number++;
+
+            total_fz = total_fz + contact_force(2 + i * 6);
+        }
+    }
+
+    for (int i = 0; i < cc_.size(); i++)
+    {
+        if (cc_[i].contact)
+        {
+            if (contact_force(i * 6 + 2) > -1.0E-3)
+            {
+                cc_[i].zmp_pos(0) = cc_[i].xc_pos(0);
+                cc_[i].zmp_pos(1) = cc_[i].xc_pos(1);
+                cc_[i].zmp_pos(2) = cc_[i].xc_pos(2);
+            }
+            else
+            {
+                cc_[i].zmp_pos(0) = cc_[i].xc_pos(0) + (-contact_force(i * 6 + 4) / contact_force(i * 6 + 2));
+                cc_[i].zmp_pos(1) = cc_[i].xc_pos(1) + (contact_force(i * 6 + 3) / contact_force(i * 6 + 2));
+                cc_[i].zmp_pos(2) = cc_[i].xc_pos(2);
+            }
+
+            zmp_pos = zmp_pos + cc_[i].zmp_pos * contact_force(i * 6 + 2) / total_fz;
+        }
+    }
+
+    return zmp_pos;
 }
 
 int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)

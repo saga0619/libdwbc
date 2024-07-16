@@ -72,6 +72,9 @@ namespace DWBC
         // degree of freedom of contact
         unsigned int contact_dof_;
 
+        // number of contact link
+        unsigned int contact_link_num_;
+
         // total number of link with mass
         unsigned int link_num_;
 
@@ -127,6 +130,8 @@ namespace DWBC
 
         MatrixXd NwJw; // NwJw matrix
 
+        VectorXd cf_redis_qp_;
+
         bool torque_limit_set_; // torque limit set flag
 
         VectorXd torque_limit_; // joint actuation limit information : (system_dof)
@@ -140,7 +145,6 @@ namespace DWBC
 
         // 2level dynamics computation
 
-
         vector<int> co_joint_idx_;
         vector<int> vc_joint_idx_;
         vector<int> nc_joint_idx_;
@@ -151,9 +155,9 @@ namespace DWBC
         vector<int> nc_rbdl_idx_;
         // std::vector<int> nc_task_idx_;
 
-        unsigned int nc_dof;
-        unsigned int co_dof;
-        unsigned int vc_dof;
+        unsigned int nc_dof;    // dof of noncontact chain
+        unsigned int co_dof;    // dof of contact chain
+        unsigned int vc_dof;    // dof of virtual and contact chain
         unsigned int reduced_model_dof_;
         unsigned int reduced_system_dof_;
 
@@ -166,9 +170,13 @@ namespace DWBC
         Matrix6d SI_nc_l_; // Spatial inertia matrix from non-contact model from non-contact model com frame;
 
         MatrixXd A_R, A_R_inv;
-        MatrixXd A_NC_O, A_NC, A_NC_l_inv;
+        MatrixXd A_NC_O; // inertia matrix of nc chain from original model (system_dof x system_dof)
+        MatrixXd A_NC;   // inertia matrix of Noncontact chain (nc_dof + 6 x nc_dof + 6)
+        MatrixXd A_NC_l_inv;
 
         VectorXd G_R;
+
+        VectorXd G_NC;
 
         VectorXd torque_grav_R_;    // gravity torque   : (reduced_model_dof_)
         VectorXd torque_task_R_;    // task torque      : (reduced_model_dof_)
@@ -271,6 +279,12 @@ namespace DWBC
         int CalcContactConstraint();
 
         /*
+        Calculate Contact Constraint Matrix (CF_c <= 0)
+        */
+        MatrixXd getContactConstraintMatrix();
+        void getContactConstraintMatrix(MatrixXd &C_);
+
+        /*
         Set Contact status, true or false
         */
         template <typename... Types>
@@ -286,6 +300,11 @@ namespace DWBC
         Calculate Contact Force with command Torque
         */
         VectorXd getContactForce(const VectorXd &command_torque);
+
+        /*
+        Calculate ZMP position based on input contact force
+        */
+        Vector3d getZMP(const VectorXd &contact_force);
 
         /*
         Calculate Angular Momentum Matrix : (3 * system_dof)
@@ -411,6 +430,7 @@ namespace DWBC
             int itr = 0;
 
             int contact_dof = 0;
+            contact_link_num_ = 0;
             for (auto n : v)
             {
                 // std::cout << "setting " << link_[cc_[itr].link_number_].name_ << " contact : " << bool_cast(n) << std::endl;
@@ -418,6 +438,7 @@ namespace DWBC
 
                 if (n == true)
                 {
+                    contact_link_num_++;
                     contact_dof += cc_[itr].contact_dof_;
                 }
 
