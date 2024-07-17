@@ -17,6 +17,7 @@ int main(void)
     bool contact3 = false;
 
     double rot_z = 0;
+    // double rot_z = M_PI_2;
     int repeat = 10000;
 
     bool use_hqp = false;
@@ -187,11 +188,20 @@ int main(void)
 
     VectorXd torque_contact_original = rd2_.torque_contact_;
 
+    VectorXd contact_force_ = rd2_.getContactForce(rd2_.torque_task_ + rd2_.torque_grav_ + rd2_.torque_contact_);
+    std::cout << "contact force : " << contact_force_.transpose() << std::endl;
+
     MatrixXd s_k = MatrixXd::Zero(rd2_.model_dof_, rd2_.model_dof_ + 6);
     s_k.block(0, 6, rd2_.model_dof_, rd2_.model_dof_) = MatrixXd::Identity(rd2_.model_dof_, rd2_.model_dof_);
     MatrixXd give_me_fstar = rd2_.ts_[0].J_task_ * rd2_.A_inv_ * rd2_.N_C * s_k.transpose();
 
     std::cout << "fstar : " << (give_me_fstar * rd2_.torque_task_).transpose() << std::endl;
+
+    MatrixXd Jkt_task3;
+    MatrixXd lambda_task3;
+
+    Jkt_task3 = rd2_.ts_[3].J_kt_;
+    lambda_task3 = rd2_.ts_[3].Lambda_task_;
 
     if (use_hqp)
     {
@@ -351,109 +361,477 @@ int main(void)
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
 
+    MatrixXd J_task = MatrixXd::Zero(6, rd2_.system_dof_);
+    J_task = rd2_.ts_[3].J_task_;
+
+    MatrixXd J_nc = MatrixXd::Zero(6, rd2_.reduced_system_dof_);
+    // J_nc =
+    J_nc.rightCols(6).setIdentity();
+    J_nc.leftCols(6).setIdentity();
+
+    Vector3d task_pos = rd2_.link_[rd2_.getLinkID("R_Wrist2_Link")].xpos - rd2_.link_[0].xpos;
+
+    Matrix3d skewtaskpos = -skew(task_pos);
+
+    Matrix3d skewncpos = -skew(rd2_.com_pos_nc_);
+
+    J_nc.block(0, 3, 3, 3) = skewncpos;
+
+    MatrixXd lambda_nc_inv = J_nc * rd2_.A_R_inv * J_nc.transpose();
+    MatrixXd lambda_nc = lambda_nc_inv.inverse();
+
+    MatrixXd J_nc_inv_T = lambda_nc * J_nc * rd2_.A_R_inv;
+
+    VectorXd fstar = f_star3;
+
+    MatrixXd lambda_inv = J_task * rd2_.A_inv_ * J_task.transpose();
+
+    MatrixXd lambda = lambda_inv.inverse();
+
+    MatrixXd J_task_inv_T = lambda * J_task * rd2_.A_inv_;
+
+    std::cout << "task local pos : " << task_pos.transpose() << std::endl;
+    std::cout << "nc com local pos : " << rd2_.com_pos_nc_.transpose() << std::endl;
+
+    std::cout << "skew task pos :\n"
+              << skewtaskpos << std::endl;
+
+    std::cout << "J_task : \n"
+              << J_task << std::endl;
+    std::cout << "lambda : \n"
+              << lambda << std::endl;
+    std::cout << "Jtask_inv_T\n"
+              << J_task_inv_T << std::endl;
+
+    std::cout << "A_R : " << std::endl;
+    std::cout << rd2_.A_R << std::endl;
+    std::cout << "A_R segment:\n"
+              << rd2_.A_R.bottomRightCorner(6, 6) << std::endl;
+
+    std::cout << "J_R_INV_T : \n"
+              << rd2_.J_R_INV_T << std::endl;
+
+    std::cout << "J_nc : \n"
+              << J_nc << std::endl;
+    std::cout << "lambda_nc : \n"
+              << lambda_nc << std::endl;
+    std::cout << "J_nc_inv_T\n"
+              << J_nc_inv_T << std::endl;
+
+    std::cout << "tt:::" << std::endl;
+    std::cout << rd2_.J_R_INV_T * J_task_inv_T - MatrixXd::Identity(rd2_.reduced_system_dof_, rd2_.reduced_system_dof_) << std::endl;
+
+    std::cout << "J_C_transpose : \n"
+              << rd2_.J_C << std::endl;
+
+    MatrixXd N_task = MatrixXd::Identity(rd2_.system_dof_, rd2_.system_dof_) - J_task.transpose() * J_task_inv_T;
+
+    VectorXd fstar_nc = J_nc * rd2_.J_R * rd2_.A_inv_ * (J_task.transpose() * lambda * fstar + N_task * (rd2_.B_ + rd2_.J_C.transpose() * contact_force_));
+
+    std::cout << "fstar 3 : " << f_star3.transpose() << std::endl;
+    std::cout << "fstar_nc : " << fstar_nc.transpose() << std::endl;
+
+    MatrixXd jkt_nc;
+    MatrixXd lambda_knc;
+
+    DWBC::CalculateJKT_R(J_nc, rd2_.A_R_inv_N_CR, rd2_.W_R_inv, jkt_nc, lambda_knc);
+
+    std::cout << "act torque 1: " << std::endl;
+    std::cout << (Jkt_task3 * lambda_task3 * f_star3).transpose() << std::endl;
+
+    std::cout << "act torque 2: " << std::endl;
+    std::cout << (jkt_nc * lambda_knc * fstar_nc).transpose() << std::endl;
+
+    std::cout << "base wrench : " << (J_task.transpose() * lambda_task3 * f_star3).head(6) << std::endl;
+
+    std::cout << "jtask \n " << (J_task.transpose() * lambda_task3).topRows(6) << std::endl;
+
+    MatrixXd A1 = (J_task.transpose() * lambda_task3).topRows(6);
+
+    std::cout << "base wrench 2 : " << (J_nc.transpose() * lambda_knc * fstar_nc).head(6) << std::endl;
+
+    std::cout << "base reee : \n"
+              << (J_nc.transpose() * lambda_knc).topRows(6) << std::endl;
+
+    MatrixXd A2 = (J_nc.transpose() * lambda_knc).topRows(6);
+
+    std::cout << "AA : \n"
+              << A2.inverse() * A1 << std::endl;
+
+    std::cout << "AtA : \n"
+              << A2.transpose() * A1 << std::endl;
+    fstar_nc = (A2.inverse() * A1 * f_star3);
+    std::cout << "fstar nc : " << (A2.inverse() * A1 * f_star3).transpose() << std::endl;
+
+    VectorXd origintasktorque = Jkt_task3 * lambda_task3 * f_star3;
+    VectorXd oo = VectorXd::Zero(rd2_.system_dof_);
+    oo.tail(rd2_.model_dof_) = origintasktorque;
+    std::cout << "original : " << std::endl;
+    std::cout << (Jkt_task3 * lambda_task3 * f_star3).transpose() << std::endl;
+
+    std::cout << "projected task : " << std::endl;
+    std::cout << (jkt_nc * lambda_knc * fstar_nc).transpose() << std::endl;
+
+    std::cout << "projected origin : " << std::endl;
+    std::cout << rd2_.J_I_nc_inv_T * origintasktorque.tail(rd2_.nc_dof);
+
+    std::cout << "-----------------------------------------------------------------" << std::endl;
+
+    VectorXd porjected_torque = rd2_.J_R_INV_T * J_task.transpose() * lambda * fstar;
+    std::cout << " projected torque : " << (porjected_torque).transpose() << std::endl;
+
+    VectorXd restored_force = J_nc_inv_T * porjected_torque;
+
+    std::cout << " resotred force : " << restored_force.transpose() << std::endl;
+
+    VectorXd resotred_torque = J_nc.transpose() * restored_force;
+    std::cout << resotred_torque.transpose() << std::endl;
+
+    std::cout << (porjected_torque - resotred_torque).transpose() << std::endl;
+
+    std::cout << "G_R : " << rd2_.G_R.transpose() << std::endl;
+    std::cout << " G_ : " << rd2_.G_.transpose() << std::endl;
+
+    MatrixXd NR = MatrixXd::Identity(rd2_.system_dof_, rd2_.system_dof_);
+
+    NR = NR - rd2_.J_R_INV_T.transpose() * rd2_.J_R;
+    std::cout << "N_R : \n"
+              << NR << std::endl;
+
+    std::cout << "JRINVT \n"
+              << rd2_.J_R_INV_T << std::endl;
+    MatrixXd J_task_nc = J_task.rightCols(rd2_.nc_dof);
+
+    MatrixXd lambda_task_nc = (J_task_nc * rd2_.A_NC.bottomRightCorner(rd2_.nc_dof,rd2_.nc_dof).inverse() * J_task_nc.transpose()).inverse();
+
+    MatrixXd G_NC = rd2_.G_.tail(rd2_.nc_dof);
+
+    VectorXd force = lambda_task_nc * fstar + lambda_task_nc * J_task_nc * rd2_.A_NC.bottomRightCorner(rd2_.nc_dof,rd2_.nc_dof).inverse() * G_NC;
+
+    std::cout << "force : " << force.transpose() << std::endl;
+
+    VectorXd torque_task_nc = J_task_nc.transpose() * force;
+
+    std::cout << "torque_task_nc : " <<  torque_task_nc.transpose() << std::endl;
+
+    VectorXd torque_task_nc_reduced = MatrixXd::Identity(rd2_.nc_dof,rd2_.nc_dof) - rd2_.J_I_nc_.transpose() * rd2_.J_I_nc_inv_T * torque_task_nc;
+
+    std::cout <<  "torque_task_nc_reduced : " << torque_task_nc_reduced.transpose() << std::endl;
+
+    //De
+
+
+
     // for (int i = 0; i < repeat; i++)
     // {
 
-    vector<int> co_joint_idx_;
-    vector<int> nc_joint_idx_;
+    // vector<int> co_joint_idx_;
+    // vector<int> nc_joint_idx_;
 
-    vector<int> co_link_idx_;
-    vector<int> nc_link_idx_;
+    // vector<int> co_link_idx_;
+    // vector<int> nc_link_idx_;
 
-    co_link_idx_.push_back(0);
+    // co_link_idx_.push_back(0);
 
-    for (int i = 0; i < rd2_.cc_.size(); i++)
-    {
-        if (rd2_.cc_[i].contact)
-        {
-            int link_idx = rd2_.cc_[i].link_number_;
+    // for (int i = 0; i < rd2_.cc_.size(); i++)
+    // {
+    //     if (rd2_.cc_[i].contact)
+    //     {
+    //         int link_idx = rd2_.cc_[i].link_number_;
 
-            while (link_idx != 0)
-            {
-                co_link_idx_.push_back(link_idx);
-                co_joint_idx_.push_back(rd2_.joint_[link_idx].joint_id_);
-                link_idx = rd2_.link_[link_idx].parent_id_;
-            }
-        }
-    }
-    sort(co_link_idx_.begin(), co_link_idx_.end());
-
-    for (int i = 0; i < rd2_.link_num_; i++)
-    {
-        if (std::find(co_link_idx_.begin(), co_link_idx_.end(), i) == co_link_idx_.end())
-        {
-            nc_link_idx_.push_back(i);
-        }
-    }
-
-    sort(co_joint_idx_.begin(), co_joint_idx_.end());
-
-    for (int i = 0; i < nc_link_idx_.size(); i++)
-    {
-        int link_idx = nc_link_idx_[i];
-        while (link_idx != 0)
-        {
-            if (find(nc_joint_idx_.begin(), nc_joint_idx_.end(), rd2_.joint_[link_idx].joint_id_) == nc_joint_idx_.end())
-            {
-                nc_joint_idx_.push_back(rd2_.joint_[link_idx].joint_id_);
-            }
-            link_idx = rd2_.link_[link_idx].parent_id_;
-
-            if (find(nc_link_idx_.begin(), nc_link_idx_.end(), link_idx) != nc_link_idx_.end())
-            {
-                break;
-            }
-        }
-    }
-
-    sort(nc_joint_idx_.begin(), nc_joint_idx_.end());
-
-    MatrixXd ANC = MatrixXd::Zero(nc_joint_idx_.size(), nc_joint_idx_.size());
-
-    for (int i = 0; i < nc_joint_idx_.size(); i++)
-    {
-        for (int j = 0; j < nc_joint_idx_.size(); j++)
-        {
-            ANC(i, j) = rd2_.A_(nc_joint_idx_[i], nc_joint_idx_[j]);
-        }
-    }
-
+    //         while (link_idx != 0)
+    //         {
+    //             co_link_idx_.push_back(link_idx);
+    //             co_joint_idx_.push_back(rd2_.joint_[link_idx].joint_id_);
+    //             link_idx = rd2_.link_[link_idx].parent_id_;
+    //         }
+    //     }
     // }
+    // sort(co_link_idx_.begin(), co_link_idx_.end());
+
+    // for (int i = 0; i < rd2_.link_num_; i++)
+    // {
+    //     if (std::find(co_link_idx_.begin(), co_link_idx_.end(), i) == co_link_idx_.end())
+    //     {
+    //         nc_link_idx_.push_back(i);
+    //     }
+    // }
+
+    // sort(co_joint_idx_.begin(), co_joint_idx_.end());
+
+    // for (int i = 0; i < nc_link_idx_.size(); i++)
+    // {
+    //     int link_idx = nc_link_idx_[i];
+    //     while (link_idx != 0)
+    //     {
+    //         if (find(nc_joint_idx_.begin(), nc_joint_idx_.end(), rd2_.joint_[link_idx].joint_id_) == nc_joint_idx_.end())
+    //         {
+    //             nc_joint_idx_.push_back(rd2_.joint_[link_idx].joint_id_);
+    //         }
+    //         link_idx = rd2_.link_[link_idx].parent_id_;
+
+    //         if (find(nc_link_idx_.begin(), nc_link_idx_.end(), link_idx) != nc_link_idx_.end())
+    //         {
+    //             break;
+    //         }
+    //     }
+    // }
+
+    // sort(nc_joint_idx_.begin(), nc_joint_idx_.end());
+
+    // MatrixXd ANC = MatrixXd::Zero(nc_joint_idx_.size(), nc_joint_idx_.size());
+
+    // for (int i = 0; i < nc_joint_idx_.size(); i++)
+    // {
+    //     for (int j = 0; j < nc_joint_idx_.size(); j++)
+    //     {
+    //         ANC(i, j) = rd2_.A_(nc_joint_idx_[i], nc_joint_idx_[j]);
+    //     }
+    // }
+
+    // // }
+    // // auto t32 = std::chrono::high_resolution_clock::now();
+
+    // // double time_contact_us = std::chrono::duration_cast<std::chrono::microseconds>(t32 - t31).count();
+
+    // // std::cout << "cd calc : " << (float)(time_contact_us / repeat) << " us" << std::endl;
+
+    // // print link_idx, joint_idx
+    // std::cout << "co_link_idx_ : ";
+    // for (int i = 0; i < co_link_idx_.size(); i++)
+    // {
+    //     std::cout << co_link_idx_[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // std::cout << "nc_link_idx_ : ";
+    // for (int i = 0; i < nc_link_idx_.size(); i++)
+    // {
+    //     std::cout << nc_link_idx_[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // std::cout << "co_joint_idx_ : ";
+    // for (int i = 0; i < co_joint_idx_.size(); i++)
+    // {
+    //     std::cout << co_joint_idx_[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // std::cout << "nc_joint_idx_ : ";
+    // for (int i = 0; i < nc_joint_idx_.size(); i++)
+    // {
+    //     std::cout << nc_joint_idx_[i] << " ";
+    // }
+    // std::cout << std::endl;
+
+    // // std::cout << "JR : " << std::endl;
+    // // std::cout << rd2_.J_R << std::endl;
+
+    // std::cout << "A_R : " << std::endl;
+    // std::cout << rd2_.A_.block(0, 0, 6, 6) << std::endl;
+
+    // std::cout << "ANC : " << std::endl;
+    // std::cout << rd2_.A_NC << std::endl;
+
+    // urdf2_file = std::string(URDF_DIR) + "/dyros_tocabi.urdf";
+
+    // // Load urdf with rbdl and print mass matrix
+    // RigidBodyDynamics::Model model;
+    // RigidBodyDynamics::Addons::URDFReadFromFile(urdf2_file.c_str(), &model, true, false);
+    // RigidBodyDynamics::Math::MatrixNd A_rbdl;
+
+    // A_rbdl.setZero(model.dof_count, model.dof_count);
+    // VectorXd q_rbdl = VectorXd::Zero(model.dof_count);
+
+    // for (size_t i = 0; i < rd2_.nc_dof; i++)
+    // {
+    //     q_rbdl(i) = q2(rd2_.nc_joint_idx_[i]);
+    // }
+
+    // RigidBodyDynamics::CompositeRigidBodyAlgorithm(model, q2, A_rbdl, true);
+
+    // // std::cout << "A_rbdl : " << std::endl;
+    // // std::cout << A_rbdl << std::endl;
+
+    // // std::cout << "diff : " << std::endl;
+    // // std::cout << rd2_.A_NC.bottomRightCorner(rd2_.nc_dof, rd2_.nc_dof) - A_rbdl << std::endl;
+
+    // std::vector<int> rbdl_id_idx;
+
+    // for (int i = 0; i < rd2_.nc_link_idx_.size(); i++)
+    // {
+    //     rbdl_id_idx.push_back(rd2_.link_[rd2_.nc_link_idx_[i]].body_id_);
+    // }
+
+    // auto t31 = std::chrono::high_resolution_clock::now();
+
+    // for (int k = 0; k < repeat; k++)
+    // {
+    //     for (unsigned int i = 1; i < model.mBodies.size(); i++)
+    //     {
+    //         if (std::find(rbdl_id_idx.begin(), rbdl_id_idx.end(), i) != rbdl_id_idx.end())
+    //         {
+    //             model.Ic[i] = model.I[i];
+    //         }
+    //         else
+    //         {
+    //             model.Ic[i] = RigidBodyDynamics::Math::SpatialRigidBodyInertia();
+    //         }
+    //     }
+    //     A_rbdl.setZero(model.dof_count, model.dof_count);
+
+    //     for (unsigned int i = model.mBodies.size() - 1; i > 0; i--)
+    //     {
+    //         if (std::find(rbdl_id_idx.begin(), rbdl_id_idx.end(), i) != rbdl_id_idx.end())
+    //         {
+    //             if (model.lambda[i] != 0)
+    //             {
+    //                 model.Ic[model.lambda[i]] = model.Ic[model.lambda[i]] + model.X_lambda[i].applyTranspose(model.Ic[i]);
+    //             }
+
+    //             unsigned int dof_index_i = model.mJoints[i].q_index;
+
+    //             if (model.mJoints[i].mDoFCount == 1)
+    //             {
+    //                 RigidBodyDynamics::Math::SpatialVector F = model.Ic[i] * model.S[i];
+    //                 A_rbdl(dof_index_i, dof_index_i) = model.S[i].dot(F);
+
+    //                 unsigned int j = i;
+    //                 unsigned int dof_index_j = dof_index_i;
+
+    //                 while (model.lambda[j] != 0)
+    //                 {
+    //                     F = model.X_lambda[j].applyTranspose(F);
+    //                     j = model.lambda[j];
+    //                     dof_index_j = model.mJoints[j].q_index;
+    //                     // if (model.mJoints[j].mDoFCount == 1)
+    //                     // {
+    //                     //     A_rbdl(dof_index_i, dof_index_j) = F.dot(model.S[j]);
+    //                     //     A_rbdl(dof_index_j, dof_index_i) = A_rbdl(dof_index_i, dof_index_j);
+    //                     // }
+    //                     if (model.mJoints[j].mDoFCount == 3)
+    //                     {
+    //                         Vector3d H_temp2 = (F.transpose() * model.multdof3_S[j]).transpose();
+    //                         A_rbdl.block<1, 3>(dof_index_i, dof_index_j) = H_temp2.transpose();
+    //                         A_rbdl.block<3, 1>(dof_index_j, dof_index_i) = H_temp2;
+    //                     }
+    //                 }
+    //             }
+    //             // if (model.mJoints[i].mDoFCount == 3)
+    //             // {
+    //             //     RigidBodyDynamics::Math::Matrix63 F_63 = model.Ic[i].toMatrix() * model.multdof3_S[i];
+    //             //     A_rbdl.block<3, 3>(dof_index_i, dof_index_i) = model.multdof3_S[i].transpose() * F_63;
+
+    //             //     unsigned int j = i;
+    //             //     unsigned int dof_index_j = dof_index_i;
+
+    //             //     while (model.lambda[j] != 0)
+    //             //     {
+    //             //         F_63 = model.X_lambda[j].toMatrixTranspose() * (F_63);
+    //             //         j = model.lambda[j];
+    //             //         dof_index_j = model.mJoints[j].q_index;
+
+    //             //         if (model.mJoints[j].mDoFCount == 1)
+    //             //         {
+    //             //             Vector3d H_temp2 = F_63.transpose() * (model.S[j]);
+
+    //             //             A_rbdl.block<3, 1>(dof_index_i, dof_index_j) = H_temp2;
+    //             //             A_rbdl.block<1, 3>(dof_index_j, dof_index_i) = H_temp2.transpose();
+    //             //         }
+    //             //         else if (model.mJoints[j].mDoFCount == 3)
+    //             //         {
+    //             //             Matrix3d H_temp2 = F_63.transpose() * (model.multdof3_S[j]);
+
+    //             //             A_rbdl.block<3, 3>(dof_index_i, dof_index_j) = H_temp2;
+    //             //             A_rbdl.block<3, 3>(dof_index_j, dof_index_i) = H_temp2.transpose();
+    //             //         }
+    //             //     }
+    //             // }
+    //         }
+    //     }
+    // }
+
     // auto t32 = std::chrono::high_resolution_clock::now();
+    // MatrixXd SI_nc_b_;
+    // SI_nc_b_.setZero(6, 6);
+    // for (int k = 0; k < repeat; k++)
+    // {
+    //     for (int i = 0; i < nc_link_idx_.size(); i++)
+    //     {
+    //         Matrix6d I_rotation = Matrix6d::Zero(6, 6);
+    //         Matrix6d temp1 = Matrix6d::Identity(6, 6);
+    //         temp1.block(0, 0, 3, 3) = rd2_.link_[nc_link_idx_[i]].rotm.transpose();
+    //         temp1.block(3, 3, 3, 3) = temp1.block(0, 0, 3, 3);
+
+    //         temp1.block(0, 3, 3, 3) = rd2_.link_[nc_link_idx_[i]].rotm.transpose() * skew(rd2_.link_[nc_link_idx_[i]].xpos - rd2_.link_[0].xpos).transpose();
+    //         SI_nc_b_ += temp1.transpose() * rd2_.link_[nc_link_idx_[i]].GetSpatialInertiaMatrix(false) * temp1;
+    //     }
+    // }
+
+    // auto t33 = std::chrono::high_resolution_clock::now();
 
     // double time_contact_us = std::chrono::duration_cast<std::chrono::microseconds>(t32 - t31).count();
 
+    // double time_contact_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t33 - t32).count();
+
     // std::cout << "cd calc : " << (float)(time_contact_us / repeat) << " us" << std::endl;
 
-    // print link_idx, joint_idx
-    std::cout << "co_link_idx_ : ";
-    for (int i = 0; i < co_link_idx_.size(); i++)
-    {
-        std::cout << co_link_idx_[i] << " ";
-    }
-    std::cout << std::endl;
+    // std::cout << "cd2 calc : " << (float)(time_contact_us2 / repeat) << " us" << std::endl;
 
-    std::cout << "nc_link_idx_ : ";
-    for (int i = 0; i < nc_link_idx_.size(); i++)
-    {
-        std::cout << nc_link_idx_[i] << " ";
-    }
-    std::cout << std::endl;
+    // Matrix6d I_nc = Matrix6d::Zero(6, 6);
 
-    std::cout << "co_joint_idx_ : ";
-    for (int i = 0; i < co_joint_idx_.size(); i++)
-    {
-        std::cout << co_joint_idx_[i] << " ";
-    }
-    std::cout << std::endl;
+    // // I_nc.block(0, 0, 3, 3) = Matrix3d::Identity(3, 3) * model.Ic[2].m;
+    // // I_nc.block(3, 0, 3, 3) = skew(model.Ic[2].h).transpose();
+    // // I_nc.block(0, 3, 3, 3) = skew(model.Ic[2].h);
+    // // I_nc(3,3) = model.Ic[2].Ixx;
 
-    std::cout << "nc_joint_idx_ : ";
-    for (int i = 0; i < nc_joint_idx_.size(); i++)
-    {
-        std::cout << nc_joint_idx_[i] << " ";
-    }
-    std::cout << std::endl;
+    // I_nc.block(0, 0, 3, 3) = model.Ic[2].m * Matrix3d::Identity();
+    // I_nc.block(3, 3, 3, 3) = model.Ic[2].toMatrix().block(0, 0, 3, 3);
+    // I_nc.block(3, 0, 3, 3) = model.Ic[2].toMatrix().block(0, 3, 3, 3);
+    // I_nc.block(0, 3, 3, 3) = I_nc.block(3, 0, 3, 3).transpose();
 
+    // std::cout << "I_nc : " << std::endl;
+    // std::cout << I_nc << std::endl;
+
+    // std::cout << "SI_nc_b_ : " << std::endl;
+    // std::cout << rd2_.SI_nc_b_ << std::endl;
+
+    // std::cout << "SI_nc_l_ : " << std::endl;
+    // std::cout << rd2_.SI_nc_l_ << std::endl;
+    // Matrix3d iner_;
+    // Vector3d com_;
+    // double maass;
+    // InertiaMatrixSegment(I_nc, iner_, com_, maass);
+    // std::cout << InertiaMatrix(iner_, maass) << std::endl;
+
+    // MatrixXd B_rbdl = MatrixXd::Zero(6 + rd2_.nc_dof, 6 + rd2_.nc_dof);
+
+    // B_rbdl.topLeftCorner(6, 6) = I_nc;
+    // // B_rbdl.topLeftCorner(6, 6) = A_rbdl.block(0, 0, 6, 6);
+
+    // for (int i = 0; i < rd2_.nc_dof; i++)
+    // {
+    //     for (int j = 0; j < 6; j++)
+    //     {
+    //         B_rbdl(6 + i, j) = A_rbdl(rd2_.nc_joint_idx_[i], j);
+    //         B_rbdl(j, 6 + i) = A_rbdl(j, rd2_.nc_joint_idx_[i]);
+    //     }
+
+    //     for (int j = 0; j < rd2_.nc_dof; j++)
+    //     {
+    //         B_rbdl(6 + i, 6 + j) = A_rbdl(rd2_.nc_joint_idx_[i], rd2_.nc_joint_idx_[j]);
+    //     }
+    // }
+
+    // B_rbdl.topRows(3) = rd2_.link_[0].rotm.transpose() * B_rbdl.topRows(3);
+    // B_rbdl.leftCols(3) = B_rbdl.leftCols(3) * rd2_.link_[0].rotm;
+
+    // std::cout << "B_rbdl : " << std::endl;
+    // std::cout << B_rbdl << std::endl;
+
+    // std::cout << "diff : " << std::endl;
+    // std::cout << B_rbdl - rd2_.A_NC << std::endl;
 
     // reorder co_link_idx_
 
