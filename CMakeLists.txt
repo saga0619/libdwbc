@@ -1,6 +1,5 @@
+cmake_minimum_required(VERSION 2.8...3.15)
 PROJECT (dwbc)
-
-CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
 
 add_compile_options(-O3 -std=c++17)
 
@@ -11,7 +10,7 @@ set(CMAKE_INTERFACE_CURRENT_DIR_IN_INTERFACE ON)
 
 OPTION (USE_QPSWIFT "Run with QPSWIFT" OFF)
 
-OPTION (RUN_TEST "Run calculation test of libdwbc" ON)
+OPTION (RUN_TEST "Run calculation test of libdwbc" OFF)
 
 OPTION (RUN_BENCHMARK "Run benchmark of libdwbc" OFF)
 
@@ -56,10 +55,14 @@ IF(PYBIND11)
     )
 ENDIF()
 
+# find_package(OsqpEigen)
+add_subdirectory(3rd-party/osqp-eigen)
+
 include_directories(
     include
     ${QPOASES_INCLUDE_DIR}
     ${EIGEN3_INCLUDE_DIR}
+    3rd-party/osqp-eigen/include
     )
 
 file(GLOB dwbc_src
@@ -83,7 +86,9 @@ ${RBDL_URDFREADER_LIBRARY}
 ${QPLIB}
 pthread
 ${PYBIND_LIB}
+OsqpEigen::OsqpEigen
 )
+target_include_directories(dwbc PRIVATE 3rd-party/osqp-eigen/include)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/dwbc-config.cmake" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 

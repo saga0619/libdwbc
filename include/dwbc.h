@@ -362,7 +362,13 @@ namespace DWBC
         int CalcSingleTaskTorqueWithJACC_QP_R(TaskSpace &ts_, bool init);
         int CalcSingleTaskTorqueWithJACC_QP_R_NC(TaskSpace &lts, VectorXd &desired_com_acc, bool init);
 
-        int CalcControlTorqueLQP(bool init = true);
+        int ConfigureLQP(HQP &hqp, bool init = true);
+        int ConfigureLQP_R(HQP &hqp_r, bool init = true);
+        int ConfigureLQP_R_NC(HQP &hqp_nc, VectorXd &q_acc, bool init = true);
+
+        int CalcControlTorqueLQP(HQP &hqp, bool init = true);
+        int CalcControlTorqueLQP_R(HQP &hqp_r, bool init = true);
+        int CalcControlTorqueLQP_R_NC(HQP &hqp_nc, VectorXd &q_acc, bool init = true);
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 

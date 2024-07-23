@@ -4301,8 +4301,411 @@ int RobotData::CalcSingleTaskTorqueWithJACC_QP_R_NC(TaskSpace &lts, VectorXd &pr
     return 1;
 }
 
-int RobotData::CalcControlTorqueLQP(bool init)
+int RobotData::ConfigureLQP(HQP &hqp, bool init)
 {
+    /**
+     * hqp settings
+     * priority 1 //
+     *      inequality constraint : torque limit (2(n-6) dof)
+     *
+     *      equality constraint   : wbd (n dof)
+     * Priority 2 //
+     *      inequality constraint :
+     *                              joint acceleration limit (2n dof)
+     *                              CoP & ZMP limit (8 * c dof)
+     *      equality constraint :
+     *                              contact constraint (6 * c dof)
+     *
+     * priority 3 //
+     *      equality constraint   : com space (3 dof)
+     *                              pelv rotation (3 dof)
+     *
+     * priority 4 //
+     *      equality constraint   : right arm (6 dof)
+     */
+
+    int ret = 0;
+
+    int acc_size = system_dof_;
+    int torque_size = model_dof_;
+    int contact_size = contact_dof_;
+    int variable_size = acc_size + contact_size;
+
+    int acc_idx = 0;
+    int contact_idx = acc_size + 0;
+    hqp.initialize(acc_size, 0, contact_size);
+
+    MatrixXd cost_h = MatrixXd::Zero(acc_size + contact_size, acc_size + contact_size);
+    VectorXd cost_g = VectorXd::Zero(acc_size + contact_size);
+
+    cost_h.block(0, 0, acc_size, acc_size) = A_ / A_.norm() * 5;
+
+    // Priority 1
+    int ineq_constraint_size = torque_size * 2; // torque limit
+    int eq_constraint_size = 6;                 // newton euler
+
+    hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+    // hqp_.hqp_hs_[0].y_ans_.head(variable_size).setZero();
+
+    MatrixXd A = MatrixXd::Zero(ineq_constraint_size, variable_size);
+    VectorXd a = VectorXd::Zero(ineq_constraint_size);
+
+    MatrixXd B = MatrixXd::Zero(eq_constraint_size, variable_size);
+    VectorXd b = VectorXd::Zero(eq_constraint_size);
+
+    B.block(0, 0, eq_constraint_size, acc_size) = A_.topRows(eq_constraint_size);
+    B.block(0, acc_size, eq_constraint_size, contact_size) = J_C.transpose().topRows(eq_constraint_size);
+    b.head(eq_constraint_size) = B_.head(eq_constraint_size);
+
+    VectorXd tlim = VectorXd::Constant(torque_size, 200);
+
+    A.block(0, 0, torque_size, acc_size) = A_.bottomRows(torque_size);
+    A.block(0, acc_size, torque_size, contact_size) = J_C.transpose().bottomRows(torque_size);
+    A.block(torque_size, 0, torque_size, acc_size) = -A_.bottomRows(torque_size);
+    A.block(torque_size, acc_size, torque_size, contact_size) = -J_C.transpose().bottomRows(torque_size);
+
+    // A.block(0, acc_size, torque_size, torque_size) = MatrixXd::Identity(torque_size, torque_size);            // torque limit
+    // A.block(torque_size, acc_size, torque_size, torque_size) = -MatrixXd::Identity(torque_size, torque_size); // torque limit
+    a.head(torque_size) = -tlim + B_.tail(torque_size);
+    a.tail(torque_size) = -tlim - B_.tail(torque_size);
+
+    // std::cout << "test0 " << hqp_.hqp_hs_[0].ineq_const_size_ << std::endl;
+    // std::cout << "A :rows : " << A.rows() << " cols : " << A.cols() << std::endl;
+
+    hqp.hqp_hs_[0].updateConstraintMatrix(A, a, B, b);
+    hqp.hqp_hs_[0].normalizeConstraintMatrix();
+    // Solve
+    hqp.hqp_hs_[0].v_ans_.setZero(ineq_constraint_size);
+    hqp.hqp_hs_[0].w_ans_.setZero(eq_constraint_size);
+    hqp.hqp_hs_[0].y_ans_.head(acc_size) = -A_inv_ * B_;
+
+    // Priority 2
+    int contact_constraint_size = contact_link_num_ * 10;
+    ineq_constraint_size = contact_constraint_size + torque_size * 2;
+    eq_constraint_size = contact_size;
+
+    hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+    A.setZero(ineq_constraint_size, variable_size);
+    a.setZero(ineq_constraint_size);
+    A.block(0, acc_size, contact_constraint_size, contact_size) = getContactConstraintMatrix();
+    A.block(contact_constraint_size, 6, torque_size, torque_size) = MatrixXd::Identity(torque_size, torque_size);
+    A.block(contact_constraint_size + torque_size, 6, torque_size, torque_size) = -MatrixXd::Identity(torque_size, torque_size);
+
+    VectorXd alim = VectorXd::Constant(torque_size, 5);
+    a.segment(contact_constraint_size, torque_size) = -alim;
+    a.segment(contact_constraint_size + torque_size, torque_size) = -alim;
+
+    B.setZero(eq_constraint_size, variable_size);
+    b.setZero(eq_constraint_size);
+    B.block(0, 0, contact_size, acc_size) = J_C;
+
+    // std::cout << "test1" << std::endl;
+    hqp.hqp_hs_[1].updateConstraintMatrix(A, a, B, b);
+    hqp.hqp_hs_[1].updateCostMatrix(cost_h, cost_g);
+    hqp.hqp_hs_[1].normalizeConstraintMatrix();
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        ineq_constraint_size = 0;
+        eq_constraint_size = ts_[i].task_dof_;
+
+        hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+        B.setZero(eq_constraint_size, variable_size);
+        b.setZero(eq_constraint_size);
+
+        B.block(0, 0, eq_constraint_size, acc_size) = ts_[i].J_task_;
+        b.head(eq_constraint_size) = -ts_[i].f_star_;
+
+        hqp.hqp_hs_[2 + i].updateConstraintMatrix(A, a, B, b);
+        hqp.hqp_hs_[2 + i].updateCostMatrix(cost_h, cost_g);
+        hqp.hqp_hs_[2 + i].normalizeConstraintMatrix();
+    }
+
+    hqp.prepare();
+
+    return ret;
+}
+
+int RobotData::CalcControlTorqueLQP(HQP &hqp, bool init)
+{
+    int ret = 0;
+    hqp.solveSequential(init);
+    return ret;
+}
+
+int RobotData::ConfigureLQP_R(HQP &hqp_, bool init)
+{
+    int ret = 0;
+
+    // classify the task space
+    // for (int i = 0; i < ts_.size(); i++)
+    // {
+    //     bool cc_link = false;
+    //     for(int j=0;j<ts_[i].task_link_.size();j++)
+    //     {
+    //         auto it = std::find(co_link_idx_.begin(), co_link_idx_.end(), ts_[i].task_link_[j].link_id_);
+    //         if(it != co_link_idx_.end())
+    //         { // if the link is int the cc link
+    //             cc_link |= true;
+    //         }
+    //         else{ // if the link is not in the cc link
+    //             cc_link |= false;
+    //         }
+    //     }
+    //     ts_[i].noncont_task_ = !co_link;
+    // }
+    int acc_size = reduced_system_dof_;
+    int torque_size = reduced_model_dof_;
+    int contact_size = contact_dof_;
+    int variable_size = acc_size + contact_size;
+
+    int acc_idx = 0;
+    // int toruqe_idx = acc_size;
+    int contact_idx = acc_size + 0;
+    hqp_.initialize(acc_size, 0, contact_size);
+
+    MatrixXd cost_h = MatrixXd::Zero(acc_size + contact_size, acc_size + contact_size);
+    VectorXd cost_g = VectorXd::Zero(acc_size + contact_size);
+
+    cost_h.block(0, 0, acc_size, acc_size) = A_R / A_.norm() * 5;
+
+    // Priority 1
+    int ineq_constraint_size = torque_size * 2; // torque limit
+    int eq_constraint_size = 6;                 // newton euler
+
+    hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    // hqp_.hqp_hs_[0].y_ans_.head(variable_size).setZero();
+
+    MatrixXd A = MatrixXd::Zero(ineq_constraint_size, variable_size);
+    VectorXd a = VectorXd::Zero(ineq_constraint_size);
+
+    MatrixXd B = MatrixXd::Zero(eq_constraint_size, variable_size);
+    VectorXd b = VectorXd::Zero(eq_constraint_size);
+
+    B.block(0, 0, eq_constraint_size, acc_size) = A_R.topRows(eq_constraint_size);
+    B.block(0, acc_size, eq_constraint_size, contact_size) = (J_CR.transpose()).topRows(eq_constraint_size);
+    b.head(eq_constraint_size) = G_R.head(eq_constraint_size);
+
+    VectorXd tlim = VectorXd::Constant(torque_size, 200);
+    int tlim_size = tlim.size();
+
+    tlim(tlim_size - 4) = 600;
+
+    A.block(0, 0, torque_size, acc_size) = A_R.bottomRows(torque_size);
+    A.block(0, acc_size, torque_size, contact_size) = J_CR.transpose().bottomRows(torque_size);
+    A.block(torque_size, 0, torque_size, acc_size) = -A_R.bottomRows(torque_size);
+    A.block(torque_size, acc_size, torque_size, contact_size) = -J_CR.transpose().bottomRows(torque_size);
+
+    // A.block(0, acc_size, torque_size, torque_size) = MatrixXd::Identity(torque_size, torque_size);            // torque limit
+    // A.block(torque_size, acc_size, torque_size, torque_size) = -MatrixXd::Identity(torque_size, torque_size); // torque limit
+    a.head(torque_size) = -tlim + G_R.tail(torque_size);
+    a.tail(torque_size) = -tlim - G_R.tail(torque_size);
+
+    // std::cout << "test0 " << hqp_.hqp_hs_[0].ineq_const_size_ << std::endl;
+    // std::cout << "A :rows : " << A.rows() << " cols : " << A.cols() << std::endl;
+
+    hqp_.hqp_hs_[0].updateConstraintMatrix(A, a, B, b);
+    hqp_.hqp_hs_[0].normalizeConstraintMatrix();
+    // Solve
+    hqp_.hqp_hs_[0].v_ans_.setZero(ineq_constraint_size);
+    hqp_.hqp_hs_[0].w_ans_.setZero(eq_constraint_size);
+    hqp_.hqp_hs_[0].y_ans_.head(acc_size) = -A_R_inv * G_R;
+
+    // Priority 2
+    int contact_constraint_size = contact_link_num_ * 10;
+    ineq_constraint_size = contact_constraint_size + torque_size * 2;
+    eq_constraint_size = contact_size;
+
+    hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    A.setZero(ineq_constraint_size, variable_size);
+    a.setZero(ineq_constraint_size);
+    A.block(0, acc_size, contact_constraint_size, contact_size) = getContactConstraintMatrix();
+    A.block(contact_constraint_size, 6, torque_size, torque_size) = MatrixXd::Identity(torque_size, torque_size);
+    A.block(contact_constraint_size + torque_size, 6, torque_size, torque_size) = -MatrixXd::Identity(torque_size, torque_size);
+
+    VectorXd alim = VectorXd::Constant(torque_size, 5);
+    a.segment(contact_constraint_size, torque_size) = -alim;
+    a.segment(contact_constraint_size + torque_size, torque_size) = -alim;
+
+    B.setZero(eq_constraint_size, variable_size);
+    b.setZero(eq_constraint_size);
+    B.block(0, 0, contact_size, acc_size) = J_CR;
+
+    // std::cout << "test1" << std::endl;
+    hqp_.hqp_hs_[1].updateConstraintMatrix(A, a, B, b);
+    hqp_.hqp_hs_[1].updateCostMatrix(cost_h, cost_g);
+    hqp_.hqp_hs_[1].normalizeConstraintMatrix();
+
+    // Priority 3
+
+    for (int i = 0; i < ts_.size(); i++)
+    {
+        if (!ts_[i].noncont_task)
+        {
+            ineq_constraint_size = 0;
+            eq_constraint_size = ts_[i].task_dof_;
+
+            hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+            B.setZero(eq_constraint_size, variable_size);
+            b.setZero(eq_constraint_size);
+
+            B.block(0, 0, eq_constraint_size, acc_size) = ts_[i].J_task_ * J_R_INV_T.transpose();
+            b.head(eq_constraint_size) = -ts_[i].f_star_;
+
+            hqp_.hqp_hs_[2 + i].updateConstraintMatrix(A, a, B, b);
+            hqp_.hqp_hs_[2 + i].updateCostMatrix(cost_h, cost_g);
+            hqp_.hqp_hs_[2 + i].normalizeConstraintMatrix();
+        }
+    }
+    hqp_.prepare();
+
+    return ret;
+}
+
+int RobotData::CalcControlTorqueLQP_R(HQP &hqp_r, bool init)
+{
+    int ret = 0;
+
+    return ret;
+}
+
+int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
+{
+    int ret = 0;
+    int acc_size_nc = nc_dof;
+    int torque_size_nc = nc_dof;
+    int variable_size = acc_size_nc;
+
+    Vector6d fstar_gnc = q_acc.tail(6);
+    Vector6d fstar_base = q_acc.head(6);
+
+    MatrixXd cost_h_nc = MatrixXd::Zero(variable_size, variable_size);
+    VectorXd cost_g_nc = VectorXd::Zero(variable_size);
+
+    cost_h_nc = A_NC.bottomRightCorner(acc_size_nc, acc_size_nc) / A_NC.bottomRightCorner(acc_size_nc, acc_size_nc).norm() * 5;
+
+    hqp_nc_.initialize(acc_size_nc, 0, 0);
+
+    int eq_constraint_size = 6;
+    int ineq_constraint_size = 2 * acc_size_nc;
+
+    hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+    MatrixXd A_nc = MatrixXd::Zero(ineq_constraint_size, variable_size);
+    VectorXd a_nc = VectorXd::Zero(ineq_constraint_size);
+
+    MatrixXd B_nc = MatrixXd::Zero(eq_constraint_size, variable_size);
+    VectorXd b_nc = VectorXd::Zero(eq_constraint_size);
+
+    // gcom const
+    B_nc.block(0, 0, eq_constraint_size, acc_size_nc) = J_I_nc_;
+    b_nc.head(eq_constraint_size) = -fstar_gnc;
+
+    VectorXd tlim_nc = VectorXd::Constant(torque_size_nc, 200);
+    A_nc.block(0, 0, acc_size_nc, acc_size_nc) = A_NC.bottomRightCorner(acc_size_nc, acc_size_nc);
+    a_nc.segment(0, acc_size_nc) = -tlim_nc + G_NC;
+    A_nc.block(1 * acc_size_nc, 0, acc_size_nc, acc_size_nc) = -A_NC.bottomRightCorner(acc_size_nc, acc_size_nc);
+    a_nc.segment(1 * acc_size_nc, acc_size_nc) = -tlim_nc - G_NC;
+
+    hqp_nc_.hqp_hs_[0].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
+    hqp_nc_.hqp_hs_[0].updateCostMatrix(cost_h_nc, cost_g_nc);
+
+    bool first = true;
+
+    int nc_task_idx = 0;
+
+    // for (int i = 0; i < ts_.size(); i++)
+    // {
+    //     if (ts_[i].noncont_task)
+    //     {
+    //         if (first)
+    //         {
+    //             first = false;
+    //             eq_constraint_size = ts_[i].task_dof_;
+    //             ineq_constraint_size = 2 * acc_size_nc;
+
+    //             hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+    //             MatrixXd Ja = MatrixXd::Identity(6, 6);
+    //             Ja.block(0, 3, 3, 3) = skew(link_[ts_[i].task_link_[0].link_id_].xpos - link_[0].xpos);
+
+    //             VectorXd fstar_local = Ja * (ts_[i].f_star_ - fstar_base);
+
+    //             B_nc.setZero(eq_constraint_size, variable_size);
+    //             b_nc.setZero(eq_constraint_size);
+
+    //             B_nc.block(0, 0, 6, acc_size_nc) = ts_[i].J_task_.rightCols(nc_dof);
+    //             b_nc.head(6) = -fstar_local;
+
+    //             // acc lim
+    //             A_nc.block(0, 0, acc_size_nc, acc_size_nc) = MatrixXd::Identity(acc_size_nc, acc_size_nc);
+    //             a_nc.segment(0, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
+    //             A_nc.block(acc_size_nc, 0, acc_size_nc, acc_size_nc) = -MatrixXd::Identity(acc_size_nc, acc_size_nc);
+    //             a_nc.segment(acc_size_nc, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
+
+    //             hqp_nc_.hqp_hs_[1].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
+    //             hqp_nc_.hqp_hs_[1].updateCostMatrix(cost_h_nc, cost_g_nc);
+    //         }
+    //         else
+    //         {
+    //             eq_constraint_size = ts_[i].task_dof_;
+    //             ineq_constraint_size = 0;
+
+    //             hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+    //             B_nc.setZero(eq_constraint_size, variable_size);
+    //             b_nc.setZero(eq_constraint_size);
+
+    //             B_nc.block(0, 0, eq_constraint_size, acc_size_nc) = ts_[i].J_task_.rightCols(acc_size_nc);
+    //             b_nc.head(eq_constraint_size) = -ts_[i].f_star_;
+
+    //             hqp_nc_.hqp_hs_[1 + i].updateEqualityConstraintMatrix(B_nc, b_nc);
+    //             hqp_nc_.hqp_hs_[1 + i].updateCostMatrix(cost_h_nc, cost_g_nc);
+    //         }
+
+    //         nc_task_idx++;
+    //     }
+    // }
+
+    eq_constraint_size = 6;
+    ineq_constraint_size = 2 * acc_size_nc;
+
+    hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+
+    MatrixXd Ja = MatrixXd::Identity(6, 6);
+    Ja.block(0, 3, 3, 3) = skew(link_[ts_[1].task_link_[0].link_id_].xpos - link_[0].xpos);
+
+    VectorXd fstar_local = Ja * (ts_[1].f_star_ - fstar_base);
+
+    B_nc.setZero(eq_constraint_size, variable_size);
+    b_nc.setZero(eq_constraint_size);
+
+    B_nc.block(0, 0, 6, acc_size_nc) = ts_[1].J_task_.rightCols(nc_dof);
+    b_nc.head(6) = -fstar_local;
+
+    // acc lim
+    A_nc.block(0, 0, acc_size_nc, acc_size_nc) = MatrixXd::Identity(acc_size_nc, acc_size_nc);
+    a_nc.segment(0, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
+
+    A_nc.block(acc_size_nc, 0, acc_size_nc, acc_size_nc) = -MatrixXd::Identity(acc_size_nc, acc_size_nc);
+    a_nc.segment(acc_size_nc, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
+
+    hqp_nc_.hqp_hs_[1].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
+    hqp_nc_.hqp_hs_[1].updateCostMatrix(cost_h_nc, cost_g_nc);
+
+    hqp_nc_.prepare();
+    return ret;
+}
+
+int RobotData::CalcControlTorqueLQP_R_NC(HQP &hqp_nc, VectorXd &q_acc, bool init)
+{
+    int ret = 0;
+
+    return ret;
 }
 
 int RobotData::CalcContactRedistributeR(bool hqp, bool init)
