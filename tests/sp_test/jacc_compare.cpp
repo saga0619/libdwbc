@@ -335,6 +335,9 @@ int main(void)
         // rdo_.SetTaskSpace(2, fstar_2);
 
         rdo_.UpdateTaskSpace();
+
+        double time_origin = 0;
+        double time_reduce = 0;
         std::cout << std::endl
                   << "--------------------------------------------------------------------------------------------------------" << std::endl;
         std::cout << "                       :: DOUBLE SUPPORT. ORIGINAL LQP :: " << std::endl;
@@ -374,6 +377,7 @@ int main(void)
             double update_time_cum = 0;
             double solve_time_cum = 0;
             // double chrono_time_cum = 0;
+            auto t0 = std::chrono::high_resolution_clock::now();
             rd_.CalcControlTorqueLQP(hqp_, true);
             for (int i = 0; i < repeat; i++)
             {
@@ -383,8 +387,9 @@ int main(void)
                 update_time_cum += hqp_.update_time_step_;
                 solve_time_cum += hqp_.solve_time_step_;
             }
-
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)(time_cum / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
+            auto t1 = std::chrono::high_resolution_clock::now();
+            time_origin = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / repeat;
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << time_origin << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
 
             for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
             {
@@ -507,9 +512,9 @@ int main(void)
 
             auto t1 = std::chrono::high_resolution_clock::now();
 
-            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us2) / repeat) << " us (" << total_max << " us)" << std::endl;
+            // double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            time_reduce = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / repeat;
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << time_reduce << " us (" << total_max << " us)" << std::endl;
 
             std::cout << std::setw(30) << std::right << "Reduced calc : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_redu_calc) / repeat) << " us (" << time_redu_calc_max << " us)" << std::endl;
             std::cout << std::setw(30) << std::right << "       LQP 1 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_total) / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
@@ -574,6 +579,7 @@ int main(void)
                 std::cout << "Contact force : " << conf.transpose() << std::endl;
             }
         }
+        std::cout << " Efficieny : " << (float)(time_origin / time_reduce) << "X" << std::endl;
     }
     {
         RobotData rdo_;
@@ -610,6 +616,9 @@ int main(void)
         // rdo_.ts_[2].noncont_task = true;
 
         rdo_.UpdateTaskSpace();
+
+        double time_origin = 0;
+        double time_reduce = 0;
 
         std::cout << std::endl
                   << "--------------------------------------------------------------------------------------------------------" << std::endl;
@@ -649,6 +658,7 @@ int main(void)
             double update_time_cum = 0;
             double solve_time_cum = 0;
             // double chrono_time_cum = 0;
+            auto t0 = std::chrono::high_resolution_clock::now();
             rd_.CalcControlTorqueLQP(hqp_, true);
             for (int i = 0; i < repeat; i++)
             {
@@ -659,7 +669,11 @@ int main(void)
                 solve_time_cum += hqp_.solve_time_step_;
             }
 
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)(time_cum / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
+            auto t1 = std::chrono::high_resolution_clock::now();
+
+            time_origin = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / repeat;
+
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << time_origin << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
 
             for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
             {
@@ -783,9 +797,11 @@ int main(void)
 
             auto t1 = std::chrono::high_resolution_clock::now();
 
-            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            time_reduce = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / repeat;
 
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us2) / repeat) << " us (" << total_max << " us)" << std::endl;
+            // double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << time_reduce << " us (" << total_max << " us)" << std::endl;
 
             std::cout << std::setw(30) << std::right << "Reduced calc : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_redu_calc) / repeat) << " us (" << time_redu_calc_max << " us)" << std::endl;
             std::cout << std::setw(30) << std::right << "       LQP 1 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_total) / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
@@ -850,6 +866,7 @@ int main(void)
                 std::cout << "Contact force : " << conf.transpose() << std::endl;
             }
         }
+        std::cout << " Efficieny : " << (float)(time_origin / time_reduce) << "X" << std::endl;
     }
     return 0;
 }
