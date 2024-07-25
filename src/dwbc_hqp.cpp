@@ -221,6 +221,7 @@ void HQP::solveWeighted(bool init)
 
 void HQP::solvefirst(bool init)
 {
+    auto t1 = std::chrono::high_resolution_clock::now();
     int total_inequality_constraint_size = 0;
     total_inequality_constraint_size += hqp_hs_[0].ineq_const_size_;
     hqp_hs_[0].qp_constraint_size_ = hqp_hs_[0].ineq_const_size_;
@@ -272,6 +273,12 @@ void HQP::solvefirst(bool init)
         hqp_hs_[0].qp_H_.topLeftCorner(dec_var_size, dec_var_size) += hqp_hs_[0].H_;
         // hqp_hs_[0].qp_g_.head(dec_var_size) += hqp_hs_[i].H_ * hqp_hs_[i - 1].y_ans_;
     }
+
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    hqp_hs_[0].qp_update_time_step_ = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+    hqp_hs_[0].qp_update_time_max_ = std::max(hqp_hs_[0].qp_update_time_max_, hqp_hs_[0].qp_update_time_step_);
+
     VectorXd ans;
     hqp_hs_[0].solveOSQP(ans, init);
 
@@ -309,7 +316,7 @@ void HQP::solveSequentialSingle(int level, bool init)
     // std::cout << "solve : " << i << std::endl;
     if (hqp_hs_[i].ineq_const_size_ > 0)
     {
-        
+
         hqp_hs_[i].qp_H_.bottomRightCorner(hqp_hs_[i].ineq_const_size_, hqp_hs_[i].ineq_const_size_).setIdentity();
         hqp_hs_[i].qp_g_.tail(hqp_hs_[i].ineq_const_size_).setZero();
 
@@ -365,10 +372,8 @@ void HQP::solveSequentialSingle(int level, bool init)
     }
 
     auto t2 = std::chrono::high_resolution_clock::now();
-    double duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    hqp_hs_[i].qp_update_time_ += duration;
-
-    hqp_hs_[i].qp_update_time_max_ = std::max(hqp_hs_[i].qp_update_time_max_, duration);
+    hqp_hs_[i].qp_update_time_step_ = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+    hqp_hs_[i].qp_update_time_max_ = std::max(hqp_hs_[i].qp_update_time_max_, hqp_hs_[i].qp_update_time_step_);
 
     VectorXd ans;
     hqp_hs_[i].solveOSQP(ans, init);
@@ -453,8 +458,8 @@ void HQP_Hierarch::initialize(const int &hierarchy_level, const int &acceleratio
     enable_cost_ = false;
     solver_init = false;
 
-    qp_solve_time_ = 0;
-    qp_update_time_ = 0;
+    qp_solve_time_step_ = 0;
+    qp_update_time_step_ = 0;
 
     qp_solve_time_max_ = 0;
     qp_update_time_max_ = 0;
@@ -575,7 +580,6 @@ void HQP_Hierarch::solveOSQP(VectorXd &qp_ans, bool init)
 
     qp_lbA_.setConstant(qp_lbA_.size(), -OsqpEigen::INFTY);
 
-    auto t1 = std::chrono::high_resolution_clock::now();
     if (init)
     {
 
@@ -600,6 +604,7 @@ void HQP_Hierarch::solveOSQP(VectorXd &qp_ans, bool init)
     else
     {
 
+        auto t1 = std::chrono::high_resolution_clock::now();
         osqp_solver_->updateGradient(qp_g_);
         osqp_solver_->updateUpperBound(qp_ubA_);
         osqp_solver_->updateHessianMatrix(sH_);
@@ -607,12 +612,11 @@ void HQP_Hierarch::solveOSQP(VectorXd &qp_ans, bool init)
 
         osqp_solver_->solveProblem();
         qp_ans = osqp_solver_->getSolution();
-    }
-    auto t2 = std::chrono::high_resolution_clock::now();
 
-    double micro_sec_solve = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    qp_solve_time_ += micro_sec_solve;
-    qp_solve_time_max_ = std::max(qp_solve_time_max_, micro_sec_solve);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        qp_solve_time_step_ = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+        qp_solve_time_max_ = std::max(qp_solve_time_max_, qp_solve_time_step_);
+    }
 
     u_ans_ = qp_ans.head(null_space_size_);
     v_ans_ = qp_ans.tail(ineq_const_size_);
@@ -639,6 +643,6 @@ void HQP_Hierarch::solve(VectorXd &qp_ans, bool init)
     qp_solver_.SolveQPoases(600, qp_ans, true);
     auto t2 = std::chrono::high_resolution_clock::now();
     double micro_sec_solve = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-    qp_solve_time_ += micro_sec_solve;
+    // qp_solve_time_ += micro_sec_solve;
     qp_solve_time_max_ = std::max(qp_solve_time_max_, micro_sec_solve);
 }

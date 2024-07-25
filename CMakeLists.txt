@@ -30,6 +30,7 @@ ENDIF()
 
 find_package(RBDL REQUIRED)
 find_package(Eigen3 3.0.0 REQUIRED)
+find_package(OsqpEigen REQUIRED)
 
 ADD_DEFINITIONS(-DURDF_DIR=\"${PROJECT_SOURCE_DIR}/tests\")
 ADD_DEFINITIONS(-DRESOURCE_DIR=\"${PROJECT_SOURCE_DIR}/tests/cases\")
@@ -55,14 +56,11 @@ IF(PYBIND11)
     )
 ENDIF()
 
-# find_package(OsqpEigen)
-add_subdirectory(3rd-party/osqp-eigen)
 
 include_directories(
     include
     ${QPOASES_INCLUDE_DIR}
     ${EIGEN3_INCLUDE_DIR}
-    3rd-party/osqp-eigen/include
     )
 
 file(GLOB dwbc_src
@@ -88,7 +86,6 @@ pthread
 ${PYBIND_LIB}
 OsqpEigen::OsqpEigen
 )
-target_include_directories(dwbc PRIVATE 3rd-party/osqp-eigen/include)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/dwbc-config.cmake" DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 

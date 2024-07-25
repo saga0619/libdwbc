@@ -663,7 +663,7 @@ void RobotData::SetTaskSpace(int heirarchy, const VectorXd &f_star, const Matrix
 {
     if (ts_[heirarchy].task_dof_ != f_star.size())
     {
-        std::cout << "ERROR : task dof not matching " << std::endl;
+        std::cout << "ERROR : task dof not matching! heir : " << heirarchy << " fstar size : " << f_star.size() << " task_dof : " << ts_[heirarchy].task_dof_ << std::endl;
     }
     if (heirarchy >= ts_.size())
     {
@@ -4433,6 +4433,71 @@ int RobotData::CalcControlTorqueLQP(HQP &hqp, bool init)
 {
     int ret = 0;
     hqp.solveSequential(init);
+    double solve_time = 0;
+    double update_time = 0;
+    for (int i = 0; i < hqp.hqp_hs_.size(); i++)
+    {
+        if (!init)
+        {
+            solve_time += hqp.hqp_hs_[i].qp_solve_time_step_;
+            update_time += hqp.hqp_hs_[i].qp_update_time_step_;
+        }
+    }
+    hqp.update_time_step_ = update_time;
+    hqp.solve_time_step_ = solve_time;
+    hqp.total_time_step_ = update_time + solve_time;
+
+    hqp.update_time_max_ = std::max(hqp.update_time_max_, update_time);
+    hqp.solve_time_max_ = std::max(hqp.solve_time_max_, solve_time);
+    hqp.total_time_max_ = std::max(hqp.total_time_max_, hqp.total_time_step_);
+    return ret;
+}
+int RobotData::CalcControlTorqueLQP_R(HQP &hqp_r, bool init)
+{
+    int ret = 0;
+    hqp_r.solveSequential(init);
+    double solve_time = 0;
+    double update_time = 0;
+    for (int i = 0; i < hqp_r.hqp_hs_.size(); i++)
+    {
+        if (!init)
+        {
+            solve_time += hqp_r.hqp_hs_[i].qp_solve_time_step_;
+            update_time += hqp_r.hqp_hs_[i].qp_update_time_step_;
+        }
+    }
+    hqp_r.update_time_step_ = update_time;
+    hqp_r.solve_time_step_ = solve_time;
+    hqp_r.total_time_step_ = update_time + solve_time;
+
+    hqp_r.update_time_max_ = std::max(hqp_r.update_time_max_, update_time);
+    hqp_r.solve_time_max_ = std::max(hqp_r.solve_time_max_, solve_time);
+    hqp_r.total_time_max_ = std::max(hqp_r.total_time_max_, hqp_r.total_time_step_);
+    return ret;
+}
+
+int RobotData::CalcControlTorqueLQP_R_NC(HQP &hqp_nc, bool init)
+{
+    int ret = 0;
+    hqp_nc.solvefirst(init);
+    hqp_nc.solveSequential(init);
+    double solve_time = 0;
+    double update_time = 0;
+    for (int i = 0; i < hqp_nc.hqp_hs_.size(); i++)
+    {
+        if (!init)
+        {
+            solve_time += hqp_nc.hqp_hs_[i].qp_solve_time_step_;
+            update_time += hqp_nc.hqp_hs_[i].qp_update_time_step_;
+        }
+    }
+    hqp_nc.update_time_step_ = update_time;
+    hqp_nc.solve_time_step_ = solve_time;
+    hqp_nc.total_time_step_ = update_time + solve_time;
+
+    hqp_nc.update_time_max_ = std::max(hqp_nc.update_time_max_, update_time);
+    hqp_nc.solve_time_max_ = std::max(hqp_nc.solve_time_max_, solve_time);
+    hqp_nc.total_time_max_ = std::max(hqp_nc.total_time_max_, hqp_nc.total_time_step_);
     return ret;
 }
 
@@ -4566,13 +4631,6 @@ int RobotData::ConfigureLQP_R(HQP &hqp_, bool init)
     return ret;
 }
 
-int RobotData::CalcControlTorqueLQP_R(HQP &hqp_r, bool init)
-{
-    int ret = 0;
-
-    return ret;
-}
-
 int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
 {
     int ret = 0;
@@ -4698,13 +4756,6 @@ int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
     hqp_nc_.hqp_hs_[1].updateCostMatrix(cost_h_nc, cost_g_nc);
 
     hqp_nc_.prepare();
-    return ret;
-}
-
-int RobotData::CalcControlTorqueLQP_R_NC(HQP &hqp_nc, VectorXd &q_acc, bool init)
-{
-    int ret = 0;
-
     return ret;
 }
 

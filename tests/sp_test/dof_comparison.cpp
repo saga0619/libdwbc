@@ -137,35 +137,24 @@ int compare(int dof_input)
         DWBC::HQP hqp_;
         rd_.ConfigureLQP(hqp_);
 
-        auto t2_0 = std::chrono::high_resolution_clock::now();
-        bool init_qp = true;
-        for (int i = 0; i < repeat; i++)
-        {
-            hqp_.solveSequential(init_qp);
+        rd_.CalcControlTorqueLQP(hqp_, true);
 
-            init_qp = false;
-        }
-        auto t2_1 = std::chrono::high_resolution_clock::now();
-
-        double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-
-        t1_time = time_original_us2 / repeat;
-
-        std::cout << " ORIGINAL LQP TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
-
+        double total_time = 0;
         double prep_time = 0;
         double solve_time = 0;
-        for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
+
+        for (int i = 0; i < repeat; i++)
         {
-            prep_time += hqp_.hqp_hs_[i].qp_update_time_;
-            solve_time += hqp_.hqp_hs_[i].qp_solve_time_;
-            // std::cout << "hqp_hs_[" << i << "] : " << hqp_.hqp_hs_[i].time_ << " us" << std::endl;
-
-            // std::cout << " Task " << i << " : " << hqp_.hqp_hs_[i].qp_update_time_ / repeat << " us | " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << std::endl;
+            rd_.CalcControlTorqueLQP(hqp_, false);
+            total_time += hqp_.total_time_step_;
+            prep_time += hqp_.update_time_step_;
+            solve_time += hqp_.solve_time_step_;
         }
+        t1_time = total_time / repeat;
 
-        std::cout << "  Internal update time : " << prep_time / repeat << " us" << std::endl;
-        std::cout << "Internal QP solve time : " << solve_time / repeat << " us" << std::endl;
+        std::cout << " ORIGINAL LQP TOTAL CONSUMPTION : " << t1_time << " us (" << hqp_.total_time_max_ << " us )" << std::endl;
+        std::cout << "  Internal update time : " << prep_time / repeat << " us" << hqp_.update_time_max_ << " us )" << std::endl;
+        std::cout << "Internal QP solve time : " << solve_time / repeat << " us" << hqp_.solve_time_max_ << " us )" << std::endl;
     }
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
@@ -194,17 +183,25 @@ int compare(int dof_input)
         auto t2_0 = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < repeat; i++)
         {
-
             rd_.ReducedDynamicsCalculate();
         }
+        double lqp1_total_time = 0;
+        double lqp1_prep_time = 0;
+        double lqp1_solve_time = 0;
+
+        double lqp2_total_time = 0;
+        double lqp2_prep_time = 0;
+        double lqp2_solve_time = 0;
+
         auto t2_1 = std::chrono::high_resolution_clock::now();
 
-        bool init_qp = true;
+        rd_.CalcControlTorqueLQP_R(hqp_, true);
         for (int i = 0; i < repeat; i++)
         {
-            hqp_.solveSequential(init_qp);
-
-            init_qp = false;
+            rd_.CalcControlTorqueLQP_R(hqp_, false);
+            lqp1_total_time += hqp_.total_time_step_;
+            lqp1_prep_time += hqp_.update_time_step_;
+            lqp1_solve_time += hqp_.solve_time_step_;
         }
         auto t2_2 = std::chrono::high_resolution_clock::now();
 
@@ -212,15 +209,13 @@ int compare(int dof_input)
         DWBC::HQP hqp_nc_;
         rd_.ConfigureLQP_R_NC(hqp_nc_, jacc);
 
-        // auto t2_3 = std::chrono::high_resolution_clock::now();
-
-        init_qp = true;
+        rd_.CalcControlTorqueLQP_R_NC(hqp_nc_, true);
         for (int i = 0; i < repeat; i++)
         {
-            hqp_nc_.solvefirst(init_qp);
-            hqp_nc_.solveSequential(init_qp);
-
-            init_qp = false;
+            rd_.CalcControlTorqueLQP_R_NC(hqp_nc_, false);
+            lqp2_total_time += hqp_nc_.total_time_step_;
+            lqp2_prep_time += hqp_nc_.update_time_step_;
+            lqp2_solve_time += hqp_nc_.solve_time_step_;
         }
 
         auto t2_3 = std::chrono::high_resolution_clock::now();
@@ -235,29 +230,11 @@ int compare(int dof_input)
         t2_task_calc = time_original_us22 / repeat;
         t2_nctask_calc = time_original_us23 / repeat;
 
-        double lqp1_prep_time = 0;
-        double lqp1_solve_time = 0;
-
-        double lqp2_prep_time = 0;
-        double lqp2_solve_time = 0;
-
-        for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
-        {
-            lqp1_prep_time += hqp_.hqp_hs_[i].qp_update_time_;
-            lqp1_solve_time += hqp_.hqp_hs_[i].qp_solve_time_;
-        }
-
-        for (int i = 0; i < hqp_nc_.hqp_hs_.size(); i++)
-        {
-            lqp2_prep_time += hqp_nc_.hqp_hs_[i].qp_update_time_;
-            lqp2_solve_time += hqp_nc_.hqp_hs_[i].qp_solve_time_;
-        }
-
         std::cout << "Reduced Dynamics Model COMP 2 TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
         std::cout << "Reduced Dynamics Model 1 - Reduced Dyn calc     : " << (float)(time_original_us21 / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model 2 - LQP 1                : " << (float)(time_original_us22 / repeat) << " us" << std::endl;
+        std::cout << "Reduced Dynamics Model 2 - LQP 1                : " << (float)(lqp1_total_time / repeat) << " us" << std::endl;
         std::cout << "Reduced Dynamics Model 2 - Update + Solve       : " << (float)(lqp1_prep_time / repeat) << " us | " << (float)(lqp1_solve_time / repeat) << " us" << std::endl;
-        std::cout << "Reduced Dynamics Model 2 - LQP 2                : " << (float)(time_original_us23 / repeat) << " us" << std::endl;
+        std::cout << "Reduced Dynamics Model 2 - LQP 2                : " << (float)(lqp2_total_time / repeat) << " us" << std::endl;
         std::cout << "Reduced Dynamics Model 2 - Update + Solve       : " << (float)(lqp2_prep_time / repeat) << " us | " << (float)(lqp2_solve_time / repeat) << " us" << std::endl;
 
         std::cout << "-----------------------------------------------------------------" << std::endl;
@@ -732,7 +709,7 @@ int compare(int dof_input)
     {
         std::ofstream outputFile("/home/dyros/saga_ws/libdwbc/tests/sp_test/output.txt", std::ios::app);
         outputFile << std::fixed << std::setprecision(4);
-        outputFile << dof_input << " " << t0_time << " " << t1_time << " " << t2_time << " " << t2_dynamics_calc << " " << t2_task_calc << " " << t2_nctask_calc << " " << t2_time / t1_time << std::endl;
+        outputFile << dof_input << " " << t1_time << " " << t2_time << " " << t2_dynamics_calc << " " << t2_task_calc << " " << t2_nctask_calc << " " << t2_time / t1_time << std::endl;
         outputFile.close();
     }
     else

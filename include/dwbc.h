@@ -368,7 +368,7 @@ namespace DWBC
 
         int CalcControlTorqueLQP(HQP &hqp, bool init = true);
         int CalcControlTorqueLQP_R(HQP &hqp_r, bool init = true);
-        int CalcControlTorqueLQP_R_NC(HQP &hqp_nc, VectorXd &q_acc, bool init = true);
+        int CalcControlTorqueLQP_R_NC(HQP &hqp_nc, bool init = true);
 
         void CalcTaskSpaceTorqueHQPWithThreaded(bool init);
 

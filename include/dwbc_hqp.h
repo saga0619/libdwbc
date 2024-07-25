@@ -23,9 +23,6 @@ namespace DWBC
         void updateEqualityCostWeight(const MatrixXd &W);
         void updateEqualityCostWeight(const VectorXd &W);
 
-
-
-
         void updateCostMatrix(const MatrixXd &H, const VectorXd &g);
         void normalizeConstraintMatrix();
 
@@ -97,9 +94,9 @@ namespace DWBC
 
         VectorXd qp_lb_;
         VectorXd qp_ub_;
-        double qp_update_time_;
-        double qp_solve_time_;
-        // double qp_prep_time_;
+
+        double qp_update_time_step_;
+        double qp_solve_time_step_;
 
         double qp_update_time_max_;
         double qp_solve_time_max_;
@@ -121,15 +118,24 @@ namespace DWBC
 
         void prepare(bool verbose = false);
         void solveSequential(bool init = true, bool verbose = false);
+        void solvefirst(bool init = true);
         void solveSequentialSingle(int level, bool init = true);
 
         void solveWeighted(bool init = true);
         // void solveSequential(bool init = true);
-        void solvefirst(bool init = true);
 
         int acceleration_size_;
         int torque_size_;
         int contact_size_;
+
+        double update_time_step_ = 0;
+        double update_time_max_ = 0;
+
+        double solve_time_step_ = 0;
+        double solve_time_max_ = 0;
+
+        double total_time_step_ = 0;
+        double total_time_max_ = 0;
 
         std::vector<HQP_Hierarch> hqp_hs_;
     };

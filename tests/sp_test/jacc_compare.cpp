@@ -14,7 +14,7 @@ int main(void)
 {
     double rot_z = 0;
     // double rot_z = M_PI_2;
-    int repeat = 1000;
+    int repeat = 10000;
 
     bool print_torque = false;
     bool print_vw = false;
@@ -367,26 +367,27 @@ int main(void)
             rd_.ConfigureLQP(hqp_);
 
             // hqp_.prepare();
-            auto t2_0 = std::chrono::high_resolution_clock::now();
+            double time_step_max = 0;
+            double time_step = 0;
 
+            double time_cum = 0;
+            double update_time_cum = 0;
+            double solve_time_cum = 0;
+            // double chrono_time_cum = 0;
+            rd_.CalcControlTorqueLQP(hqp_, true);
             for (int i = 0; i < repeat; i++)
             {
-                hqp_.solveSequential(init_qp);
-                init_qp = false;
+                rd_.CalcControlTorqueLQP(hqp_, false);
+
+                time_cum += hqp_.total_time_step_;
+                update_time_cum += hqp_.update_time_step_;
+                solve_time_cum += hqp_.solve_time_step_;
             }
-            auto t2_1 = std::chrono::high_resolution_clock::now();
 
-            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-            // double time_original_us3 = std::chrono::duration_cast<std::chrono::microseconds>(t2_2 - t2_1).count();
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)(time_cum / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
 
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)(time_original_us2 / repeat) << " us" << std::endl;
-
-            double total_update_time = 0;
-            double total_comp_time = 0;
             for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
             {
-                total_update_time += hqp_.hqp_hs_[i].qp_update_time_;
-                total_comp_time += hqp_.hqp_hs_[i].qp_solve_time_;
                 //     VectorXd jacc = hqp_.hqp_hs_[i].y_ans_.head(acc_size);
                 //     VectorXd conf = hqp_.hqp_hs_[i].y_ans_.tail(contact_size);
                 //     VectorXd torque = rd_.A_.bottomRows(torque_size) * jacc + rd_.J_C.transpose().bottomRows(torque_size) * conf + rd_.B_.tail(torque_size);
@@ -394,18 +395,18 @@ int main(void)
                 //     std::cout << "torque qp : " << torque.transpose() << std::endl;
                 //     std::cout << "contact qp : " << conf.transpose() << std::endl;
 
-                if (print_task_time)
-                {
-                    std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
-                }
+                // if (print_task_time)
+                // {
+                //     std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
+                // }
                 if (print_vw)
                 {
                     std::cout << "v ans : " << hqp_.hqp_hs_[i].v_ans_.transpose() << std::endl;
                     std::cout << "w ans : " << hqp_.hqp_hs_[i].w_ans_.transpose() << std::endl;
                 }
             }
-            std::cout << std::setw(30) << std::right << " Internal   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((total_update_time) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Internal QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((total_comp_time) / repeat) << " us" << std::endl;
+            std::cout << std::setw(30) << std::right << " Internal   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_cum) / repeat) << " us (" << hqp_.update_time_max_ << ")" << std::endl;
+            std::cout << std::setw(30) << std::right << " Internal QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((solve_time_cum) / repeat) << " us (" << hqp_.solve_time_max_ << ")" << std::endl;
 
             VectorXd jacc = hqp_.hqp_hs_.back().y_ans_.head(hqp_.acceleration_size_);
             VectorXd conf = hqp_.hqp_hs_.back().y_ans_.tail(hqp_.contact_size_);
@@ -456,72 +457,64 @@ int main(void)
             rd_.SetContact(1, 1, 0, 0);
 
             rd_.UpdateTaskSpace();
-            auto t2_00 = std::chrono::high_resolution_clock::now();
+
+            double time_redu_calc = 0;
+            double time_redu_calc_max = 0;
+
+            auto t0 = std::chrono::high_resolution_clock::now();
+
             for (int i = 0; i < repeat; i++)
             {
+                auto t2_00 = std::chrono::high_resolution_clock::now();
                 rd_.ReducedDynamicsCalculate();
+                auto t2_0 = std::chrono::high_resolution_clock::now();
+
+                double time_calc = std::chrono::duration_cast<std::chrono::microseconds>(t2_0 - t2_00).count();
+                time_redu_calc += time_calc;
+                time_redu_calc_max = std::max(time_redu_calc_max, time_calc);
             }
 
-            auto t2_0 = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < repeat; i++)
-            {
-                hqp_.solveSequential(init_qp);
-
-                init_qp = false;
-            }
-            auto t2_1 = std::chrono::high_resolution_clock::now();
+            rd_.CalcControlTorqueLQP_R(hqp_, true);
 
             HQP hqp_nc_;
             VectorXd jacc = hqp_.hqp_hs_.back().y_ans_.head(hqp_.acceleration_size_);
             rd_.ConfigureLQP_R_NC(hqp_nc_, jacc);
+            rd_.CalcControlTorqueLQP_R_NC(hqp_nc_, true);
 
-            init_qp = true;
+            double time_total = 0;
+            double time_update = 0;
+            double time_solve = 0;
 
-            auto t2_2 = std::chrono::high_resolution_clock::now();
+            double time_total_nc = 0;
+            double time_update_nc = 0;
+            double time_solve_nc = 0;
+
+            double total_max = 0;
             for (int i = 0; i < repeat; i++)
             {
-                hqp_nc_.solvefirst(init_qp);
-                init_qp = false;
+                rd_.CalcControlTorqueLQP_R(hqp_, false);
+                time_total += hqp_.total_time_step_;
+                time_update += hqp_.update_time_step_;
+                time_solve += hqp_.solve_time_step_;
+
+                rd_.CalcControlTorqueLQP_R_NC(hqp_nc_, false);
+                time_total_nc += hqp_nc_.total_time_step_;
+                time_update_nc += hqp_nc_.update_time_step_;
+                time_solve_nc += hqp_nc_.solve_time_step_;
+
+                total_max = std::max(total_max, hqp_nc_.total_time_step_ + hqp_.total_time_step_);
             }
 
-            auto t2_3 = std::chrono::high_resolution_clock::now();
+            auto t1 = std::chrono::high_resolution_clock::now();
 
-            init_qp = true;
-            for (int i = 0; i < repeat; i++)
-            {
-                hqp_nc_.solveSequential(init_qp);
+            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
-                init_qp = false;
-            }
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us2) / repeat) << " us (" << total_max << " us)" << std::endl;
 
-            auto t2_4 = std::chrono::high_resolution_clock::now();
-            double time_original_us1 = std::chrono::duration_cast<std::chrono::microseconds>(t2_0 - t2_00).count();
-            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-            double time_original_us3 = std::chrono::duration_cast<std::chrono::microseconds>(t2_3 - t2_2).count();
-            double time_original_us4 = std::chrono::duration_cast<std::chrono::microseconds>(t2_4 - t2_3).count();
-
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us1 + time_original_us2 + time_original_us3 + time_original_us4) / repeat) << " us" << std::endl;
-
-            std::cout << std::setw(30) << std::right << "Reduced calc : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us1) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "       LQP 1 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us2) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "       LQP 2 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us3 + time_original_us4) / repeat) << " us" << std::endl;
+            std::cout << std::setw(30) << std::right << "Reduced calc : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_redu_calc) / repeat) << " us (" << time_redu_calc_max << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "       LQP 1 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_total) / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "       LQP 2 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_total_nc) / repeat) << " us (" << hqp_nc_.total_time_max_ << " us)" << std::endl;
             // std::cout << "Reduced Dynamics Model HERZOG 2 NC : " << (float)((time_original_us4) / repeat) << " us" << std::endl;
-
-            double update_time_r = 0;
-            double comp_time_r = 0;
-            double update_time_nc = 0;
-            double comp_time_nc = 0;
-
-            for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
-            {
-                update_time_r += hqp_.hqp_hs_[i].qp_update_time_;
-                comp_time_r += hqp_.hqp_hs_[i].qp_solve_time_;
-            }
-            for (int i = 0; i < hqp_nc_.hqp_hs_.size(); i++)
-            {
-                update_time_nc += hqp_nc_.hqp_hs_[i].qp_update_time_;
-                comp_time_nc += hqp_nc_.hqp_hs_[i].qp_solve_time_;
-            }
 
             if (print_task_time || print_vw)
             {
@@ -529,10 +522,10 @@ int main(void)
             }
             for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
             {
-                if (print_task_time)
-                {
-                    std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
-                }
+                // if (print_task_time)
+                // {
+                //     std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
+                // }
                 if (print_vw)
                 {
                     std::cout << "v ans : " << hqp_.hqp_hs_[i].v_ans_.transpose() << std::endl;
@@ -541,13 +534,9 @@ int main(void)
             }
             if (print_task_time || print_vw)
                 std::cout << std::endl;
-            int acc_size = hqp_.acceleration_size_;
-            int contact_size = hqp_.contact_size_;
-            int torque_size = rd_.model_dof_;
 
-            jacc = hqp_.hqp_hs_.back().y_ans_.head(acc_size);
-            VectorXd conf = hqp_.hqp_hs_.back().y_ans_.tail(contact_size);
-            VectorXd torque_lqp1 = rd_.A_R.bottomRows(torque_size) * jacc + rd_.J_CR.transpose().bottomRows(torque_size) * conf + rd_.G_R.tail(torque_size);
+            VectorXd conf = hqp_.hqp_hs_.back().y_ans_.tail(hqp_.contact_size_);
+            VectorXd torque_lqp1 = rd_.A_R.bottomRows(rd_.reduced_model_dof_) * jacc + rd_.J_CR.transpose().bottomRows(rd_.reduced_model_dof_) * conf + rd_.G_R.tail(rd_.reduced_model_dof_);
             VectorXd torque_control = VectorXd::Zero(rd_.model_dof_);
 
             torque_control.head(rd_.co_dof) = torque_lqp1.head(rd_.co_dof);
@@ -556,10 +545,10 @@ int main(void)
                 std::cout << "LQP 2 : ";
             for (int i = 0; i < hqp_nc_.hqp_hs_.size(); i++)
             {
-                if (print_task_time)
-                {
-                    std::cout << " | task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat;
-                }
+                // if (print_task_time)
+                // {
+                //     std::cout << " | task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat;
+                // }
                 if (print_vw)
                 {
                     std::cout << "v ans : " << hqp_nc_.hqp_hs_[i].v_ans_.transpose() << std::endl;
@@ -568,18 +557,16 @@ int main(void)
             }
             if (print_task_time || print_vw)
                 std::cout << std::endl;
-            // int acc_size_nc = rd_.nc_dof;
-            VectorXd jacc_2 = hqp_nc_.hqp_hs_.back().y_ans_.head(rd_.nc_dof);
-            VectorXd torque_lqp2 = rd_.A_NC.bottomRightCorner(rd_.nc_dof, rd_.nc_dof) * jacc_2 + rd_.G_NC;
+
+            VectorXd jacc_2 = hqp_nc_.hqp_hs_.back().y_ans_.head(hqp_nc_.acceleration_size_);
+            VectorXd torque_lqp2 = rd_.A_NC.bottomRightCorner(hqp_nc_.acceleration_size_, hqp_nc_.acceleration_size_) * jacc_2 + rd_.G_NC;
 
             torque_control.tail(rd_.nc_dof) = torque_lqp2;
 
-            std::cout << std::setw(30) << std::right << "  LQP 1 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_r) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((comp_time_r) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "  LQP 2 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_nc) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((comp_time_nc) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Internal   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_nc + update_time_r) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Internal QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((comp_time_nc + comp_time_r) / repeat) << " us" << std::endl;
+            std::cout << std::setw(30) << std::right << "  LQP 1 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_update) / repeat) << " us (" << hqp_.update_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_solve) / repeat) << " us (" << hqp_.solve_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "  LQP 2 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_update_nc) / repeat) << " us (" << hqp_nc_.update_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_update_nc) / repeat) << " us (" << hqp_nc_.solve_time_max_ << " us)" << std::endl;
 
             if (print_torque)
             {
@@ -601,7 +588,7 @@ int main(void)
         rdo_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
         rdo_.AddTaskSpace(0, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
         rdo_.AddTaskSpace(1, TASK_LINK_6D, desired_control_target_rf.c_str(), Vector3d::Zero(), verbose);
-        rdo_.AddTaskSpace(2, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
+        rdo_.AddTaskSpace(1, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
 
         rdo_.SetContact(true, false, false, false);
         rdo_.CalcContactConstraint();
@@ -612,12 +599,15 @@ int main(void)
         fstar_01.topRows(3) = fstar_0;
         fstar_01.bottomRows(3) = fstar_1;
 
+        Vector12d fstar_22;
+        fstar_22.head(6) = fstar_2;
+        fstar_22.tail(6) = fstar_2;
+
         rdo_.SetTaskSpace(0, fstar_01);
-        rdo_.SetTaskSpace(1, fstar_2);
-        rdo_.SetTaskSpace(2, fstar_2);
+        rdo_.SetTaskSpace(1, fstar_22);
 
         rdo_.ts_[1].noncont_task = true;
-        rdo_.ts_[2].noncont_task = true;
+        // rdo_.ts_[2].noncont_task = true;
 
         rdo_.UpdateTaskSpace();
 
@@ -652,31 +642,29 @@ int main(void)
             DWBC::HQP hqp_;
             rd_.ConfigureLQP(hqp_);
 
-            auto t2_0 = std::chrono::high_resolution_clock::now();
+            double time_step_max = 0;
+            double time_step = 0;
 
+            double time_cum = 0;
+            double update_time_cum = 0;
+            double solve_time_cum = 0;
+            // double chrono_time_cum = 0;
+            rd_.CalcControlTorqueLQP(hqp_, true);
             for (int i = 0; i < repeat; i++)
             {
-                hqp_.solveSequential(init_qp);
-                init_qp = false;
+                rd_.CalcControlTorqueLQP(hqp_, false);
+
+                time_cum += hqp_.total_time_step_;
+                update_time_cum += hqp_.update_time_step_;
+                solve_time_cum += hqp_.solve_time_step_;
             }
-            auto t2_1 = std::chrono::high_resolution_clock::now();
 
-            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)(time_original_us2 / repeat) << " us" << std::endl;
-
-            double total_update_time = 0;
-            double total_comp_time = 0;
-            for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
-            {
-                total_update_time += hqp_.hqp_hs_[i].qp_update_time_;
-                total_comp_time += hqp_.hqp_hs_[i].qp_solve_time_;
-            }
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)(time_cum / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
 
             for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
             {
-                if (print_task_time)
-                    std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
+                // if (print_task_time)
+                // std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
                 //     VectorXd jacc = hqp_.hqp_hs_[i].y_ans_.head(acc_size);
                 //     VectorXd conf = hqp_.hqp_hs_[i].y_ans_.tail(contact_size);
                 //     VectorXd torque = rd_.A_.bottomRows(torque_size) * jacc + rd_.J_C.transpose().bottomRows(torque_size) * conf + rd_.B_.tail(torque_size);
@@ -692,8 +680,8 @@ int main(void)
             // std::cout << " total update time : " << total_update_time / repeat << " us" << std::endl;
             // std::cout << " Mat calc time : " << (total_comp_time + total_update_time) / repeat << " us" << std::endl;
             // std::cout << " QP solve time : " << (total_comp_time + total_update_time) / repeat << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Interanl   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((total_update_time) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Internal QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((total_comp_time) / repeat) << " us" << std::endl;
+            std::cout << std::setw(30) << std::right << " Internal   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_cum) / repeat) << " us (" << hqp_.update_time_max_ << ")" << std::endl;
+            std::cout << std::setw(30) << std::right << " Internal QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((solve_time_cum) / repeat) << " us (" << hqp_.solve_time_max_ << ")" << std::endl;
 
             VectorXd jacc = hqp_.hqp_hs_.back().y_ans_.head(hqp_.acceleration_size_);
             VectorXd conf = hqp_.hqp_hs_.back().y_ans_.tail(hqp_.contact_size_);
@@ -738,151 +726,82 @@ int main(void)
              *      equality constraint   : right arm (3 dof)
              */
             DWBC::HQP hqp_;
+            rd_.ts_[1].noncont_task = true;
 
             rd_.ConfigureLQP_R(hqp_);
 
-            auto t2_00 = std::chrono::high_resolution_clock::now();
-            // bool init = true;
+            rd_.SetContact(1, 1, 0, 0);
+
+            rd_.UpdateTaskSpace();
+
+            double time_redu_calc = 0;
+            double time_redu_calc_max = 0;
+
+            auto t0 = std::chrono::high_resolution_clock::now();
+
             for (int i = 0; i < repeat; i++)
             {
+                auto t2_00 = std::chrono::high_resolution_clock::now();
                 rd_.ReducedDynamicsCalculate();
+                auto t2_0 = std::chrono::high_resolution_clock::now();
+
+                double time_calc = std::chrono::duration_cast<std::chrono::microseconds>(t2_0 - t2_00).count();
+                time_redu_calc += time_calc;
+                time_redu_calc_max = std::max(time_redu_calc_max, time_calc);
             }
 
-            auto t2_0 = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < repeat; i++)
-            {
-                hqp_.solveSequential(init_qp);
-
-                init_qp = false;
-            }
-            auto t2_1 = std::chrono::high_resolution_clock::now();
+            rd_.CalcControlTorqueLQP_R(hqp_, true);
 
             HQP hqp_nc_;
             VectorXd jacc = hqp_.hqp_hs_.back().y_ans_.head(hqp_.acceleration_size_);
             rd_.ConfigureLQP_R_NC(hqp_nc_, jacc);
+            rd_.CalcControlTorqueLQP_R_NC(hqp_nc_, true);
 
-            // HQP hqp_nc_;
-            // int acc_size_nc = rd_.nc_dof;
-            // int torque_size_nc = rd_.nc_dof;
-            // int variable_size = acc_size_nc;
+            double time_total = 0;
+            double time_update = 0;
+            double time_solve = 0;
 
-            // MatrixXd cost_h_nc = MatrixXd::Zero(variable_size, variable_size);
-            // VectorXd cost_g_nc = VectorXd::Zero(variable_size);
+            double time_total_nc = 0;
+            double time_update_nc = 0;
+            double time_solve_nc = 0;
 
-            // cost_h_nc = rd_.A_NC.bottomRightCorner(acc_size_nc, acc_size_nc) / rd_.A_NC.bottomRightCorner(acc_size_nc, acc_size_nc).norm();
-
-            // hqp_nc_.initialize(acc_size_nc, 0, 0);
-
-            // int eq_constraint_size = 6;
-            // int ineq_constraint_size = 2 * acc_size_nc;
-
-            // hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
-
-            // MatrixXd A_nc = MatrixXd::Zero(ineq_constraint_size, variable_size);
-            // VectorXd a_nc = VectorXd::Zero(ineq_constraint_size);
-
-            // MatrixXd B_nc = MatrixXd::Zero(eq_constraint_size, variable_size);
-            // VectorXd b_nc = VectorXd::Zero(eq_constraint_size);
-
-            // // gcom const
-            // B_nc.block(0, 0, eq_constraint_size, acc_size_nc) = jtask_gnc;
-            // b_nc.head(eq_constraint_size) = -fstar_gnc;
-
-            // VectorXd tlim_nc = VectorXd::Constant(torque_size_nc, 200);
-            // A_nc.block(0, 0, acc_size_nc, acc_size_nc) = rd_.A_NC.bottomRightCorner(acc_size_nc, acc_size_nc);
-            // a_nc.segment(0, acc_size_nc) = -tlim_nc + rd_.G_NC;
-            // A_nc.block(1 * acc_size_nc, 0, acc_size_nc, acc_size_nc) = -rd_.A_NC.bottomRightCorner(acc_size_nc, acc_size_nc);
-            // a_nc.segment(1 * acc_size_nc, acc_size_nc) = -tlim_nc - rd_.G_NC;
-
-            // hqp_nc_.hqp_hs_[0].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
-            // hqp_nc_.hqp_hs_[0].updateCostMatrix(cost_h_nc, cost_g_nc);
-
-            // eq_constraint_size = 6;
-            // ineq_constraint_size = 2 * acc_size_nc;
-
-            // hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
-
-            // MatrixXd Ja = MatrixXd::Identity(6, 6);
-            // Ja.block(0, 3, 3, 3) = skew(rd_.link_[rd_.ts_[1].task_link_[0].link_id_].xpos - rd_.link_[0].xpos);
-
-            // VectorXd fstar_local = Ja * (rd_.ts_[1].f_star_ - fstar_base);
-
-            // B_nc.setZero(eq_constraint_size, variable_size);
-            // b_nc.setZero(eq_constraint_size);
-
-            // B_nc.block(0, 0, 6, acc_size_nc) = rd_.ts_[1].J_task_.rightCols(rd_.nc_dof);
-            // b_nc.head(6) = -fstar_local;
-
-            // // acc lim
-            // A_nc.block(0, 0, acc_size_nc, acc_size_nc) = MatrixXd::Identity(acc_size_nc, acc_size_nc);
-            // a_nc.segment(0, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
-
-            // A_nc.block(acc_size_nc, 0, acc_size_nc, acc_size_nc) = -MatrixXd::Identity(acc_size_nc, acc_size_nc);
-            // a_nc.segment(acc_size_nc, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
-
-            // hqp_nc_.hqp_hs_[1].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
-            // hqp_nc_.hqp_hs_[1].updateCostMatrix(cost_h_nc, cost_g_nc);
-
-            // // std::cout << "Noncontact chain " << std::endl;
-            // hqp_nc_.prepare();
-
-            init_qp = true;
-
-            auto t2_2 = std::chrono::high_resolution_clock::now();
+            double total_max = 0;
             for (int i = 0; i < repeat; i++)
             {
-                hqp_nc_.solvefirst(init_qp);
-                init_qp = false;
+                rd_.CalcControlTorqueLQP_R(hqp_, false);
+                time_total += hqp_.total_time_step_;
+                time_update += hqp_.update_time_step_;
+                time_solve += hqp_.solve_time_step_;
+
+                rd_.CalcControlTorqueLQP_R_NC(hqp_nc_, false);
+                time_total_nc += hqp_nc_.total_time_step_;
+                time_update_nc += hqp_nc_.update_time_step_;
+                time_solve_nc += hqp_nc_.solve_time_step_;
+
+                total_max = std::max(total_max, hqp_nc_.total_time_step_ + hqp_.total_time_step_);
             }
 
-            auto t2_3 = std::chrono::high_resolution_clock::now();
+            auto t1 = std::chrono::high_resolution_clock::now();
 
-            init_qp = true;
-            for (int i = 0; i < repeat; i++)
-            {
-                hqp_nc_.solveSequential(init_qp);
+            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
-                init_qp = false;
-            }
+            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us2) / repeat) << " us (" << total_max << " us)" << std::endl;
 
-            auto t2_4 = std::chrono::high_resolution_clock::now();
-            double time_original_us1 = std::chrono::duration_cast<std::chrono::microseconds>(t2_0 - t2_00).count();
-            double time_original_us2 = std::chrono::duration_cast<std::chrono::microseconds>(t2_1 - t2_0).count();
-            double time_original_us3 = std::chrono::duration_cast<std::chrono::microseconds>(t2_3 - t2_2).count();
-            double time_original_us4 = std::chrono::duration_cast<std::chrono::microseconds>(t2_4 - t2_3).count();
-
-            std::cout << std::setw(30) << std::right << "TOTAL CONSUMPTION : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us1 + time_original_us2 + time_original_us3 + time_original_us4) / repeat) << " us" << std::endl;
-
-            std::cout << std::setw(30) << std::right << "Reduced calc : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us1) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "       LQP 1 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us2) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "       LQP 2 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_original_us3 + time_original_us4) / repeat) << " us" << std::endl;
+            std::cout << std::setw(30) << std::right << "Reduced calc : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_redu_calc) / repeat) << " us (" << time_redu_calc_max << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "       LQP 1 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_total) / repeat) << " us (" << hqp_.total_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "       LQP 2 : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_total_nc) / repeat) << " us (" << hqp_nc_.total_time_max_ << " us)" << std::endl;
             // std::cout << "Reduced Dynamics Model HERZOG 2 NC : " << (float)((time_original_us4) / repeat) << " us" << std::endl;
 
-            double update_time_r = 0;
-            double comp_time_r = 0;
-            double update_time_nc = 0;
-            double comp_time_nc = 0;
-
-            for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
-            {
-                update_time_r += hqp_.hqp_hs_[i].qp_update_time_;
-                comp_time_r += hqp_.hqp_hs_[i].qp_solve_time_;
-            }
-            for (int i = 0; i < hqp_nc_.hqp_hs_.size(); i++)
-            {
-                update_time_nc += hqp_nc_.hqp_hs_[i].qp_update_time_;
-                comp_time_nc += hqp_nc_.hqp_hs_[i].qp_solve_time_;
-            }
             if (print_task_time || print_vw)
             {
                 std::cout << "LQP 1 : ";
             }
             for (int i = 0; i < hqp_.hqp_hs_.size(); i++)
             {
-                if (print_task_time)
-                {
-                    std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
-                }
+                // if (print_task_time)
+                // {
+                //     std::cout << "task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat << " us" << std::endl;
+                // }
                 if (print_vw)
                 {
                     std::cout << "v ans : " << hqp_.hqp_hs_[i].v_ans_.transpose() << std::endl;
@@ -902,10 +821,10 @@ int main(void)
                 std::cout << "LQP 2 : ";
             for (int i = 0; i < hqp_nc_.hqp_hs_.size(); i++)
             {
-                if (print_task_time)
-                {
-                    std::cout << " | task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat;
-                }
+                // if (print_task_time)
+                // {
+                //     std::cout << " | task " << i << " time : " << hqp_.hqp_hs_[i].qp_solve_time_ / repeat;
+                // }
                 if (print_vw)
                 {
                     std::cout << "v ans : " << hqp_nc_.hqp_hs_[i].v_ans_.transpose() << std::endl;
@@ -920,12 +839,10 @@ int main(void)
 
             torque_control.tail(rd_.nc_dof) = torque_lqp2;
 
-            std::cout << std::setw(30) << std::right << "  LQP 1 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_r) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((comp_time_r) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "  LQP 2 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_nc) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((comp_time_nc) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Internal   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((update_time_nc + update_time_r) / repeat) << " us" << std::endl;
-            std::cout << std::setw(30) << std::right << " Internal QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((comp_time_nc + comp_time_r) / repeat) << " us" << std::endl;
+            std::cout << std::setw(30) << std::right << "  LQP 1 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_update) / repeat) << " us (" << hqp_.update_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_solve) / repeat) << " us (" << hqp_.solve_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "  LQP 2 INT |   update time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_update_nc) / repeat) << " us (" << hqp_nc_.update_time_max_ << " us)" << std::endl;
+            std::cout << std::setw(30) << std::right << "         | QP solve time : " << std::fixed << std::setw(8) << std::setprecision(2) << (float)((time_update_nc) / repeat) << " us (" << hqp_nc_.solve_time_max_ << " us)" << std::endl;
 
             if (print_torque)
             {
