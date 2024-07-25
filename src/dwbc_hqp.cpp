@@ -320,16 +320,21 @@ void HQP::solveSequentialSingle(int level, bool init)
         hqp_hs_[i].qp_H_.bottomRightCorner(hqp_hs_[i].ineq_const_size_, hqp_hs_[i].ineq_const_size_).setIdentity();
         hqp_hs_[i].qp_g_.tail(hqp_hs_[i].ineq_const_size_).setZero();
 
-        hqp_hs_[i].qp_A_.topLeftCorner(hqp_hs_[i].ineq_const_size_, hqp_hs_[i - 1].null_space_size_) = hqp_hs_[i].V_ * (hqp_hs_[i].A_ * hqp_hs_[i - 1].Z_);
+        // hqp_hs_[i].qp_A_.topLeftCorner(hqp_hs_[i].ineq_const_size_, hqp_hs_[i - 1].null_space_size_) = hqp_hs_[i].V_ * (hqp_hs_[i].A_ * hqp_hs_[i - 1].Z_);
+        hqp_hs_[i].qp_A_.topLeftCorner(hqp_hs_[i].ineq_const_size_, hqp_hs_[i - 1].null_space_size_) = (hqp_hs_[i].A_ * hqp_hs_[i - 1].Z_);
         hqp_hs_[i].qp_A_.topRightCorner(hqp_hs_[i].ineq_const_size_, hqp_hs_[i].ineq_const_size_) = -MatrixXd::Identity(hqp_hs_[i].ineq_const_size_, hqp_hs_[i].ineq_const_size_);
-        hqp_hs_[i].qp_ubA_.head(hqp_hs_[i].ineq_const_size_) = -hqp_hs_[i].V_ * (hqp_hs_[i].A_ * hqp_hs_[i - 1].y_ans_) - hqp_hs_[i].V_ * hqp_hs_[i].a_;
+        hqp_hs_[i].qp_ubA_.head(hqp_hs_[i].ineq_const_size_) = -(hqp_hs_[i].A_ * hqp_hs_[i - 1].y_ans_) - hqp_hs_[i].a_;
+        // hqp_hs_[i].qp_ubA_.head(hqp_hs_[i].ineq_const_size_) = -hqp_hs_[i].V_ * (hqp_hs_[i].A_ * hqp_hs_[i - 1].y_ans_) - hqp_hs_[i].V_ * hqp_hs_[i].a_;
+
         hqp_hs_[i].qp_lbA_.head(hqp_hs_[i].ineq_const_size_).setConstant(-INFTY);
 
         hqp_hs_[i].qp_lb_.segment(hqp_hs_[i - 1].null_space_size_, hqp_hs_[i].ineq_const_size_).setZero();
     }
 
-    MatrixXd temp = hqp_hs_[i].W_ * (hqp_hs_[i].B_ * hqp_hs_[i - 1].Z_);
-    VectorXd temp2 = hqp_hs_[i].W_ * (hqp_hs_[i].B_ * hqp_hs_[i - 1].y_ans_) + hqp_hs_[i].W_ * hqp_hs_[i].b_;
+    // MatrixXd temp = hqp_hs_[i].W_ * (hqp_hs_[i].B_ * hqp_hs_[i - 1].Z_);
+    // VectorXd temp2 = hqp_hs_[i].W_ * (hqp_hs_[i].B_ * hqp_hs_[i - 1].y_ans_) + hqp_hs_[i].W_ * hqp_hs_[i].b_;
+    MatrixXd temp = (hqp_hs_[i].B_ * hqp_hs_[i - 1].Z_);
+    VectorXd temp2 = (hqp_hs_[i].B_ * hqp_hs_[i - 1].y_ans_) + hqp_hs_[i].b_;
 
     hqp_hs_[i].qp_H_.topLeftCorner(hqp_hs_[i - 1].null_space_size_, hqp_hs_[i - 1].null_space_size_) = temp.transpose() * temp;
     hqp_hs_[i].qp_g_.head(hqp_hs_[i - 1].null_space_size_) = temp.transpose() * temp2;
@@ -363,8 +368,10 @@ void HQP::solveSequentialSingle(int level, bool init)
             assert(hqp_hs_[j].V_.cols() == hqp_hs_[j].A_.rows());
             assert(hqp_hs_[j].A_.cols() == hqp_hs_[i - 1].Z_.rows());
 
-            hqp_hs_[i].qp_A_.block(const_idx, 0, hqp_hs_[j].ineq_const_size_, hqp_hs_[i - 1].null_space_size_) = hqp_hs_[j].V_ * hqp_hs_[j].A_ * hqp_hs_[i - 1].Z_;
-            hqp_hs_[i].qp_ubA_.segment(const_idx, hqp_hs_[j].ineq_const_size_) = -hqp_hs_[j].V_ * hqp_hs_[j].A_ * hqp_hs_[i - 1].y_ans_ + hqp_hs_[j].v_ans_ - hqp_hs_[j].V_ * hqp_hs_[j].a_;
+            // hqp_hs_[i].qp_A_.block(const_idx, 0, hqp_hs_[j].ineq_const_size_, hqp_hs_[i - 1].null_space_size_) = hqp_hs_[j].V_ * hqp_hs_[j].A_ * hqp_hs_[i - 1].Z_;
+            // hqp_hs_[i].qp_ubA_.segment(const_idx, hqp_hs_[j].ineq_const_size_) = -hqp_hs_[j].V_ * hqp_hs_[j].A_ * hqp_hs_[i - 1].y_ans_ + hqp_hs_[j].v_ans_ - hqp_hs_[j].V_ * hqp_hs_[j].a_;
+            hqp_hs_[i].qp_A_.block(const_idx, 0, hqp_hs_[j].ineq_const_size_, hqp_hs_[i - 1].null_space_size_) = hqp_hs_[j].A_ * hqp_hs_[i - 1].Z_;
+            hqp_hs_[i].qp_ubA_.segment(const_idx, hqp_hs_[j].ineq_const_size_) = -hqp_hs_[j].A_ * hqp_hs_[i - 1].y_ans_ + hqp_hs_[j].v_ans_ - hqp_hs_[j].a_;
             hqp_hs_[i].qp_lbA_.segment(const_idx, hqp_hs_[j].ineq_const_size_).setConstant(-INFTY);
 
             const_idx += hqp_hs_[j].ineq_const_size_;
@@ -382,8 +389,9 @@ void HQP::solveSequentialSingle(int level, bool init)
 
     if (hqp_hs_[i].ineq_const_size_ > 0)
         hqp_hs_[i].v_ans_ = ans.tail(hqp_hs_[i].ineq_const_size_);
+    hqp_hs_[i].w_ans_ = hqp_hs_[i].B_ * hqp_hs_[i].y_ans_ + hqp_hs_[i].b_;
 
-    hqp_hs_[i].w_ans_ = hqp_hs_[i].W_ * hqp_hs_[i].B_ * hqp_hs_[i].y_ans_ + hqp_hs_[i].W_ * hqp_hs_[i].b_;
+    // hqp_hs_[i].w_ans_ = hqp_hs_[i].W_ * hqp_hs_[i].B_ * hqp_hs_[i].y_ans_ + hqp_hs_[i].W_ * hqp_hs_[i].b_;
 }
 
 void HQP::solveSequential(bool init, bool verbose)
