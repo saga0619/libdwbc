@@ -160,13 +160,12 @@ int compare(int dof_input)
 
         DWBC::HQP hqp_;
         rd_.ConfigureLQP(hqp_);
-
+        auto t1 = std::chrono::high_resolution_clock::now();
         rd_.CalcControlTorqueLQP(hqp_, true);
 
         double total_time = 0;
         double prep_time = 0;
         double solve_time = 0;
-
         for (int i = 0; i < repeat; i++)
         {
             rd_.CalcControlTorqueLQP(hqp_, false);
@@ -174,7 +173,11 @@ int compare(int dof_input)
             prep_time += hqp_.update_time_step_;
             solve_time += hqp_.solve_time_step_;
         }
-        t1_time = total_time / repeat;
+        auto t2 = std::chrono::high_resolution_clock::now();
+
+        double time_original_us = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+
+        t1_time = time_original_us / repeat;
 
         std::cout << "  ORIGINAL LQP TOTAL CONSUMPTION : " << t1_time << " us (" << hqp_.total_time_max_ << " us )" << std::endl;
         std::cout << "            Internal update time : " << prep_time / repeat << " us (" << hqp_.update_time_max_ << " us )" << std::endl;
