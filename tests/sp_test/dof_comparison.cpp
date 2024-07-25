@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <fstream>
+#include <limits.h>
 
 #ifndef URDF_DIR
 #define URDF_DIR ""
@@ -13,6 +14,29 @@ using namespace DWBC;
 using namespace std;
 
 // int main(void)
+std::string getExecutablePath()
+{
+    char result[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+    if (count == -1)
+    {
+        // 에러 처리
+        perror("readlink");
+        exit(EXIT_FAILURE);
+    }
+    return std::string(result, count);
+}
+
+std::string getExecutableDir()
+{
+    std::string path = getExecutablePath();
+    size_t lastSlash = path.find_last_of('/');
+    if (lastSlash == std::string::npos)
+    {
+        return ""; // 디렉토리 구분자가 없음
+    }
+    return path.substr(0, lastSlash);
+}
 
 int compare(int dof_input)
 {
@@ -20,7 +44,7 @@ int compare(int dof_input)
     bool contact2 = true;
 
     double rot_z = 0;
-    int repeat = 100;
+    int repeat = 10000;
 
     double tlim_val;
     double alim_val;
@@ -152,9 +176,9 @@ int compare(int dof_input)
         }
         t1_time = total_time / repeat;
 
-        std::cout << " ORIGINAL LQP TOTAL CONSUMPTION : " << t1_time << " us (" << hqp_.total_time_max_ << " us )" << std::endl;
-        std::cout << "  Internal update time : " << prep_time / repeat << " us" << hqp_.update_time_max_ << " us )" << std::endl;
-        std::cout << "Internal QP solve time : " << solve_time / repeat << " us" << hqp_.solve_time_max_ << " us )" << std::endl;
+        std::cout << "  ORIGINAL LQP TOTAL CONSUMPTION : " << t1_time << " us (" << hqp_.total_time_max_ << " us )" << std::endl;
+        std::cout << "            Internal update time : " << prep_time / repeat << " us (" << hqp_.update_time_max_ << " us )" << std::endl;
+        std::cout << "          Internal QP solve time : " << solve_time / repeat << " us (" << hqp_.solve_time_max_ << " us )" << std::endl;
     }
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
@@ -707,7 +731,9 @@ int compare(int dof_input)
 
     if (t1_success && t2_success)
     {
-        std::ofstream outputFile("/home/dyros/saga_ws/libdwbc/tests/sp_test/output.txt", std::ios::app);
+        std::string execDir = getExecutableDir();
+        std::string filePath = execDir + "/../../../output.txt";
+        std::ofstream outputFile(filePath, std::ios::app);
         outputFile << std::fixed << std::setprecision(4);
         outputFile << dof_input << " " << t1_time << " " << t2_time << " " << t2_dynamics_calc << " " << t2_task_calc << " " << t2_nctask_calc << " " << t2_time / t1_time << std::endl;
         outputFile.close();
