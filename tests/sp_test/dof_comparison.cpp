@@ -38,13 +38,13 @@ std::string getExecutableDir()
     return path.substr(0, lastSlash);
 }
 
-int compare(int dof_input)
+int compare(int dof_input, int repeat_v)
 {
     bool contact1 = true;
     bool contact2 = true;
 
     double rot_z = 0;
-    int repeat = 10000;
+    int repeat = repeat_v;
 
     double tlim_val;
     double alim_val;
@@ -140,6 +140,9 @@ int compare(int dof_input)
     double t2_task_calc = 0;
     double t2_nctask_calc = 0;
 
+    double original_solve_time = 0;
+    double proposed_solve_time = 0;
+
     bool verbose = false;
     {
         RobotData rd_;
@@ -178,6 +181,7 @@ int compare(int dof_input)
         double time_original_us = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 
         t1_time = time_original_us / repeat;
+        original_solve_time = solve_time / repeat;
 
         std::cout << "  ORIGINAL LQP TOTAL CONSUMPTION : " << t1_time << " us (" << hqp_.total_time_max_ << " us )" << std::endl;
         std::cout << "            Internal update time : " << prep_time / repeat << " us (" << hqp_.update_time_max_ << " us )" << std::endl;
@@ -257,6 +261,8 @@ int compare(int dof_input)
         t2_task_calc = time_original_us22 / repeat;
         t2_nctask_calc = time_original_us23 / repeat;
 
+        proposed_solve_time = lqp1_solve_time / repeat + lqp2_solve_time / repeat;
+
         std::cout << "Reduced Dynamics Model COMP 2 TOTAL CONSUMPTION : " << (float)(time_original_us2 / repeat) << " us" << std::endl;
         std::cout << "Reduced Dynamics Model 1 - Reduced Dyn calc     : " << (float)(time_original_us21 / repeat) << " us" << std::endl;
         std::cout << "Reduced Dynamics Model 2 - LQP 1                : " << (float)(lqp1_total_time / repeat) << " us" << std::endl;
@@ -266,7 +272,8 @@ int compare(int dof_input)
 
         std::cout << "-----------------------------------------------------------------" << std::endl;
 
-        std::cout << rd_.model_dof_ << "DOF : total comparison : " << t2_time / t1_time * 100 << " %" << std::endl;
+        std::cout << rd_.model_dof_ << "DOF : total comparison : " << t2_time / t1_time * 100 << " % (lower is better)" << std::endl;
+        std::cout << rd_.model_dof_ << "DOF :    qp comparison : " << proposed_solve_time / original_solve_time * 100 << " % (lower is better)" << std::endl;
     }
 
     // {
@@ -751,18 +758,52 @@ int compare(int dof_input)
 
 int main(int argc, char **argv)
 {
-    // retreive int arguments
-    int option = 0;
-    if (argc > 1)
+    int dof_option = -1; // 초기화: 옵션이 제공되지 않으면 -1로 남음
+    int repeat_option = 1000;
+
+    int opt;
+    while ((opt = getopt(argc, argv, "d:r:")) != -1)
     {
-        option = std::stoi(argv[1]);
-        compare(option);
+        switch (opt)
+        {
+        case 'd':
+            dof_option = std::stoi(optarg);
+            break;
+        case 'r':
+            repeat_option = std::stoi(optarg);
+            break;
+        default:
+            std::cerr << "Usage: " << argv[0] << " -d <dof> -r <repeatr>\n";
+            return 1;
+        }
+    }
+
+    std::cout << "dof_option = " << dof_option << std::endl;
+    std::cout << "repeat_option = " << repeat_option << std::endl;
+
+    // int option = 0;
+    // if (argc > 1)
+    // {
+    //     option = std::stoi(argv[1]);
+    //     compare(dof_option);
+    // }
+    // else
+    // {
+    //     for (int i = 20; i < 46; i++)
+    //     {
+    //         compare(i);
+    //     }
+    // }
+
+    if (dof_option != -1)
+    {
+        compare(dof_option, repeat_option);
     }
     else
     {
         for (int i = 20; i < 46; i++)
         {
-            compare(i);
+            compare(i, repeat_option);
         }
     }
 
