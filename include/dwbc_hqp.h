@@ -137,6 +137,13 @@ namespace DWBC
         double total_time_step_ = 0;
         double total_time_max_ = 0;
 
+        double jacc_cost = 1.0;
+        double tlim_def = 200.0;
+        double alim_def = 2.0;
+
+        VectorXd jacc;
+        VectorXd contact_force;
+
         std::vector<HQP_Hierarch> hqp_hs_;
     };
 

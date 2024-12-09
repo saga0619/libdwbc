@@ -61,6 +61,7 @@ include_directories(
     include
     ${QPOASES_INCLUDE_DIR}
     ${EIGEN3_INCLUDE_DIR}
+    ${OsqpEigen_INCLUDE_DIR}
     )
 
 file(GLOB dwbc_src

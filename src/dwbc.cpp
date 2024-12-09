@@ -76,11 +76,15 @@ void RobotData::AddQP()
 void RobotData::ClearQP()
 {
     qp_task_.clear();
+    osqp_task_.clear();
 }
 
 void RobotData::AddQP()
 {
     qp_task_.push_back(CQuadraticProgram());
+
+    OsqpEigen::Solver *osqp_ti = new OsqpEigen::Solver();
+    osqp_task_.push_back(osqp_ti);
 }
 #endif
 
@@ -130,6 +134,8 @@ void RobotData::InitModelData(int verbose)
     qp_task_.clear();
 
     qp_contact_ = CQuadraticProgram();
+
+    osqp_contact_ = new OsqpEigen::Solver();
 
     system_dof_ = model_.dof_count;
     if (is_floating_)
@@ -950,6 +956,7 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     int model_size = model_dof_;       // size of joint
 
     int torque_limit_constraint_size = 0;
+    int fz_limit_const_size = 1;
 
     if (init_trigger)
     {
@@ -969,7 +976,14 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
         if (cc_[i].contact)
         {
             total_contact_dof += cc_[i].contact_dof_;
-            contact_constraint_size += cc_[i].constraint_number_;
+            if (cc_[i].fz_limiter_switch_)
+            {
+                contact_constraint_size += cc_[i].constraint_number_ + fz_limit_const_size;
+            }
+            else
+            {
+                contact_constraint_size += cc_[i].constraint_number_;
+            }
         }
     }
     contact_dof += total_contact_dof;
@@ -1018,6 +1032,8 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     Eigen::MatrixXd A_const_a;
     A_const_a.setZero(contact_constraint_size, total_contact_dof);
 
+    VectorXd Alim = VectorXd::Zero(contact_constraint_size);
+
     Eigen::MatrixXd A_rot;
     A_rot.setZero(total_contact_dof, total_contact_dof);
 
@@ -1032,6 +1048,14 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
 
             A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
             A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
+
+            if (cc_[i].fz_limiter_switch_)
+            {
+
+                A_const_a(const_idx + CONTACT_CONSTRAINT_ZMP + 6, contact_idx + 2) = -1.0;
+                Alim(const_idx + CONTACT_CONSTRAINT_ZMP + 6) = cc_[i].fz_limit_;
+                const_idx += 1;
+            }
 
             const_idx += cc_[i].constraint_number_;
             contact_idx += cc_[i].contact_dof_;
@@ -1050,7 +1074,7 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     lbA.segment(torque_limit_constraint_size, contact_constraint_size).setConstant(-INFTY);
 
     // lbA.segment(total_constraint_size) = -ubA_contact;
-    ubA.segment(torque_limit_constraint_size, contact_constraint_size) = -bA;
+    ubA.segment(torque_limit_constraint_size, contact_constraint_size) = -bA - Alim;
 
     // qp_.EnableEqualityCondition(0.0001);
 
@@ -1061,68 +1085,83 @@ int RobotData::CalcSingleTaskTorqueWithQP(TaskSpace &ts_, const MatrixXd &task_n
     ts_.f_star_qp_ = qpres.segment(0, task_dof);
     return 1;
 #else
-    if (qp_task_[ts_.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
-    {
-        if (init_trigger)
-        {
-            qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
-        }
-    }
-    else
-    {
-        qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
-    }
 
-    qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
-    qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
-    qp_task_[ts_.heirarchy_].DeleteSubjectToX();
+    int solve_success = SolveOSQP(osqp_task_[ts_.heirarchy_], H, g, A, lbA, ubA, qpres, init_trigger);
 
-    if (qp_task_[ts_.heirarchy_].SolveQPoases(1000, qpres))
+    if (solve_success)
     {
         ts_.f_star_qp_ = qpres.segment(0, task_dof);
         ts_.contact_qp_ = qpres.segment(task_dof, contact_dof);
-        ts_.qp_error = 0;
-
-        // Check ZMP/force constraint result :
-
-        // ts_.torque_h_ = torque_prev + Ntorque_task * (ts_.f_star_ + ts_.f_star_qp_) + NwJw * ts_.contact_qp_;
-        // VectorXd contact_force = A_rot * (J_C_INV_T.rightCols(model_dof_) * ts_.torque_h_ - P_C);
-
-        // for (int i = 0; i < cc_.size(); i++)
-        // {
-        //     if (cc_[i].contact)
-        //     {
-        //         if (abs(contact_force(i * 6 + 4) / contact_force(i * 6 + 2)) > cc_[i].contact_plane_x_ + 1.0E-6)
-        //         {
-        //             std::cout << " X ZMP Constraint Violated : " << i << " " << contact_force(i * 6 + 4) / contact_force(i * 6 + 2) << " " << cc_[i].contact_plane_x_ << std::endl;
-        //         }
-        //         if (abs(contact_force(i * 6 + 3) / contact_force(i * 6 + 2)) > cc_[i].contact_plane_y_ + 1.0E-6)
-        //         {
-        //             std::cout << " Y ZMP Constraint Violated : " << i << " " << contact_force(i * 6 + 3) / contact_force(i * 6 + 2) << " " << cc_[i].contact_plane_y_ << std::endl;
-        //         }
-
-        //         if (abs(contact_force(i * 6 + 0) / contact_force(i * 6 + 2)) > cc_[i].friction_ratio_ + 1.0E-6)
-        //         {
-        //             std::cout << " X Friction Constraint Violated : " << i << " " << contact_force(i * 6 + 0) / contact_force(i * 6 + 2) << " " << cc_[i].friction_ratio_ << std::endl;
-        //         }
-        //         if (abs(contact_force(i * 6 + 1) / contact_force(i * 6 + 2)) > cc_[i].friction_ratio_ + 1.0E-6)
-        //         {
-        //             std::cout << " Y Friction Constraint Violated : " << i << " " << contact_force(i * 6 + 1) / contact_force(i * 6 + 2) << " " << cc_[i].friction_ratio_ << std::endl;
-        //         }
-        //     }
-        // }
-
         return 1;
     }
     else
     {
-        ts_.f_star_qp_ = VectorXd::Zero(task_dof);
-        ts_.contact_qp_ = VectorXd::Zero(contact_dof);
-        ts_.qp_error = 1;
-        // qp_task_[ts_.heirarchy_].PrintMinProb();
-        // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
+        std::cout << "QP Solve Failed" << std::endl;
         return 0;
     }
+
+    // if (qp_task_[ts_.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
+    // {
+    //     if (init_trigger)
+    //     {
+    //         qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    //     }
+    // }
+    // else
+    // {
+    //     qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    // }
+
+    // qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
+    // qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
+    // qp_task_[ts_.heirarchy_].DeleteSubjectToX();
+
+    // if (qp_task_[ts_.heirarchy_].SolveQPoases(1000, qpres))
+    // {
+    //     ts_.f_star_qp_ = qpres.segment(0, task_dof);
+    //     ts_.contact_qp_ = qpres.segment(task_dof, contact_dof);
+    //     ts_.qp_error = 0;
+
+    // Check ZMP/force constraint result :
+
+    // ts_.torque_h_ = torque_prev + Ntorque_task * (ts_.f_star_ + ts_.f_star_qp_) + NwJw * ts_.contact_qp_;
+    // VectorXd contact_force = A_rot * (J_C_INV_T.rightCols(model_dof_) * ts_.torque_h_ - P_C);
+
+    // for (int i = 0; i < cc_.size(); i++)
+    // {
+    //     if (cc_[i].contact)
+    //     {
+    //         if (abs(contact_force(i * 6 + 4) / contact_force(i * 6 + 2)) > cc_[i].contact_plane_x_ + 1.0E-6)
+    //         {
+    //             std::cout << " X ZMP Constraint Violated : " << i << " " << contact_force(i * 6 + 4) / contact_force(i * 6 + 2) << " " << cc_[i].contact_plane_x_ << std::endl;
+    //         }
+    //         if (abs(contact_force(i * 6 + 3) / contact_force(i * 6 + 2)) > cc_[i].contact_plane_y_ + 1.0E-6)
+    //         {
+    //             std::cout << " Y ZMP Constraint Violated : " << i << " " << contact_force(i * 6 + 3) / contact_force(i * 6 + 2) << " " << cc_[i].contact_plane_y_ << std::endl;
+    //         }
+
+    //         if (abs(contact_force(i * 6 + 0) / contact_force(i * 6 + 2)) > cc_[i].friction_ratio_ + 1.0E-6)
+    //         {
+    //             std::cout << " X Friction Constraint Violated : " << i << " " << contact_force(i * 6 + 0) / contact_force(i * 6 + 2) << " " << cc_[i].friction_ratio_ << std::endl;
+    //         }
+    //         if (abs(contact_force(i * 6 + 1) / contact_force(i * 6 + 2)) > cc_[i].friction_ratio_ + 1.0E-6)
+    //         {
+    //             std::cout << " Y Friction Constraint Violated : " << i << " " << contact_force(i * 6 + 1) / contact_force(i * 6 + 2) << " " << cc_[i].friction_ratio_ << std::endl;
+    //         }
+    //     }
+    // }
+
+    //     return 1;
+    // }
+    // else
+    // {
+    //     ts_.f_star_qp_ = VectorXd::Zero(task_dof);
+    //     ts_.contact_qp_ = VectorXd::Zero(contact_dof);
+    //     ts_.qp_error = 1;
+    //     // qp_task_[ts_.heirarchy_].PrintMinProb();
+    //     // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
+    //     return 0;
+    // }
 #endif
 }
 
@@ -1401,14 +1440,14 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
             {
                 total_contact_dof += cc_[i].contact_dof_;
 
-                // if (cc_[i].fz_limiter_switch_)
-                // {
-                //     contact_constraint_size += cc_[i].constraint_number_ + fz_limit_const_size;
-                // }
-                // else
-                // {
-                contact_constraint_size += cc_[i].constraint_number_;
-                // }
+                if (cc_[i].fz_limiter_switch_)
+                {
+                    contact_constraint_size += cc_[i].constraint_number_ + fz_limit_const_size;
+                }
+                else
+                {
+                    contact_constraint_size += cc_[i].constraint_number_;
+                }
             }
         }
         contact_dof += total_contact_dof;
@@ -1486,6 +1525,8 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
             MatrixXd A_const_a;
             A_const_a.setZero(contact_constraint_size, total_contact_dof);
 
+            VectorXd Alim = VectorXd::Zero(contact_constraint_size);
+
             MatrixXd A_rot;
             A_rot.setZero(total_contact_dof, total_contact_dof);
 
@@ -1501,6 +1542,14 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
                     A_const_a.block(const_idx, contact_idx, 4, 6) = cc_[i].GetZMPConstMatrix4x6();
                     A_const_a.block(const_idx + CONTACT_CONSTRAINT_ZMP, contact_idx, 6, 6) = cc_[i].GetForceConstMatrix6x6();
 
+                    if (cc_[i].fz_limiter_switch_)
+                    {
+
+                        A_const_a(const_idx + CONTACT_CONSTRAINT_ZMP + 6, contact_idx + 2) = -1.0;
+                        Alim(const_idx + CONTACT_CONSTRAINT_ZMP + 6) = cc_[i].fz_limit_;
+                        const_idx += 1;
+                    }
+
                     const_idx += cc_[i].constraint_number_;
                     contact_idx += cc_[i].contact_dof_;
                 }
@@ -1508,13 +1557,15 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
 
             Eigen::MatrixXd CM = -A_const_a * A_rot;
 
+            // contact force = J_C_INV_T.rightCols(model_size) * (torque_input + NwJw * fw ) - P_C;
+
             // Eigen::MatrixXd Atemp = -CM * J_C_INV_T.rightCols(model_size);
             // Eigen::VectorXd bA = CM * P_C - CM * J_C_INV_T.rightCols(model_size) * torque_input;
 
             A_qp.block(torque_limit_constraint_size, 0, contact_constraint_size, contact_dof) = CM * J_C_INV_T.rightCols(model_dof_) * NwJw;
 
             lbA.segment(torque_limit_constraint_size, contact_constraint_size).setConstant(-INFTY);
-            ubA.segment(torque_limit_constraint_size, contact_constraint_size) = CM * P_C - CM * J_C_INV_T.rightCols(model_size) * torque_input;
+            ubA.segment(torque_limit_constraint_size, contact_constraint_size) = CM * P_C - CM * J_C_INV_T.rightCols(model_size) * torque_input - Alim;
 
             const_idx = 0;
             contact_idx = 0;
@@ -1529,21 +1580,38 @@ int RobotData::CalcContactRedistribute(VectorXd torque_input, bool hqp, bool ini
             return 1;
 
 #else
-            if (qp_contact_.CheckProblemSize(variable_number, total_constraint_size))
-            {
-                if (init)
-                {
-                    qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
-                }
-            }
-            else
-            {
-                qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
-            }
+            // if (qp_contact_.CheckProblemSize(variable_number, total_constraint_size))
+            // {
+            //     if (init)
+            //     {
+            //         qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+            //     }
+            // }
+            // else
+            // {
+            //     qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+            // }
 
-            qp_contact_.UpdateMinProblem(H, g);
-            qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
-            if (qp_contact_.SolveQPoases(300, qpres, false))
+            // qp_contact_.UpdateMinProblem(H, g);
+            // qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
+            // if (qp_contact_.SolveQPoases(300, qpres, false))
+            // {
+            //     cf_redis_qp_ = qpres;
+            //     torque_contact_ += NwJw * qpres;
+
+            //     return 1;
+            // }
+            // else
+            // {
+            //     std::cout << "Contact QP solve failed" << std::endl;
+            //     torque_contact_.setZero(model_size);
+
+            //     return 0;
+            // }
+
+            int solve_success = SolveOSQP(osqp_contact_, H, g, A_qp, lbA, ubA, qpres, init);
+
+            if (solve_success)
             {
                 cf_redis_qp_ = qpres;
                 torque_contact_ += NwJw * qpres;
@@ -3561,24 +3629,9 @@ int RobotData::CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task
     // qp_.EnableEqualityCondition(0.0001);
 
     VectorXd qpres;
+    int solve_success = SolveOSQP(osqp_task_[ts_.heirarchy_], H, g, A, lbA, ubA, qpres, init_trigger);
 
-    if (qp_task_[ts_.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
-    {
-        if (init_trigger)
-        {
-            qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
-        }
-    }
-    else
-    {
-        qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
-    }
-
-    qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
-    qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
-    qp_task_[ts_.heirarchy_].DeleteSubjectToX();
-
-    if (qp_task_[ts_.heirarchy_].SolveQPoases(300, qpres))
+    if (solve_success)
     {
         ts_.f_star_qp_ = qpres.segment(0, task_dof);
         ts_.contact_qp_ = qpres.segment(task_dof, contact_dof);
@@ -3590,12 +3643,42 @@ int RobotData::CalcSingleTaskTorqueWithQP_R(TaskSpace &ts_, const MatrixXd &task
         std::cout << "task solve failed" << std::endl;
         ts_.f_star_qp_ = VectorXd::Zero(task_dof);
         ts_.qp_error = 1;
-
-        // qp_task_[ts_.heirarchy_].PrintMinProb();
-
-        // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
         return 0;
     }
+    // if (qp_task_[ts_.heirarchy_].CheckProblemSize(variable_size, total_constraint_size))
+    // {
+    //     if (init_trigger)
+    //     {
+    //         qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    //     }
+    // }
+    // else
+    // {
+    //     qp_task_[ts_.heirarchy_].InitializeProblemSize(variable_size, total_constraint_size);
+    // }
+
+    // qp_task_[ts_.heirarchy_].UpdateMinProblem(H, g);
+    // qp_task_[ts_.heirarchy_].UpdateSubjectToAx(A, lbA, ubA);
+    // qp_task_[ts_.heirarchy_].DeleteSubjectToX();
+
+    // if (qp_task_[ts_.heirarchy_].SolveQPoases(300, qpres))
+    // {
+    //     ts_.f_star_qp_ = qpres.segment(0, task_dof);
+    //     ts_.contact_qp_ = qpres.segment(task_dof, contact_dof);
+    //     ts_.qp_error = 0;
+    //     return 1;
+    // }
+    // else
+    // {
+    //     std::cout << "task solve failed" << std::endl;
+    //     ts_.f_star_qp_ = VectorXd::Zero(task_dof);
+    //     ts_.qp_error = 1;
+
+    //     // qp_task_[ts_.heirarchy_].PrintMinProb();
+
+    //     // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
+    //     return 0;
+    // }
 }
 
 int RobotData::CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_, const VectorXd &torque_prev, const MatrixXd &NwJw, const MatrixXd &J_C_INV_T, const MatrixXd &P_C, bool init_trigger)
@@ -3719,24 +3802,8 @@ int RobotData::CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_
     // qp_.EnableEqualityCondition(0.0001);
 
     VectorXd qpres;
-
-    if (qp_task_[first_nc_TaskSpace_idx_].CheckProblemSize(variable_size, total_constraint_size))
-    {
-        if (init_trigger)
-        {
-            qp_task_[first_nc_TaskSpace_idx_].InitializeProblemSize(variable_size, total_constraint_size);
-        }
-    }
-    else
-    {
-        qp_task_[first_nc_TaskSpace_idx_].InitializeProblemSize(variable_size, total_constraint_size);
-    }
-
-    qp_task_[first_nc_TaskSpace_idx_].UpdateMinProblem(H, g);
-    qp_task_[first_nc_TaskSpace_idx_].UpdateSubjectToAx(A, lbA, ubA);
-    qp_task_[first_nc_TaskSpace_idx_].DeleteSubjectToX();
-
-    if (qp_task_[first_nc_TaskSpace_idx_].SolveQPoases(300, qpres))
+    int solve_success = SolveOSQP(osqp_task_[first_nc_TaskSpace_idx_], H, g, A, lbA, ubA, qpres, init_trigger);
+    if (solve_success)
     {
         force_on_nc_R_qp_ = qpres.segment(0, task_dof);
 
@@ -3747,12 +3814,42 @@ int RobotData::CalcSingleTaskTorqueWithQP_R_NC(const MatrixXd &task_null_matrix_
     {
         std::cout << "task solve failed" << std::endl;
         force_on_nc_R_qp_ = VectorXd::Zero(task_dof);
-
-        // qp_task_[ts_.heirarchy_].PrintMinProb();
-
-        // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
         return 0;
     }
+
+    // if (qp_task_[first_nc_TaskSpace_idx_].CheckProblemSize(variable_size, total_constraint_size))
+    // {
+    //     if (init_trigger)
+    //     {
+    //         qp_task_[first_nc_TaskSpace_idx_].InitializeProblemSize(variable_size, total_constraint_size);
+    //     }
+    // }
+    // else
+    // {
+    //     qp_task_[first_nc_TaskSpace_idx_].InitializeProblemSize(variable_size, total_constraint_size);
+    // }
+
+    // qp_task_[first_nc_TaskSpace_idx_].UpdateMinProblem(H, g);
+    // qp_task_[first_nc_TaskSpace_idx_].UpdateSubjectToAx(A, lbA, ubA);
+    // qp_task_[first_nc_TaskSpace_idx_].DeleteSubjectToX();
+
+    // if (qp_task_[first_nc_TaskSpace_idx_].SolveQPoases(300, qpres))
+    // {
+    //     force_on_nc_R_qp_ = qpres.segment(0, task_dof);
+
+    //     nc_qp_contact_ = qpres.segment(task_dof, contact_dof);
+    //     return 1;
+    // }
+    // else
+    // {
+    //     std::cout << "task solve failed" << std::endl;
+    //     force_on_nc_R_qp_ = VectorXd::Zero(task_dof);
+
+    //     // qp_task_[ts_.heirarchy_].PrintMinProb();
+
+    //     // qp_task_[ts_.heirarchy_].PrintSubjectToAx();
+    //     return 0;
+    // }
 }
 
 int RobotData::ReducedCalcContactRedistribute(bool hqp, bool init)
@@ -4333,18 +4430,25 @@ int RobotData::ConfigureLQP(HQP &hqp, bool init)
 
     int acc_idx = 0;
     int contact_idx = acc_size + 0;
-    hqp.initialize(acc_size, 0, contact_size);
+
+    if (init)
+    {
+        hqp.initialize(acc_size, 0, contact_size);
+    }
 
     MatrixXd cost_h = MatrixXd::Zero(acc_size + contact_size, acc_size + contact_size);
     VectorXd cost_g = VectorXd::Zero(acc_size + contact_size);
 
-    cost_h.block(0, 0, acc_size, acc_size) = A_ / A_.norm() * 5;
+    cost_h.block(0, 0, acc_size, acc_size) = A_ / A_.topLeftCorner(6, 6).norm() * hqp.jacc_cost;
 
     // Priority 1
     int ineq_constraint_size = torque_size * 2; // torque limit
     int eq_constraint_size = 6;                 // newton euler
 
-    hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    if (init)
+    {
+        hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    }
 
     // hqp_.hqp_hs_[0].y_ans_.head(variable_size).setZero();
 
@@ -4358,7 +4462,7 @@ int RobotData::ConfigureLQP(HQP &hqp, bool init)
     B.block(0, acc_size, eq_constraint_size, contact_size) = J_C.transpose().topRows(eq_constraint_size);
     b.head(eq_constraint_size) = B_.head(eq_constraint_size);
 
-    VectorXd tlim = VectorXd::Constant(torque_size, 200);
+    VectorXd tlim = VectorXd::Constant(torque_size, hqp.tlim_def);
 
     A.block(0, 0, torque_size, acc_size) = A_.bottomRows(torque_size);
     A.block(0, acc_size, torque_size, contact_size) = J_C.transpose().bottomRows(torque_size);
@@ -4384,8 +4488,8 @@ int RobotData::ConfigureLQP(HQP &hqp, bool init)
     int contact_constraint_size = contact_link_num_ * 10;
     ineq_constraint_size = contact_constraint_size + torque_size * 2;
     eq_constraint_size = contact_size;
-
-    hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    if (init)
+        hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
 
     A.setZero(ineq_constraint_size, variable_size);
     a.setZero(ineq_constraint_size);
@@ -4393,7 +4497,7 @@ int RobotData::ConfigureLQP(HQP &hqp, bool init)
     A.block(contact_constraint_size, 6, torque_size, torque_size) = MatrixXd::Identity(torque_size, torque_size);
     A.block(contact_constraint_size + torque_size, 6, torque_size, torque_size) = -MatrixXd::Identity(torque_size, torque_size);
 
-    VectorXd alim = VectorXd::Constant(torque_size, 5);
+    VectorXd alim = VectorXd::Constant(torque_size, hqp.alim_def);
     a.segment(contact_constraint_size, torque_size) = -alim;
     a.segment(contact_constraint_size + torque_size, torque_size) = -alim;
 
@@ -4410,8 +4514,8 @@ int RobotData::ConfigureLQP(HQP &hqp, bool init)
     {
         ineq_constraint_size = 0;
         eq_constraint_size = ts_[i].task_dof_;
-
-        hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
+        if (init)
+            hqp.addHierarchy(ineq_constraint_size, eq_constraint_size);
 
         B.setZero(eq_constraint_size, variable_size);
         b.setZero(eq_constraint_size);
@@ -4450,6 +4554,9 @@ int RobotData::CalcControlTorqueLQP(HQP &hqp, bool init)
     hqp.update_time_max_ = std::max(hqp.update_time_max_, update_time);
     hqp.solve_time_max_ = std::max(hqp.solve_time_max_, solve_time);
     hqp.total_time_max_ = std::max(hqp.total_time_max_, hqp.total_time_step_);
+
+    hqp.jacc = hqp.hqp_hs_.back().y_ans_.head(system_dof_);
+    hqp.contact_force = hqp.hqp_hs_.back().y_ans_.tail(contact_dof_);
     return ret;
 }
 int RobotData::CalcControlTorqueLQP_R(HQP &hqp_r, bool init)
@@ -4535,13 +4642,13 @@ int RobotData::ConfigureLQP_R(HQP &hqp_, bool init)
     MatrixXd cost_h = MatrixXd::Zero(acc_size + contact_size, acc_size + contact_size);
     VectorXd cost_g = VectorXd::Zero(acc_size + contact_size);
 
-    cost_h.block(0, 0, acc_size, acc_size) = A_R / A_.norm() * 5;
+    cost_h.block(0, 0, acc_size, acc_size) = A_R / A_.topLeftCorner(6, 6).norm() * hqp_.jacc_cost;
 
     // Priority 1
     int ineq_constraint_size = torque_size * 2; // torque limit
     int eq_constraint_size = 6;                 // newton euler
-
-    hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    if (init)
+        hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
     // hqp_.hqp_hs_[0].y_ans_.head(variable_size).setZero();
 
     MatrixXd A = MatrixXd::Zero(ineq_constraint_size, variable_size);
@@ -4554,7 +4661,7 @@ int RobotData::ConfigureLQP_R(HQP &hqp_, bool init)
     B.block(0, acc_size, eq_constraint_size, contact_size) = (J_CR.transpose()).topRows(eq_constraint_size);
     b.head(eq_constraint_size) = G_R.head(eq_constraint_size);
 
-    VectorXd tlim = VectorXd::Constant(torque_size, 200);
+    VectorXd tlim = VectorXd::Constant(torque_size, hqp_.tlim_def);
     int tlim_size = tlim.size();
 
     tlim(tlim_size - 4) = 600;
@@ -4583,15 +4690,15 @@ int RobotData::ConfigureLQP_R(HQP &hqp_, bool init)
     int contact_constraint_size = contact_link_num_ * 10;
     ineq_constraint_size = contact_constraint_size + torque_size * 2;
     eq_constraint_size = contact_size;
-
-    hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    if (init)
+        hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
     A.setZero(ineq_constraint_size, variable_size);
     a.setZero(ineq_constraint_size);
     A.block(0, acc_size, contact_constraint_size, contact_size) = getContactConstraintMatrix();
     A.block(contact_constraint_size, 6, torque_size, torque_size) = MatrixXd::Identity(torque_size, torque_size);
     A.block(contact_constraint_size + torque_size, 6, torque_size, torque_size) = -MatrixXd::Identity(torque_size, torque_size);
 
-    VectorXd alim = VectorXd::Constant(torque_size, 5);
+    VectorXd alim = VectorXd::Constant(torque_size, hqp_.alim_def);
     a.segment(contact_constraint_size, torque_size) = -alim;
     a.segment(contact_constraint_size + torque_size, torque_size) = -alim;
 
@@ -4612,8 +4719,8 @@ int RobotData::ConfigureLQP_R(HQP &hqp_, bool init)
         {
             ineq_constraint_size = 0;
             eq_constraint_size = ts_[i].task_dof_;
-
-            hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+            if (init)
+                hqp_.addHierarchy(ineq_constraint_size, eq_constraint_size);
 
             B.setZero(eq_constraint_size, variable_size);
             b.setZero(eq_constraint_size);
@@ -4644,14 +4751,14 @@ int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
     MatrixXd cost_h_nc = MatrixXd::Zero(variable_size, variable_size);
     VectorXd cost_g_nc = VectorXd::Zero(variable_size);
 
-    cost_h_nc = A_NC.bottomRightCorner(acc_size_nc, acc_size_nc) / A_NC.bottomRightCorner(acc_size_nc, acc_size_nc).norm() * 5;
+    cost_h_nc = A_NC.bottomRightCorner(acc_size_nc, acc_size_nc) / A_NC.topLeftCorner(6, 6).norm() * hqp_nc_.jacc_cost;
 
     hqp_nc_.initialize(acc_size_nc, 0, 0);
 
     int eq_constraint_size = 6;
     int ineq_constraint_size = 2 * acc_size_nc;
-
-    hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    if (init)
+        hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
 
     MatrixXd A_nc = MatrixXd::Zero(ineq_constraint_size, variable_size);
     VectorXd a_nc = VectorXd::Zero(ineq_constraint_size);
@@ -4663,7 +4770,7 @@ int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
     B_nc.block(0, 0, eq_constraint_size, acc_size_nc) = J_I_nc_;
     b_nc.head(eq_constraint_size) = -fstar_gnc;
 
-    VectorXd tlim_nc = VectorXd::Constant(torque_size_nc, 200);
+    VectorXd tlim_nc = VectorXd::Constant(torque_size_nc, hqp_nc_.tlim_def);
     A_nc.block(0, 0, acc_size_nc, acc_size_nc) = A_NC.bottomRightCorner(acc_size_nc, acc_size_nc);
     a_nc.segment(0, acc_size_nc) = -tlim_nc + G_NC;
     A_nc.block(1 * acc_size_nc, 0, acc_size_nc, acc_size_nc) = -A_NC.bottomRightCorner(acc_size_nc, acc_size_nc);
@@ -4731,8 +4838,8 @@ int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
 
     eq_constraint_size = 6;
     ineq_constraint_size = 2 * acc_size_nc;
-
-    hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
+    if (init)
+        hqp_nc_.addHierarchy(ineq_constraint_size, eq_constraint_size);
 
     MatrixXd Ja = MatrixXd::Identity(6, 6);
     Ja.block(0, 3, 3, 3) = skew(link_[ts_[1].task_link_[0].link_id_].xpos - link_[0].xpos);
@@ -4747,10 +4854,10 @@ int RobotData::ConfigureLQP_R_NC(HQP &hqp_nc_, VectorXd &q_acc, bool init)
 
     // acc lim
     A_nc.block(0, 0, acc_size_nc, acc_size_nc) = MatrixXd::Identity(acc_size_nc, acc_size_nc);
-    a_nc.segment(0, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
+    a_nc.segment(0, acc_size_nc) = -VectorXd::Constant(acc_size_nc, hqp_nc_.alim_def);
 
     A_nc.block(acc_size_nc, 0, acc_size_nc, acc_size_nc) = -MatrixXd::Identity(acc_size_nc, acc_size_nc);
-    a_nc.segment(acc_size_nc, acc_size_nc) = -VectorXd::Constant(acc_size_nc, 5);
+    a_nc.segment(acc_size_nc, acc_size_nc) = -VectorXd::Constant(acc_size_nc, hqp_nc_.alim_def);
 
     hqp_nc_.hqp_hs_[1].updateConstraintMatrix(A_nc, a_nc, B_nc, b_nc);
     hqp_nc_.hqp_hs_[1].updateCostMatrix(cost_h_nc, cost_g_nc);
@@ -4817,35 +4924,39 @@ int RobotData::CalcContactRedistributeR(VectorXd torque_input, bool hqp, bool in
             Eigen::MatrixXd crot_matrix = Eigen::MatrixXd::Zero(total_contact_dof, total_contact_dof);
             Eigen::MatrixXd RotW = Eigen::MatrixXd::Identity(total_contact_dof, total_contact_dof);
             int acc_cdof = 0;
-            for (int i = 0; i < contact_index; i++)
-            {
-                if (cc_[i].contact)
-                {
-                    Vector3d vec_origin, vec_target;
-                    vec_origin = cc_[i].rotm.rightCols(1);
-                    vec_target = (com_pos - cc_[i].xc_pos).normalized();
-                    Matrix3d cm = AxisTransform2V(vec_origin, vec_target);
+            // for (int i = 0; i < contact_index; i++)
+            // {
+            //     if (cc_[i].contact)
+            //     {
+            //         Vector3d vec_origin, vec_target;
+            //         vec_origin = cc_[i].rotm.rightCols(1);
+            //         vec_target = (com_pos - cc_[i].xc_pos).normalized();
+            //         Matrix3d cm = AxisTransform2V(vec_origin, vec_target);
 
-                    cm.setIdentity(); // comment this line to redistribute contact force with COM based vector
+            //         cm.setIdentity(); // comment this line to redistribute contact force with COM based vector
 
-                    if (cc_[i].contact_type_ == CONTACT_6D)
-                    {
-                        crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = crot_matrix.block(acc_cdof + 3, acc_cdof + 3, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
-                        RotW(acc_cdof + 2, acc_cdof + 2) = 0;
-                        acc_cdof += cc_[i].contact_dof_;
-                    }
-                    else if (cc_[i].contact_type_ == CONTACT_POINT)
-                    {
-                        crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
-                        RotW(acc_cdof + 2, acc_cdof + 2) = 0;
-                        acc_cdof += cc_[i].contact_dof_;
-                    }
-                }
-            }
-            J_CR_INV_T.rightCols(model_size) * NwJw_R;
-            H_temp = RotW * crot_matrix * J_CR_INV_T.rightCols(model_size) * NwJw_R;
-            H = H_temp.transpose() * H_temp;
-            g = (RotW * crot_matrix * (J_CR_INV_T.rightCols(model_size) * torque_input - P_CR)).transpose() * H_temp;
+            //         if (cc_[i].contact_type_ == CONTACT_6D)
+            //         {
+            //             crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = crot_matrix.block(acc_cdof + 3, acc_cdof + 3, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
+            //             RotW(acc_cdof + 2, acc_cdof + 2) = 0;
+            //             acc_cdof += cc_[i].contact_dof_;
+            //         }
+            //         else if (cc_[i].contact_type_ == CONTACT_POINT)
+            //         {
+            //             crot_matrix.block(acc_cdof, acc_cdof, 3, 3) = cm.transpose() * cc_[i].rotm.transpose();
+            //             RotW(acc_cdof + 2, acc_cdof + 2) = 0;
+            //             acc_cdof += cc_[i].contact_dof_;
+            //         }
+            //     }
+            // }
+            // J_CR_INV_T.rightCols(model_size) * NwJw_R;
+            // H_temp = RotW * crot_matrix * J_CR_INV_T.rightCols(model_size) * NwJw_R;
+            // H = H_temp.transpose() * H_temp;
+            // g = (RotW * crot_matrix * (J_CR_INV_T.rightCols(model_size) * torque_input - P_CR)).transpose() * H_temp;
+
+            H.setZero(variable_number, variable_number);
+            H.setIdentity();
+            g.setZero(variable_number);
 
             MatrixXd A_qp;
             VectorXd lbA, ubA;
@@ -4893,32 +5004,46 @@ int RobotData::CalcContactRedistributeR(VectorXd torque_input, bool hqp, bool in
                 // Force Constraint
                 // Will be added
             }
+            Eigen::MatrixXd CM = -A_const_a * A_rot;
 
-            Eigen::MatrixXd Atemp = A_const_a * A_rot * J_CR_INV_T.rightCols(model_size);
-            Eigen::VectorXd bA = A_const_a * (A_rot * P_CR) - Atemp * torque_input;
+            // Eigen::MatrixXd Atemp = A_const_a * A_rot * J_CR_INV_T.rightCols(model_size);
+            // Eigen::VectorXd bA = A_const_a * (A_rot * P_CR) - Atemp * torque_input;
 
-            A_qp.block(torque_limit_constraint_size, 0, contact_constraint_size, contact_dof) = -Atemp * NwJw_R;
+            A_qp.block(torque_limit_constraint_size, 0, contact_constraint_size, contact_dof) = CM * J_CR_INV_T.rightCols(model_size) * NwJw_R;
 
             lbA.segment(torque_limit_constraint_size, contact_constraint_size).setConstant(-INFTY);
-            ubA.segment(torque_limit_constraint_size, contact_constraint_size) = -bA;
+            ubA.segment(torque_limit_constraint_size, contact_constraint_size) = CM * P_CR - CM * J_CR_INV_T.rightCols(model_size) * torque_input;
 
             Eigen::VectorXd qpres;
+            int solve_success = SolveOSQP(osqp_contact_, H, g, A_qp, lbA, ubA, qpres, init);
+            // if (qp_contact_.CheckProblemSize(variable_number, total_constraint_size))
+            // {
+            //     if (init)
+            //     {
+            //         qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+            //     }
+            // }
+            // else
+            // {
+            //     qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
+            // }
 
-            if (qp_contact_.CheckProblemSize(variable_number, total_constraint_size))
-            {
-                if (init)
-                {
-                    qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
-                }
-            }
-            else
-            {
-                qp_contact_.InitializeProblemSize(variable_number, total_constraint_size);
-            }
+            // qp_contact_.UpdateMinProblem(H, g);
+            // qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
+            // if (qp_contact_.SolveQPoases(600, qpres))
+            // {
+            //     torque_contact_R_ = NwJw_R * qpres;
 
-            qp_contact_.UpdateMinProblem(H, g);
-            qp_contact_.UpdateSubjectToAx(A_qp, lbA, ubA);
-            if (qp_contact_.SolveQPoases(600, qpres))
+            //     return 1;
+            // }
+            // else
+            // {
+            //     std::cout << "Contact Reduced qp solve failed" << std::endl;
+            //     torque_contact_R_.setZero(model_size);
+
+            //     return 0;
+            // }
+            if (solve_success)
             {
                 torque_contact_R_ = NwJw_R * qpres;
 
@@ -4988,5 +5113,92 @@ int RobotData::CalcContactRedistributeR(VectorXd torque_input, bool hqp, bool in
 
             return 0;
         }
+    }
+}
+
+int RobotData::SolveOSQP(OsqpEigen::Solver *osqp, const MatrixXd &H, VectorXd &g, const MatrixXd &A, VectorXd &lb, VectorXd &ub, VectorXd &ans, bool init)
+{
+    Eigen::SparseMatrix<double> sA_ = A.sparseView(1E-5);
+    Eigen::SparseMatrix<double> sH_ = H.sparseView(1E-5);
+
+    int var_num = H.cols();
+    int const_num = A.rows();
+    int result = 0;
+
+    if (init)
+    {
+        osqp->clearSolver();
+        osqp->data()->clearHessianMatrix();
+        osqp->data()->clearLinearConstraintsMatrix();
+
+        osqp->data()->setNumberOfVariables(var_num);
+        osqp->data()->setNumberOfConstraints(const_num);
+
+        osqp->data()->setHessianMatrix(sH_);
+        osqp->data()->setGradient(g);
+        osqp->data()->setLinearConstraintsMatrix(sA_);
+        osqp->data()->setUpperBound(ub);
+        osqp->data()->setLowerBound(lb);
+
+        osqp->settings()->setWarmStart(true);
+        osqp->settings()->setVerbosity(false);
+        osqp->settings()->setAlpha(1.0);
+
+        if (!osqp->initSolver())
+            return 0;
+
+        if (osqp->solveProblem() != OsqpEigen::ErrorExitFlag::NoError)
+            return 0;
+
+        ans = osqp->getSolution();
+
+        return 1;
+    }
+    else
+    {
+
+        osqp->updateHessianMatrix(sH_);
+        osqp->updateGradient(g);
+        osqp->updateLinearConstraintsMatrix(sA_);
+        osqp->updateUpperBound(ub);
+        osqp->updateLowerBound(lb);
+        if (osqp->solveProblem() != OsqpEigen::ErrorExitFlag::NoError)
+            return 0;
+
+        ans = osqp->getSolution();
+
+        return 1;
+    }
+}
+
+int RobotData::SolveQPoases(CQuadraticProgram &qp, const MatrixXd &H, const VectorXd &g, const MatrixXd &A, const VectorXd &lb, const VectorXd &ub, VectorXd &ans, bool init)
+{
+    int var_num = H.cols();
+    int const_num = A.rows();
+    int result = 0;
+
+    if (qp.CheckProblemSize(var_num, const_num))
+    {
+        if (init)
+        {
+            qp.InitializeProblemSize(var_num, const_num);
+        }
+    }
+    else
+    {
+        qp.InitializeProblemSize(var_num, const_num);
+    }
+
+    qp.UpdateMinProblem(H, g);
+    qp.UpdateSubjectToAx(A, lb, ub);
+
+    if (qp.SolveQPoases(600, ans))
+    {
+        return 1;
+    }
+    else
+    {
+        std::cout << "Contact Reduced qp solve failed" << std::endl;
+        return 0;
     }
 }

@@ -156,9 +156,9 @@ namespace DWBC
         vector<int> nc_rbdl_idx_;
         // std::vector<int> nc_task_idx_;
 
-        unsigned int nc_dof;    // dof of noncontact chain
-        unsigned int co_dof;    // dof of contact chain
-        unsigned int vc_dof;    // dof of virtual and contact chain
+        unsigned int nc_dof; // dof of noncontact chain
+        unsigned int co_dof; // dof of contact chain
+        unsigned int vc_dof; // dof of virtual and contact chain
         unsigned int reduced_model_dof_;
         unsigned int reduced_system_dof_;
 
@@ -225,6 +225,10 @@ namespace DWBC
 #else
         std::vector<CQuadraticProgram> qp_task_;
         CQuadraticProgram qp_contact_;
+
+        std::vector<OsqpEigen::Solver *> osqp_task_;
+        OsqpEigen::Solver *osqp_contact_;
+
 #endif
 
         /*
@@ -427,6 +431,9 @@ namespace DWBC
         void CalcVirtualInertia(RigidBodyDynamics::Model &vmodel, std::vector<Link> &links, std::vector<Joint> &joints, Matrix3d &new_inertia, Vector3d &new_com, double &new_mass);
         void ChangeLinkInertia(std::string link_name, Matrix3d &com_inertia, Vector3d &com_position, double com_mass, bool verbose = false);
         void CalcVirtualCMM(RigidBodyDynamics::Model v_model, std::vector<Link> &_link, Vector3d &com_pos, MatrixXd &cmm, bool verbose = false);
+
+        int SolveOSQP(OsqpEigen::Solver *osqp, const MatrixXd &H, VectorXd &g, const MatrixXd &A, VectorXd &lb, VectorXd &ub, VectorXd &ans, bool init = true);
+        int SolveQPoases(CQuadraticProgram &qp, const MatrixXd &H, const VectorXd &g, const MatrixXd &A, const VectorXd &lb, const VectorXd &ub, VectorXd &ans, bool init = true);
     };
 
     template <typename... Types>

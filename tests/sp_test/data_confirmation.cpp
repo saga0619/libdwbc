@@ -18,7 +18,7 @@ int main(void)
 
     double rot_z = 0;
     // double rot_z = M_PI_2;
-    int repeat = 10;
+    int repeat = 1;
 
     bool use_hqp = true;
 
@@ -54,7 +54,7 @@ int main(void)
     fstar_0 << 0.3142, -1.8202, -1.7750;
     fstar_1 << -17.8677, 8.4977, 1.0850;
     fstar_2 << -8.5340, 8.5992, 1.2655;
-    fstar_3 << 4.0251, 3.9975, 7.5672, -8.2841, 30.3652, 0.8954, 2.7585, 3.7898, 9.3234, -9.5724, 43.8036, 2.5202;
+    // fstar_3 << 4.0251, 3.9975, 7.5672, -8.2841, 30.3652, 0.8954, 2.7585, 3.7898, 9.3234, -9.5724, 43.8036, 2.5202;
 
     bool verbose = false;
     rd2_.UpdateKinematics(q2, q2dot, q2ddot);
@@ -63,11 +63,16 @@ int main(void)
     rd2_.AddContactConstraint(23, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
     rd2_.AddContactConstraint(31, CONTACT_TYPE::CONTACT_6D, Vector3d(0.03, 0, -0.1585), Vector3d(0, 0, 1), 0.04, 0.04);
 
+    rd2_.cc_[0].fz_limiter_switch_ = true;
+    rd2_.cc_[1].fz_limiter_switch_ = true;
+    rd2_.cc_[0].fz_limit_ = 10;
+    rd2_.cc_[1].fz_limit_ = 10;
+
     rd2_.AddTaskSpace(0, TASK_LINK_POSITION, desired_control_target.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(1, TASK_LINK_ROTATION, desired_control_target2.c_str(), Vector3d::Zero(), verbose);
     rd2_.AddTaskSpace(2, TASK_LINK_ROTATION, desired_control_target3.c_str(), Vector3d::Zero(), verbose);
-    rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
-    rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
+    // rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target4.c_str(), Vector3d::Zero(), verbose);
+    // rd2_.AddTaskSpace(3, TASK_LINK_6D, desired_control_target5.c_str(), Vector3d::Zero(), verbose);
     // rd2_.AddTaskSpace(TASK_CUSTOM, 12);
 
     rd2_.SetContact(contact1, contact2, contact3, false);
@@ -79,7 +84,7 @@ int main(void)
     rd2_.SetTaskSpace(0, fstar_0);
     rd2_.SetTaskSpace(1, fstar_1);
     rd2_.SetTaskSpace(2, fstar_2);
-    rd2_.SetTaskSpace(3, fstar_3);
+    // rd2_.SetTaskSpace(3, fstar_3);
 
     rd2_.CalcGravCompensation();
     rd2_.CalcTaskControlTorque(use_hqp, true);
@@ -127,6 +132,13 @@ int main(void)
     std::cout << "Original Dynamics Model 4 - Contact Redistribution Calcula : " << (int)(time_original4_us / repeat) << " us" << std::endl;
 
     std::cout << "-----------------------------------------------------------------" << std::endl;
+    
+    std::cout << rd2_.torque_task_.transpose() << std::endl;
+    std::cout << rd2_.torque_grav_.transpose() << std::endl;
+    std::cout << rd2_.torque_contact_.transpose() << std::endl;
+    VectorXd cf_ = rd2_.getContactForce(rd2_.torque_task_ + rd2_.torque_grav_ + rd2_.torque_contact_);
+
+    std::cout << "res contact force : " << cf_.transpose() << std::endl;
 
     std::cout << "Task QP Error : " << taskqp_err << std::endl;
     std::cout << "Contact QP Error : " << contactqp_err << std::endl;
@@ -135,8 +147,8 @@ int main(void)
     rd2_.CalcContactConstraint();
     rd2_.ReducedDynamicsCalculate();
 
-    std::cout << "J_R:"<<std::endl;
-    std::cout << rd2_.J_R << std::endl;
+    // std::cout << "J_R:"<<std::endl;
+    // std::cout << rd2_.J_R << std::endl;
 
 
 
