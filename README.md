@@ -6,7 +6,7 @@ Yisoo Lee, Junewhee Ahn, et al. "Computationally Efficient HQP-based Whole-body 
 
 Junewhee Ahn, et al. "Time-Efficient Contact Consistent Whole-Body Control Framework via Reduced-Dimension Dynamics Construction" 2024 IEEE ACCESS
 
-Junewhee Ahn, et al. "Efficient Computation of Whole-Body Control Utilizing Simplified Whole-Body Dynamics via Centroidal Dynamics" 2024 arXiv
+Junewhee Ahn, et al. "Efficient Computation of Whole-Body Control Utilizing Simplified Whole-Body Dynamics via Centroidal Dynamics" 2025 International Journal of Control, Automation and Systems
 	
 
 ## How to ...
